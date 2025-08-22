@@ -1,0 +1,121 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Financial Planning Platform API",
+        "version": "1.0.0",
+        "description": "Comprehensive API for personal financial management, investment insights, and simulation-based planning",
+        "contact": {
+            "name": "Financial Planning Support",
+            "email": "api-support@financialplanner.com"
+        },
+        "license": {
+            "name": "Commercial License",
+            "url": "https://financialplanner.com/license"
+        }
+    },
+    "servers": [
+        {
+            "url": "https://api.financialplanner.com/v1",
+            "description": "Production Server"
+        },
+        {
+            "url": "https://staging-api.financialplanner.com/v1",
+            "description": "Staging Server"
+        }
+    ],
+    "paths": {
+        "/auth/login": {
+            "post": {
+                "summary": "User Authentication",
+                "description": "Authenticate user and receive JWT token",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "email": {"type": "string", "format": "email"},
+                                    "password": {"type": "string", "format": "password"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Authentication",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "access_token": {"type": "string"},
+                                        "token_type": {"type": "string"},
+                                        "expires_in": {"type": "integer"}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {"description": "Invalid Credentials"}
+                }
+            }
+        },
+        "/simulations/monte-carlo": {
+            "post": {
+                "summary": "Monte Carlo Financial Simulation",
+                "description": "Run comprehensive financial scenario simulation",
+                "security": [{"bearerAuth": []}],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "initial_investment": {"type": "number"},
+                                    "monthly_contribution": {"type": "number"},
+                                    "years": {"type": "integer"},
+                                    "risk_tolerance": {"type": "string", "enum": ["low", "medium", "high"]}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Simulation Results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "success_probability": {"type": "number"},
+                                        "median_final_balance": {"type": "number"},
+                                        "scenarios": {"type": "array"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        }
+    },
+    "tags": [
+        {"name": "Authentication", "description": "User login and registration"},
+        {"name": "Simulations", "description": "Financial scenario modeling"},
+        {"name": "Users", "description": "User profile and management"},
+        {"name": "Investments", "description": "Investment recommendations and tracking"}
+    ]
+}

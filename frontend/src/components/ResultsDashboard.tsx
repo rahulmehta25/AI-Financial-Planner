@@ -268,3 +268,49 @@ export default function ResultsDashboard({
     </div>
   );
 }
+
+function generateDemoNarrative(result: SimulationResult, demoProfile?: string): string {
+  const profileNarratives = {
+    young_professional: `Based on our analysis of your financial profile as a young professional, you're in an excellent position to build long-term wealth. Your current savings rate and investment timeline give you significant advantages:
+
+• **Growth Potential**: With a 30+ year investment horizon, you can take advantage of compound growth and market volatility
+• **Risk Capacity**: Your age allows for a more aggressive portfolio allocation, maximizing growth potential
+• **Goal Achievement**: Your emergency fund and house down payment goals are well-structured and achievable
+
+Our Monte Carlo simulations show a ${result.scenarios?.realistic?.goalAchievementRate || 78}% probability of meeting your retirement goals with your current strategy. The projected portfolio value of ${formatCurrency(result.scenarios?.realistic?.finalValue || 1650000)} provides a strong foundation for financial independence.
+
+**Key Insights:**
+- Your current savings rate is commendable and sustainable
+- Consider maximizing employer 401(k) matching for immediate returns
+- International diversification could enhance risk-adjusted returns`,
+    
+    family_oriented: `Your family-focused financial plan demonstrates excellent prioritization and realistic goal setting. Our analysis reveals several strengths in your approach:
+
+• **Education Planning**: Your 529 contributions are on track to cover projected education costs
+• **Balanced Approach**: You're successfully juggling multiple financial priorities
+• **Risk Management**: Your moderate risk tolerance aligns well with your family responsibilities
+
+With an ${result.scenarios?.realistic?.goalAchievementRate || 81}% success probability, your plan shows strong potential for achieving all major goals. The expected portfolio value of ${formatCurrency(result.scenarios?.realistic?.finalValue || 1450000)} provides security for your family's future.
+
+**Strategic Recommendations:**
+- Consider increasing contributions to tax-advantaged accounts
+- Review insurance coverage to protect against unforeseen events
+- Explore 529 plan tax benefits in your state`,
+    
+    pre_retiree: `As you approach retirement, your financial plan reflects wisdom and strategic thinking. Our analysis shows you're well-positioned for a comfortable retirement:
+
+• **Strong Foundation**: Your accumulated wealth provides excellent security
+• **Conservative Approach**: Your risk reduction strategy is appropriate for your timeline
+• **Healthcare Planning**: Dedicated healthcare reserves show forward-thinking
+
+With an ${result.scenarios?.realistic?.goalAchievementRate || 88}% probability of success, you're on track for your retirement goals. The projected value of ${formatCurrency(result.scenarios?.realistic?.finalValue || 2200000)} should support your desired lifestyle.
+
+**Pre-Retirement Considerations:**
+- Social Security optimization strategy is crucial at your age
+- Consider gradual portfolio de-risking as you approach retirement
+- Healthcare cost planning becomes increasingly important`
+  };
+  
+  return profileNarratives[demoProfile as keyof typeof profileNarratives] || 
+    'This analysis provides insights into your financial position and recommendations for optimizing your strategy.';
+}
