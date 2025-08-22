@@ -1,10 +1,95 @@
 #!/bin/bash
 
-# Financial Planning System - Demo Startup Script
-# Cross-platform deployment automation with production-ready practices
-# Supports: macOS, Linux, Windows WSL
+# Financial Planning Demo Simple Startup Script
+# ============================================
 
-set -euo pipefail
+echo "🚀 AI Financial Planning Demo Launcher"
+echo "======================================"
+echo ""
+
+# Check if Python 3 is available
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python 3 is required but not found."
+    echo "Please install Python 3.8 or higher."
+    exit 1
+fi
+
+echo "🐍 Python version:"
+python3 --version
+echo ""
+
+# Check available dependencies
+echo "📦 Checking dependencies..."
+
+# Core requirements
+python3 -c "import fastapi" 2>/dev/null && echo "   ✅ FastAPI available" || echo "   ⚠️  FastAPI not available - install with: pip3 install fastapi"
+python3 -c "import uvicorn" 2>/dev/null && echo "   ✅ Uvicorn available" || echo "   ⚠️  Uvicorn not available - install with: pip3 install uvicorn"
+python3 -c "import numpy" 2>/dev/null && echo "   ✅ NumPy available" || echo "   ⚠️  NumPy not available - install with: pip3 install numpy"
+python3 -c "import pydantic" 2>/dev/null && echo "   ✅ Pydantic available" || echo "   ⚠️  Pydantic not available - install with: pip3 install pydantic"
+python3 -c "import jose" 2>/dev/null && echo "   ✅ Python-JOSE available" || echo "   ⚠️  Python-JOSE not available - install with: pip3 install python-jose[cryptography]"
+python3 -c "import passlib" 2>/dev/null && echo "   ✅ Passlib available" || echo "   ⚠️  Passlib not available - install with: pip3 install passlib[bcrypt]"
+
+# Advanced dependencies
+python3 -c "import scipy" 2>/dev/null && echo "   ✅ SciPy available (advanced optimization)" || echo "   ⚠️  SciPy not available (will use simplified optimization)"
+python3 -c "import matplotlib" 2>/dev/null && echo "   ✅ Matplotlib available (charts)" || echo "   ⚠️  Matplotlib not available (no charts)"
+python3 -c "import numba" 2>/dev/null && echo "   ✅ Numba available (JIT acceleration)" || echo "   ⚠️  Numba not available (will use NumPy)"
+python3 -c "import reportlab" 2>/dev/null && echo "   ✅ ReportLab available (PDF reports)" || echo "   ⚠️  ReportLab not available (no PDF reports)"
+
+echo ""
+
+# Determine which demo to run
+FULL_DEPS_AVAILABLE=true
+
+# Check if full dependencies are available
+python3 -c "import scipy, matplotlib, reportlab" 2>/dev/null || FULL_DEPS_AVAILABLE=false
+
+if [ "$FULL_DEPS_AVAILABLE" = true ]; then
+    echo "🌟 All dependencies available! Running full-featured demo..."
+    DEMO_FILE="working_demo.py"
+else
+    echo "⚡ Running minimal dependency demo (still fully functional)..."
+    DEMO_FILE="minimal_working_demo.py"
+fi
+
+echo ""
+
+# Check if basic requirements are met
+BASIC_DEPS_AVAILABLE=true
+python3 -c "import fastapi, uvicorn, numpy, pydantic, jose, passlib" 2>/dev/null || BASIC_DEPS_AVAILABLE=false
+
+if [ "$BASIC_DEPS_AVAILABLE" = false ]; then
+    echo "❌ Missing basic dependencies. Installing them now..."
+    echo ""
+    echo "🔧 Installing required packages..."
+    pip3 install fastapi uvicorn numpy pydantic "python-jose[cryptography]" "passlib[bcrypt]"
+    echo ""
+    echo "✅ Basic dependencies installed!"
+    echo ""
+fi
+
+# Check if demo file exists
+if [ ! -f "$DEMO_FILE" ]; then
+    echo "❌ Demo file $DEMO_FILE not found!"
+    exit 1
+fi
+
+echo "🚀 Starting demo server..."
+echo "📚 Open http://localhost:8000/docs in your browser"
+echo ""
+echo "👤 Demo login credentials:"
+echo "   📧 demo@example.com"
+echo "   🔑 demo123"
+echo ""
+echo "🎯 Quick start:"
+echo "   1. Visit http://localhost:8000/sample-data to create demo data"
+echo "   2. Login with demo credentials"
+echo "   3. Explore the interactive API documentation"
+echo ""
+echo "Press Ctrl+C to stop the server"
+echo "================================="
+
+# Start the appropriate demo
+python3 "$DEMO_FILE"
 
 # Colors for output
 RED='\033[0;31m'

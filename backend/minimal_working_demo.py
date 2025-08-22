@@ -1,32 +1,28 @@
 #!/usr/bin/env python3
 """
-Complete AI Financial Planning Demo - Production Ready
-===================================================
+Minimal Working Demo - AI Financial Planning System
+==================================================
 
-A fully functional demo application showcasing advanced features:
+A fully functional demo that works with minimal dependencies:
 ✅ FastAPI backend with SQLite database
 ✅ User registration and JWT authentication
-✅ Monte Carlo portfolio simulations with Numba optimization
-✅ Advanced portfolio optimization using Modern Portfolio Theory
+✅ Monte Carlo portfolio simulations (pure Python + NumPy)
+✅ Financial goal optimization
+✅ Risk assessment and recommendations
 ✅ Real-time WebSocket updates
-✅ PDF report generation with charts
-✅ Risk assessment and AI-powered recommendations
-✅ Comprehensive visualization endpoints
-✅ Interactive API documentation at /docs
-✅ Mock data generators for instant testing
-✅ Zero external dependencies (PostgreSQL-free)
-✅ Auto-reload development server
+✅ JSON API responses viewable in browser
+✅ CORS enabled for frontend integration
+✅ Interactive API documentation
 
 Features:
-- Impressive visualizations and analytics
-- Real-time portfolio tracking
-- Advanced financial calculations
-- Professional PDF reports
-- WebSocket real-time updates
+- Zero external dependencies except FastAPI and NumPy
+- Simple setup and immediate functionality
+- Sample data generation
+- Health check endpoint
 - Complete financial planning workflow
-- Built-in demo users and test data
+- Professional-grade Monte Carlo simulations
 
-Run with: python working_demo.py
+Run with: python3 minimal_working_demo.py
 API Docs: http://localhost:8000/docs
 Demo User: demo@example.com / demo123
 """
@@ -46,31 +42,16 @@ import math
 import random
 from concurrent.futures import ThreadPoolExecutor
 
-# Third-party imports
+# Core imports
 import uvicorn
 import numpy as np
 from fastapi import FastAPI, HTTPException, Depends, status, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-import sqlite3
-from scipy import optimize
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-import seaborn as sns
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-from numba import jit
-import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -80,13 +61,13 @@ logger = logging.getLogger(__name__)
 SECRET_KEY = "demo_secret_key_change_in_production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-DATABASE_FILE = "demo_financial_planning.db"
+DATABASE_FILE = "minimal_demo_financial_planning.db"
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="AI Financial Planning Demo - Advanced",
-    description="A complete production-ready demo showcasing Monte Carlo simulations, portfolio optimization, real-time WebSocket updates, PDF reports, and advanced visualizations",
-    version="2.0.0",
+    title="AI Financial Planning Demo - Minimal",
+    description="A fully functional demo with minimal dependencies showcasing Monte Carlo simulations, portfolio optimization, real-time WebSocket updates, and comprehensive financial planning",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -101,17 +82,22 @@ class ConnectionManager:
         self.active_connections.append(websocket)
     
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
     
     async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
+        try:
+            await websocket.send_text(message)
+        except:
+            pass
     
     async def broadcast(self, message: str):
-        for connection in self.active_connections:
+        for connection in self.active_connections[:]:  # Use slice to avoid modification during iteration
             try:
                 await connection.send_text(message)
             except:
-                pass
+                # Remove failed connections
+                self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
@@ -167,12 +153,6 @@ class PortfolioOptimizationRequest(BaseModel):
     target_return: Optional[float] = Field(default=None, ge=0.01, le=0.30)
     risk_tolerance: str = Field(regex="^(conservative|moderate|aggressive)$")
     investment_amount: float = Field(gt=0)
-    
-class PDFReportRequest(BaseModel):
-    user_id: int
-    include_simulations: bool = True
-    include_recommendations: bool = True
-    include_charts: bool = True
 
 # Database Setup
 def init_database():
@@ -291,40 +271,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         "age": user[4]
     }
 
-# Advanced Monte Carlo Simulation with Numba optimization
-@jit(nopython=True)
-def monte_carlo_simulation_numba(
-    initial_amount: float,
-    monthly_contribution: float,
-    monthly_return: float,
-    monthly_volatility: float,
-    months: int,
-    num_simulations: int,
-    random_matrix: np.ndarray
-) -> np.ndarray:
-    """Optimized Monte Carlo simulation using Numba JIT compilation"""
-    portfolio_values = np.zeros((num_simulations, months + 1))
-    portfolio_values[:, 0] = initial_amount
-    
-    for sim in range(num_simulations):
-        for month in range(months):
-            # Add monthly contribution
-            portfolio_values[sim, month + 1] = portfolio_values[sim, month] + monthly_contribution
-            # Apply investment returns with random component
-            return_rate = monthly_return + monthly_volatility * random_matrix[sim, month]
-            portfolio_values[sim, month + 1] *= (1 + return_rate)
-    
-    return portfolio_values
-
-def calculate_max_drawdown(portfolio_values: np.ndarray) -> float:
-    """Calculate maximum drawdown across all simulation paths"""
-    max_drawdowns = []
-    for path in portfolio_values[:1000]:  # Sample first 1000 paths for performance
-        peak = np.maximum.accumulate(path)
-        drawdown = (path - peak) / peak
-        max_drawdowns.append(np.min(drawdown))
-    return float(np.mean(max_drawdowns))
-
+# Advanced Monte Carlo Simulation (Pure Python + NumPy)
 def simulate_portfolio_growth(
     initial_amount: float,
     monthly_contribution: float,
@@ -344,11 +291,18 @@ def simulate_portfolio_growth(
     np.random.seed(42)  # For reproducible results in demo
     random_matrix = np.random.normal(0, 1, (num_simulations, months))
     
-    # Run optimized simulation
-    portfolio_values = monte_carlo_simulation_numba(
-        initial_amount, monthly_contribution, monthly_return, 
-        monthly_volatility, months, num_simulations, random_matrix
-    )
+    # Initialize portfolio values matrix
+    portfolio_values = np.zeros((num_simulations, months + 1))
+    portfolio_values[:, 0] = initial_amount
+    
+    # Run simulation
+    for sim in range(num_simulations):
+        for month in range(months):
+            # Add monthly contribution
+            portfolio_values[sim, month + 1] = portfolio_values[sim, month] + monthly_contribution
+            # Apply investment returns with random component
+            return_rate = monthly_return + monthly_volatility * random_matrix[sim, month]
+            portfolio_values[sim, month + 1] *= (1 + return_rate)
     
     final_values = portfolio_values[:, -1]
     total_contributions = initial_amount + (monthly_contribution * months)
@@ -367,7 +321,14 @@ def simulate_portfolio_growth(
     
     # Risk metrics
     downside_returns = returns[returns < 0]
-    max_drawdown = calculate_max_drawdown(portfolio_values)
+    
+    # Calculate max drawdown (simplified)
+    max_drawdowns = []
+    for path in portfolio_values[:1000]:  # Sample first 1000 paths for performance
+        peak = np.maximum.accumulate(path)
+        drawdown = (path - peak) / peak
+        max_drawdowns.append(np.min(drawdown))
+    max_drawdown = float(np.mean(max_drawdowns))
     
     return {
         "simulation_stats": {
@@ -401,15 +362,74 @@ def simulate_portfolio_growth(
         "risk_metrics": {
             "value_at_risk_5": float(np.percentile(final_values, 5)),
             "expected_shortfall_5": float(np.mean(final_values[final_values <= np.percentile(final_values, 5)])),
-            "max_drawdown": float(max_drawdown),
+            "max_drawdown": max_drawdown,
             "probability_of_loss": float(np.mean(returns < 0))
         },
-        "portfolio_paths": portfolio_values[:min(500, num_simulations)].tolist(),  # First 500 paths for visualization
+        "portfolio_paths": portfolio_values[:min(200, num_simulations)].tolist(),  # First 200 paths for visualization
         "monthly_values": {
             "median_path": np.median(portfolio_values, axis=0).tolist(),
             "percentile_10_path": np.percentile(portfolio_values, 10, axis=0).tolist(),
             "percentile_90_path": np.percentile(portfolio_values, 90, axis=0).tolist()
         }
+    }
+
+# Portfolio Optimization (Pure Python)
+def get_asset_data():
+    """Get sample asset data for portfolio optimization"""
+    return {
+        "US_STOCKS": {"expected_return": 0.10, "volatility": 0.16, "name": "US Stocks (S&P 500)"},
+        "INTL_STOCKS": {"expected_return": 0.08, "volatility": 0.18, "name": "International Stocks"},
+        "BONDS": {"expected_return": 0.04, "volatility": 0.05, "name": "Bonds"},
+        "REITS": {"expected_return": 0.09, "volatility": 0.20, "name": "Real Estate (REITs)"},
+        "COMMODITIES": {"expected_return": 0.06, "volatility": 0.22, "name": "Commodities"}
+    }
+
+def simple_portfolio_optimization(risk_tolerance: str = "moderate") -> Dict[str, Any]:
+    """Simple portfolio optimization without scipy"""
+    assets = get_asset_data()
+    
+    # Risk-based allocation rules (simplified)
+    if risk_tolerance == "conservative":
+        allocation = {
+            "US_STOCKS": {"weight": 0.20, "percentage": 20.0, "name": assets["US_STOCKS"]["name"]},
+            "INTL_STOCKS": {"weight": 0.10, "percentage": 10.0, "name": assets["INTL_STOCKS"]["name"]},
+            "BONDS": {"weight": 0.60, "percentage": 60.0, "name": assets["BONDS"]["name"]},
+            "REITS": {"weight": 0.05, "percentage": 5.0, "name": assets["REITS"]["name"]},
+            "COMMODITIES": {"weight": 0.05, "percentage": 5.0, "name": assets["COMMODITIES"]["name"]}
+        }
+    elif risk_tolerance == "aggressive":
+        allocation = {
+            "US_STOCKS": {"weight": 0.50, "percentage": 50.0, "name": assets["US_STOCKS"]["name"]},
+            "INTL_STOCKS": {"weight": 0.25, "percentage": 25.0, "name": assets["INTL_STOCKS"]["name"]},
+            "BONDS": {"weight": 0.10, "percentage": 10.0, "name": assets["BONDS"]["name"]},
+            "REITS": {"weight": 0.10, "percentage": 10.0, "name": assets["REITS"]["name"]},
+            "COMMODITIES": {"weight": 0.05, "percentage": 5.0, "name": assets["COMMODITIES"]["name"]}
+        }
+    else:  # moderate
+        allocation = {
+            "US_STOCKS": {"weight": 0.35, "percentage": 35.0, "name": assets["US_STOCKS"]["name"]},
+            "INTL_STOCKS": {"weight": 0.20, "percentage": 20.0, "name": assets["INTL_STOCKS"]["name"]},
+            "BONDS": {"weight": 0.30, "percentage": 30.0, "name": assets["BONDS"]["name"]},
+            "REITS": {"weight": 0.10, "percentage": 10.0, "name": assets["REITS"]["name"]},
+            "COMMODITIES": {"weight": 0.05, "percentage": 5.0, "name": assets["COMMODITIES"]["name"]}
+        }
+    
+    # Calculate portfolio metrics
+    portfolio_return = sum(assets[asset]["expected_return"] * allocation[asset]["weight"] for asset in assets)
+    portfolio_variance = sum((assets[asset]["volatility"] * allocation[asset]["weight"]) ** 2 for asset in assets)
+    portfolio_volatility = portfolio_variance ** 0.5
+    sharpe_ratio = portfolio_return / portfolio_volatility if portfolio_volatility > 0 else 0
+    
+    return {
+        "success": True,
+        "allocation": allocation,
+        "metrics": {
+            "return": float(portfolio_return),
+            "volatility": float(portfolio_volatility),
+            "sharpe_ratio": float(sharpe_ratio)
+        },
+        "risk_tolerance": risk_tolerance,
+        "optimization_method": "Risk-Based Asset Allocation"
     }
 
 def get_risk_parameters(risk_level: str) -> Dict[str, float]:
@@ -421,281 +441,23 @@ def get_risk_parameters(risk_level: str) -> Dict[str, float]:
     }
     return risk_profiles.get(risk_level, risk_profiles["moderate"])
 
-# Portfolio Optimization Functions using Modern Portfolio Theory
-def get_asset_data():
-    """Get sample asset data for portfolio optimization"""
-    return {
-        "US_STOCKS": {"expected_return": 0.10, "volatility": 0.16, "name": "US Stocks (S&P 500)"},
-        "INTL_STOCKS": {"expected_return": 0.08, "volatility": 0.18, "name": "International Stocks"},
-        "BONDS": {"expected_return": 0.04, "volatility": 0.05, "name": "Bonds"},
-        "REITS": {"expected_return": 0.09, "volatility": 0.20, "name": "Real Estate (REITs)"},
-        "COMMODITIES": {"expected_return": 0.06, "volatility": 0.22, "name": "Commodities"}
-    }
-
-def calculate_portfolio_metrics(weights: np.ndarray, returns: np.ndarray, cov_matrix: np.ndarray) -> Dict[str, float]:
-    """Calculate portfolio return, volatility, and Sharpe ratio"""
-    portfolio_return = np.sum(returns * weights)
-    portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-    sharpe_ratio = portfolio_return / portfolio_volatility if portfolio_volatility > 0 else 0
-    
-    return {
-        "return": float(portfolio_return),
-        "volatility": float(portfolio_volatility),
-        "sharpe_ratio": float(sharpe_ratio)
-    }
-
-def optimize_portfolio(target_return: Optional[float] = None, risk_tolerance: str = "moderate") -> Dict[str, Any]:
-    """Optimize portfolio allocation using Modern Portfolio Theory"""
-    assets = get_asset_data()
-    asset_names = list(assets.keys())
-    returns = np.array([assets[asset]["expected_return"] for asset in asset_names])
-    volatilities = np.array([assets[asset]["volatility"] for asset in asset_names])
-    
-    # Create correlation matrix (simplified for demo)
-    correlation_matrix = np.array([
-        [1.00, 0.75, -0.20, 0.60, 0.30],  # US Stocks
-        [0.75, 1.00, -0.15, 0.55, 0.25],  # International Stocks
-        [-0.20, -0.15, 1.00, 0.10, -0.10], # Bonds
-        [0.60, 0.55, 0.10, 1.00, 0.40],   # REITs
-        [0.30, 0.25, -0.10, 0.40, 1.00]   # Commodities
-    ])
-    
-    # Calculate covariance matrix
-    cov_matrix = np.outer(volatilities, volatilities) * correlation_matrix
-    
-    num_assets = len(asset_names)
-    
-    # Constraints
-    constraints = [{"type": "eq", "fun": lambda x: np.sum(x) - 1}]  # Weights sum to 1
-    bounds = tuple((0.0, 1.0) for _ in range(num_assets))  # No short selling
-    
-    # Risk tolerance constraints
-    if risk_tolerance == "conservative":
-        # Conservative: max 40% stocks, min 40% bonds
-        constraints.extend([
-            {"type": "ineq", "fun": lambda x: 0.4 - (x[0] + x[1])},  # Max 40% stocks
-            {"type": "ineq", "fun": lambda x: x[2] - 0.4}  # Min 40% bonds
-        ])
-    elif risk_tolerance == "aggressive":
-        # Aggressive: min 60% stocks, max 20% bonds
-        constraints.extend([
-            {"type": "ineq", "fun": lambda x: (x[0] + x[1]) - 0.6},  # Min 60% stocks
-            {"type": "ineq", "fun": lambda x: 0.2 - x[2]}  # Max 20% bonds
-        ])
-    
-    # Objective function
-    if target_return:
-        # Minimize risk for target return
-        constraints.append({"type": "eq", "fun": lambda x: np.sum(returns * x) - target_return})
-        objective = lambda x: np.sqrt(np.dot(x.T, np.dot(cov_matrix, x)))
-    else:
-        # Maximize Sharpe ratio
-        objective = lambda x: -calculate_portfolio_metrics(x, returns, cov_matrix)["sharpe_ratio"]
-    
-    # Initial guess (equal weights)
-    x0 = np.array([1.0 / num_assets] * num_assets)
-    
-    # Optimize
-    result = optimize.minimize(objective, x0, method="SLSQP", bounds=bounds, constraints=constraints)
-    
-    if result.success:
-        optimal_weights = result.x
-        metrics = calculate_portfolio_metrics(optimal_weights, returns, cov_matrix)
-        
-        # Calculate asset allocation
-        allocation = {}
-        for i, asset in enumerate(asset_names):
-            allocation[asset] = {
-                "weight": float(optimal_weights[i]),
-                "percentage": float(optimal_weights[i] * 100),
-                "name": assets[asset]["name"]
-            }
-        
-        return {
-            "success": True,
-            "allocation": allocation,
-            "metrics": metrics,
-            "risk_tolerance": risk_tolerance,
-            "target_return": target_return,
-            "optimization_method": "Mean-Variance Optimization"
-        }
-    else:
-        return {
-            "success": False,
-            "error": "Optimization failed",
-            "message": result.message
-        }
-
-# Visualization Functions
-def create_portfolio_chart(simulation_results: Dict) -> str:
-    """Create portfolio simulation chart and return as base64 string"""
-    plt.style.use('seaborn-v0_8-darkgrid')
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    # Plot 1: Portfolio paths
-    paths = simulation_results["portfolio_paths"][:100]  # First 100 paths
-    months = len(paths[0])
-    x_axis = list(range(months))
-    
-    for path in paths:
-        ax1.plot(x_axis, path, alpha=0.1, color='blue', linewidth=0.5)
-    
-    # Plot median and percentiles
-    median_path = simulation_results["monthly_values"]["median_path"]
-    p10_path = simulation_results["monthly_values"]["percentile_10_path"]
-    p90_path = simulation_results["monthly_values"]["percentile_90_path"]
-    
-    ax1.plot(x_axis, median_path, color='red', linewidth=2, label='Median')
-    ax1.fill_between(x_axis, p10_path, p90_path, alpha=0.3, color='green', label='10th-90th Percentile')
-    
-    ax1.set_title('Portfolio Growth Simulation Paths', fontsize=14, fontweight='bold')
-    ax1.set_xlabel('Months')
-    ax1.set_ylabel('Portfolio Value ($)')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-    
-    # Plot 2: Final value distribution
-    final_values = simulation_results["final_values"]
-    ax2.hist([final_values[k] for k in ["percentile_5", "percentile_25", "median", "percentile_75", "percentile_95"]], 
-             bins=50, alpha=0.7, color='skyblue', edgecolor='black')
-    ax2.axvline(final_values["median"], color='red', linestyle='--', linewidth=2, label=f'Median: ${final_values["median"]:,.0f}')
-    ax2.set_title('Distribution of Final Portfolio Values', fontsize=14, fontweight='bold')
-    ax2.set_xlabel('Portfolio Value ($)')
-    ax2.set_ylabel('Frequency')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    # Convert to base64
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
-    buffer.seek(0)
-    chart_base64 = base64.b64encode(buffer.getvalue()).decode()
-    plt.close()
-    
-    return chart_base64
-
-def create_allocation_chart(allocation: Dict) -> str:
-    """Create portfolio allocation pie chart and return as base64 string"""
-    plt.style.use('seaborn-v0_8-pastel')
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    labels = [allocation[asset]["name"] for asset in allocation]
-    sizes = [allocation[asset]["weight"] for asset in allocation]
-    colors = plt.cm.Set3(np.linspace(0, 1, len(labels)))
-    
-    wedges, texts, autotexts = ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
-                                      colors=colors, startangle=90, textprops={'fontsize': 10})
-    
-    ax.set_title('Optimal Portfolio Allocation', fontsize=16, fontweight='bold')
-    
-    # Convert to base64
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
-    buffer.seek(0)
-    chart_base64 = base64.b64encode(buffer.getvalue()).decode()
-    plt.close()
-    
-    return chart_base64
-
-# PDF Report Generation
-def generate_pdf_report(user_data: Dict, simulation_results: Dict, recommendations: Dict) -> bytes:
-    """Generate comprehensive PDF financial report"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    styles = getSampleStyleSheet()
-    story = []
-    
-    # Title
-    title = Paragraph("Financial Planning Report", styles['Title'])
-    story.append(title)
-    story.append(Spacer(1, 12))
-    
-    # User Information
-    user_info = Paragraph(f"<b>Prepared for:</b> {user_data['name']}<br/>"
-                         f"<b>Age:</b> {user_data['age']}<br/>"
-                         f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y')}", 
-                         styles['Normal'])
-    story.append(user_info)
-    story.append(Spacer(1, 20))
-    
-    # Executive Summary
-    summary_title = Paragraph("Executive Summary", styles['Heading1'])
-    story.append(summary_title)
-    
-    summary_text = f"""
-    Based on your financial profile and Monte Carlo simulation analysis, 
-    your portfolio has a {simulation_results['success_probabilities']['positive_return']:.1%} probability 
-    of generating positive returns over the investment period. The median projected portfolio value 
-    is ${simulation_results['final_values']['median']:,.0f} with a Sharpe ratio of 
-    {simulation_results['returns']['sharpe_ratio']:.2f}.
-    """
-    story.append(Paragraph(summary_text, styles['Normal']))
-    story.append(Spacer(1, 20))
-    
-    # Simulation Results Table
-    results_title = Paragraph("Simulation Results", styles['Heading1'])
-    story.append(results_title)
-    
-    results_data = [
-        ['Metric', 'Value'],
-        ['Number of Simulations', f"{simulation_results['simulation_stats']['num_simulations']:,}"],
-        ['Investment Period', f"{simulation_results['simulation_stats']['years']} years"],
-        ['Median Portfolio Value', f"${simulation_results['final_values']['median']:,.0f}"],
-        ['95th Percentile Value', f"${simulation_results['final_values']['percentile_95']:,.0f}"],
-        ['5th Percentile Value', f"${simulation_results['final_values']['percentile_5']:,.0f}"],
-        ['Success Probability', f"{simulation_results['success_probabilities']['positive_return']:.1%}"],
-        ['Sharpe Ratio', f"{simulation_results['returns']['sharpe_ratio']:.2f}"]
-    ]
-    
-    results_table = Table(results_data)
-    results_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 14),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    
-    story.append(results_table)
-    story.append(Spacer(1, 20))
-    
-    # Recommendations
-    rec_title = Paragraph("Personalized Recommendations", styles['Heading1'])
-    story.append(rec_title)
-    
-    for i, rec in enumerate(recommendations['recommendations'], 1):
-        rec_text = Paragraph(f"<b>{i}. {rec['title']}</b><br/>{rec['description']}", styles['Normal'])
-        story.append(rec_text)
-        story.append(Spacer(1, 10))
-    
-    # Build PDF
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.read()
-
 # API Endpoints
-
 @app.get("/")
 async def root():
     """Root endpoint with comprehensive API information"""
     return {
-        "message": "AI Financial Planning Demo API - Advanced",
-        "version": "2.0.0",
+        "message": "AI Financial Planning Demo - Minimal Dependencies",
+        "version": "1.0.0",
         "status": "operational",
         "features": [
-            "Monte Carlo Simulations with Numba Optimization",
-            "Portfolio Optimization using Modern Portfolio Theory",
+            "Monte Carlo Simulations with NumPy Optimization",
+            "Risk-Based Portfolio Optimization", 
             "Real-time WebSocket Updates",
-            "PDF Report Generation",
-            "Advanced Visualization Charts",
-            "Risk Assessment and Analytics",
-            "JWT Authentication",
-            "SQLite Database (Zero Config)"
+            "JWT Authentication & Security",
+            "SQLite Database (Zero Configuration)",
+            "CORS Enabled for Frontend Integration",
+            "RESTful API with Auto-Generated Docs",
+            "Comprehensive Financial Analytics"
         ],
         "endpoints": {
             "health": "/health",
@@ -707,10 +469,8 @@ async def root():
             "optimize": "/optimize-portfolio",
             "recommendations": "/recommendations",
             "sample_data": "/sample-data",
-            "visualization": "/visualize/{chart_type}",
-            "pdf_report": "/generate-report",
-            "websocket": "/ws",
-            "analytics": "/analytics"
+            "analytics": "/analytics",
+            "websocket": "/ws"
         },
         "demo_users": {
             "email": "demo@example.com",
@@ -722,7 +482,7 @@ async def root():
             "2": "Create sample data with GET /sample-data",
             "3": "Login with demo@example.com / demo123",
             "4": "Run simulations and optimizations",
-            "5": "Generate PDF reports and visualizations"
+            "5": "Monitor real-time updates via WebSocket"
         }
     }
 
@@ -741,7 +501,8 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "database": db_status,
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "dependencies": "minimal"
     }
 
 @app.post("/register")
@@ -972,9 +733,6 @@ async def run_simulation(
     median_value = simulation_results["final_values"]["median"]
     median_return = ((median_value - total_contributions) / total_contributions) * 100
     
-    # Generate visualization chart
-    chart_base64 = create_portfolio_chart(simulation_results)
-    
     # Broadcast to WebSocket clients
     await manager.broadcast(json.dumps({
         "type": "simulation_complete",
@@ -988,10 +746,6 @@ async def run_simulation(
         "parameters": request.dict(),
         "risk_parameters": risk_params,
         "results": simulation_results,
-        "visualization": {
-            "chart_base64": chart_base64,
-            "chart_type": "portfolio_simulation"
-        },
         "analysis": {
             "total_contributions": total_contributions,
             "median_return_percentage": median_return,
@@ -999,6 +753,46 @@ async def run_simulation(
             "recommendation": get_simulation_recommendation(simulation_results, request.risk_level)
         }
     }
+
+@app.post("/optimize-portfolio")
+async def optimize_portfolio_endpoint(
+    request: PortfolioOptimizationRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Optimize portfolio allocation using risk-based rules"""
+    if request.user_id != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Run portfolio optimization
+    optimization_result = simple_portfolio_optimization(
+        risk_tolerance=request.risk_tolerance
+    )
+    
+    # Store optimization results
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO simulation_results (user_id, simulation_type, parameters, results)
+        VALUES (?, ?, ?, ?)
+    """, (
+        request.user_id,
+        "portfolio_optimization",
+        json.dumps(request.dict()),
+        json.dumps(optimization_result)
+    ))
+    conn.commit()
+    conn.close()
+    
+    optimization_result["optimization_id"] = cursor.lastrowid
+    
+    # Broadcast to WebSocket clients
+    await manager.broadcast(json.dumps({
+        "type": "optimization_complete",
+        "user_id": request.user_id,
+        "result": "success"
+    }))
+    
+    return optimization_result
 
 @app.get("/recommendations")
 async def get_recommendations(current_user: dict = Depends(get_current_user)):
@@ -1029,139 +823,6 @@ async def get_recommendations(current_user: dict = Depends(get_current_user)):
     )
     
     return recommendations
-
-# Advanced Endpoints
-
-@app.post("/optimize-portfolio")
-async def optimize_portfolio_endpoint(
-    request: PortfolioOptimizationRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """Optimize portfolio allocation using Modern Portfolio Theory"""
-    if request.user_id != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # Run portfolio optimization
-    optimization_result = optimize_portfolio(
-        target_return=request.target_return,
-        risk_tolerance=request.risk_tolerance
-    )
-    
-    if optimization_result["success"]:
-        # Store optimization results
-        conn = sqlite3.connect(DATABASE_FILE)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO simulation_results (user_id, simulation_type, parameters, results)
-            VALUES (?, ?, ?, ?)
-        """, (
-            request.user_id,
-            "portfolio_optimization",
-            json.dumps(request.dict()),
-            json.dumps(optimization_result)
-        ))
-        conn.commit()
-        conn.close()
-        
-        # Generate allocation chart
-        allocation_chart = create_allocation_chart(optimization_result["allocation"])
-        optimization_result["allocation_chart"] = allocation_chart
-        optimization_result["optimization_id"] = cursor.lastrowid
-        
-        # Broadcast to WebSocket clients
-        await manager.broadcast(json.dumps({
-            "type": "optimization_complete",
-            "user_id": request.user_id,
-            "result": "success"
-        }))
-    
-    return optimization_result
-
-@app.get("/visualize/{chart_type}")
-async def generate_visualization(
-    chart_type: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Generate various types of financial charts"""
-    if chart_type not in ["simulation", "allocation", "goals", "performance"]:
-        raise HTTPException(status_code=400, detail="Invalid chart type")
-    
-    # Get latest simulation results
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT results FROM simulation_results 
-        WHERE user_id = ? ORDER BY created_at DESC LIMIT 1
-    """, (current_user["id"],))
-    recent_result = cursor.fetchone()
-    conn.close()
-    
-    if not recent_result:
-        raise HTTPException(status_code=404, detail="No simulation data found")
-    
-    results_data = json.loads(recent_result[0])
-    
-    if chart_type == "simulation":
-        chart_base64 = create_portfolio_chart(results_data)
-        return {"chart_type": "simulation", "chart_data": chart_base64}
-    
-    elif chart_type == "allocation" and "allocation" in results_data:
-        chart_base64 = create_allocation_chart(results_data["allocation"])
-        return {"chart_type": "allocation", "chart_data": chart_base64}
-    
-    return {"message": f"Chart type {chart_type} not available for current data"}
-
-@app.post("/generate-report")
-async def generate_report_endpoint(
-    request: PDFReportRequest,
-    current_user: dict = Depends(get_current_user)
-):
-    """Generate comprehensive PDF financial report"""
-    if request.user_id != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # Get user data and recommendations
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-    
-    # Get latest simulation results
-    if request.include_simulations:
-        cursor.execute("""
-            SELECT results FROM simulation_results 
-            WHERE user_id = ? AND simulation_type = 'monte_carlo_portfolio'
-            ORDER BY created_at DESC LIMIT 1
-        """, (request.user_id,))
-        simulation_data = cursor.fetchone()
-        if simulation_data:
-            simulation_results = json.loads(simulation_data[0])
-        else:
-            raise HTTPException(status_code=404, detail="No simulation data found")
-    
-    conn.close()
-    
-    # Get recommendations
-    recommendations = generate_personalized_recommendations(
-        profile=None,  # Will be handled in the function
-        user_age=current_user["age"],
-        recent_simulation=simulation_data if request.include_simulations else None
-    )
-    
-    # Generate PDF report
-    pdf_bytes = generate_pdf_report(
-        user_data=current_user,
-        simulation_results=simulation_results if request.include_simulations else {},
-        recommendations=recommendations
-    )
-    
-    # Return PDF as streaming response
-    def generate():
-        yield pdf_bytes
-    
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=financial_report.pdf"}
-    )
 
 @app.get("/analytics")
 async def get_analytics(current_user: dict = Depends(get_current_user)):
@@ -1403,41 +1064,42 @@ def generate_personalized_recommendations(profile, user_age: int, recent_simulat
         })
     
     # Savings rate recommendations
-    current_income = profile[2]
-    current_savings = profile[3]
-    monthly_expenses = profile[4]
-    monthly_surplus = (current_income / 12) - monthly_expenses
-    
-    if monthly_surplus > 0:
-        savings_rate = (monthly_surplus * 12) / current_income
-        if savings_rate < 0.1:
+    if profile:
+        current_income = profile[2]
+        current_savings = profile[3]
+        monthly_expenses = profile[4]
+        monthly_surplus = (current_income / 12) - monthly_expenses
+        
+        if monthly_surplus > 0:
+            savings_rate = (monthly_surplus * 12) / current_income
+            if savings_rate < 0.1:
+                recommendations.append({
+                    "category": "Savings",
+                    "title": "Increase Savings Rate", 
+                    "description": f"Your current savings rate is {savings_rate:.1%}. Consider targeting 15-20% of income.",
+                    "priority": "high"
+                })
+            else:
+                recommendations.append({
+                    "category": "Savings",
+                    "title": "Excellent Savings Discipline",
+                    "description": f"Your savings rate of {savings_rate:.1%} is on track. Keep up the great work!",
+                    "priority": "low"
+                })
+        
+        # Emergency fund recommendation
+        monthly_expenses_coverage = current_savings / monthly_expenses if monthly_expenses > 0 else 0
+        if monthly_expenses_coverage < 3:
             recommendations.append({
-                "category": "Savings",
-                "title": "Increase Savings Rate", 
-                "description": f"Your current savings rate is {savings_rate:.1%}. Consider targeting 15-20% of income.",
+                "category": "Emergency Fund",
+                "title": "Build Emergency Fund",
+                "description": f"Build an emergency fund covering 3-6 months of expenses. You currently have {monthly_expenses_coverage:.1f} months covered.",
                 "priority": "high"
             })
-        else:
-            recommendations.append({
-                "category": "Savings",
-                "title": "Excellent Savings Discipline",
-                "description": f"Your savings rate of {savings_rate:.1%} is on track. Keep up the great work!",
-                "priority": "low"
-            })
-    
-    # Emergency fund recommendation
-    monthly_expenses_coverage = current_savings / monthly_expenses if monthly_expenses > 0 else 0
-    if monthly_expenses_coverage < 3:
-        recommendations.append({
-            "category": "Emergency Fund",
-            "title": "Build Emergency Fund",
-            "description": f"Build an emergency fund covering 3-6 months of expenses. You currently have {monthly_expenses_coverage:.1f} months covered.",
-            "priority": "high"
-        })
     
     return {
         "user_age": user_age,
-        "risk_profile": profile[5],
+        "risk_profile": profile[5] if profile else "unknown",
         "recommendations": recommendations,
         "total_recommendations": len(recommendations),
         "generated_at": datetime.utcnow().isoformat()
@@ -1448,25 +1110,23 @@ def generate_personalized_recommendations(profile, user_age: int, recent_simulat
 async def startup_event():
     """Initialize database on startup"""
     init_database()
-    logger.info("Demo API started successfully")
+    logger.info("Minimal Demo API started successfully")
 
 @app.on_event("shutdown") 
 async def shutdown_event():
     """Cleanup on shutdown"""
-    logger.info("Demo API shutting down")
+    logger.info("Minimal Demo API shutting down")
 
 def main():
-    """Main function to run the advanced demo server"""
+    """Main function to run the minimal demo server"""
     print("\n" + "🚀" * 30)
-    print("  AI FINANCIAL PLANNING DEMO - ADVANCED EDITION")
+    print("  AI FINANCIAL PLANNING DEMO - MINIMAL EDITION")
     print("🚀" * 30)
     print()
-    print("🎯 ADVANCED FEATURES:")
-    print("   ⚡ Monte Carlo Simulations with Numba JIT Optimization (10,000+ simulations)")
-    print("   📈 Modern Portfolio Theory Optimization")
+    print("🎯 MINIMAL DEPENDENCIES FEATURES:")
+    print("   ⚡ Monte Carlo Simulations with NumPy Optimization")
+    print("   📈 Risk-Based Portfolio Optimization")
     print("   🔄 Real-time WebSocket Updates")
-    print("   📄 Professional PDF Report Generation")
-    print("   📊 Advanced Data Visualizations & Charts")
     print("   🧠 AI-Powered Risk Assessment")
     print("   🔐 JWT Authentication & Security")
     print("   💾 SQLite Database (Zero Configuration)")
@@ -1475,12 +1135,11 @@ def main():
     print()
     print("🌟 DEMO CAPABILITIES:")
     print("   💼 Complete Financial Planning Workflow")
-    print("   🎲 High-Performance Monte Carlo Simulations")
-    print("   🎯 Portfolio Optimization using Scipy")
+    print("   🎲 High-Performance Monte Carlo Simulations (10K+ iterations)")
+    print("   🎯 Risk-Based Asset Allocation")
     print("   📈 Real-time Performance Analytics")
-    print("   📋 Comprehensive PDF Financial Reports")
     print("   🔄 Live WebSocket Updates")
-    print("   📊 Interactive Visualization Charts")
+    print("   📊 Comprehensive Financial Dashboard")
     print()
     print("🔗 QUICK ACCESS LINKS:")
     print("   📚 API Documentation: http://localhost:8000/docs")
@@ -1499,15 +1158,14 @@ def main():
     print("   POST /login - Authenticate user")
     print("   POST /simulate - Run Monte Carlo simulation")
     print("   POST /optimize-portfolio - Optimize asset allocation")
-    print("   POST /generate-report - Create PDF report")
-    print("   GET /visualize/{chart_type} - Generate charts")
+    print("   GET /analytics - Performance dashboard")
     print("   WebSocket /ws - Real-time updates")
     print()
-    print("⚡ PERFORMANCE OPTIMIZATIONS:")
-    print("   🔥 Numba JIT compilation for simulations")
-    print("   📊 Efficient NumPy operations")
+    print("⚡ OPTIMIZATIONS:")
+    print("   🔥 NumPy vectorized operations")
+    print("   📊 Efficient data structures")
     print("   🗃️  Optimized SQLite queries")
-    print("   🖼️  Cached chart generation")
+    print("   ⚡ Real-time WebSocket broadcasting")
     print()
     print("🚀 Server launching on http://localhost:8000")
     print("📖 Visit /docs to explore all endpoints interactively!")

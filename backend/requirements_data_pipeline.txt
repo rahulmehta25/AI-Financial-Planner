@@ -1,0 +1,52 @@
+# Data Pipeline Demo Dependencies
+# Core data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Beautiful console output and progress bars
+rich>=13.0.0
+
+# Data visualization and charting
+plotly>=5.15.0
+
+# HTTP requests for API simulation
+requests>=2.31.0
+
+# Database connectivity
+sqlite3  # Built into Python
+
+# Async processing
+asyncio  # Built into Python
+
+# Date and time handling
+datetime  # Built into Python
+
+# JSON processing
+json  # Built into Python
+
+# Logging
+logging  # Built into Python
+
+# File system operations
+pathlib  # Built into Python
+
+# Type hints and dataclasses
+typing  # Built into Python
+dataclasses  # Built into Python
+enum  # Built into Python
+
+# Concurrent processing
+concurrent.futures  # Built into Python
+
+# Random data generation
+random  # Built into Python
+
+# System and time utilities
+time  # Built into Python
+
+# Optional: For enhanced data processing capabilities
+# scikit-learn>=1.3.0  # For ML-based data quality checks
+# apache-airflow>=2.6.0  # For production pipeline orchestration
+# kafka-python>=2.0.0  # For real Kafka streaming
+# great-expectations>=0.17.0  # For advanced data quality
+# dbt-core>=1.5.0  # For data transformation workflows

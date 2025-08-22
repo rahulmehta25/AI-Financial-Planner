@@ -1,115 +1,177 @@
 #!/usr/bin/env python3
 """
-Application Startup Script
+Startup script for the AI Financial Planning System
 
-This script can start the FastAPI application in various modes based on
-available dependencies.
+This script demonstrates how to start the application properly
+with automatic dependency detection and graceful degradation.
 """
 
 import sys
 import os
-import logging
 import subprocess
-
-# Add the backend directory to the Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from pathlib import Path
 
 def check_dependencies():
-    """Check which dependencies are available"""
+    """Check if required dependencies are installed"""
     dependencies = {
-        "fastapi": False,
-        "uvicorn": False,
-        "pydantic": False,
-        "sqlalchemy": False
+        'fastapi': 'FastAPI web framework',
+        'uvicorn': 'ASGI server',
+        'pydantic': 'Data validation library',
+        'sqlalchemy': 'Database ORM'
     }
     
-    for dep in dependencies:
+    missing = []
+    available = []
+    
+    for dep, description in dependencies.items():
         try:
             __import__(dep)
-            dependencies[dep] = True
-            logger.info(f"✓ {dep} is available")
+            available.append(f"✅ {dep}: {description}")
         except ImportError:
-            logger.warning(f"✗ {dep} is not available")
+            missing.append(f"❌ {dep}: {description}")
     
-    return dependencies
+    return available, missing
+
+def install_minimal_dependencies():
+    """Install minimal dependencies for basic functionality"""
+    print("Installing minimal dependencies...")
+    
+    try:
+        subprocess.run([
+            sys.executable, "-m", "pip", "install", 
+            "fastapi", "uvicorn[standard]", "pydantic", "python-multipart"
+        ], check=True)
+        print("✅ Minimal dependencies installed successfully!")
+        return True
+    except subprocess.CalledProcessError:
+        print("❌ Failed to install dependencies")
+        return False
 
 def start_with_uvicorn():
     """Start the application with uvicorn"""
+    print("Starting application with uvicorn...")
+    
+    # Set environment variables for development
+    os.environ.setdefault('DEBUG', 'true')
+    os.environ.setdefault('ENVIRONMENT', 'development')
+    os.environ.setdefault('HOST', '0.0.0.0')
+    os.environ.setdefault('PORT', '8000')
+    
     try:
+        # Change to the backend directory
+        os.chdir(Path(__file__).parent)
+        
         cmd = [
             sys.executable, "-m", "uvicorn", 
-            "app.main:app", 
-            "--reload", 
-            "--host", "0.0.0.0", 
-            "--port", "8000"
+            "app.main:app",
+            "--host", os.getenv('HOST', '0.0.0.0'),
+            "--port", os.getenv('PORT', '8000'),
+            "--reload",
+            "--log-level", "info"
         ]
-        logger.info("Starting FastAPI application with uvicorn...")
-        logger.info(f"Command: {' '.join(cmd)}")
+        
+        print(f"Running command: {' '.join(cmd)}")
         subprocess.run(cmd)
-    except FileNotFoundError:
-        logger.error("uvicorn not found. Please install with: pip install uvicorn")
-        return False
     except KeyboardInterrupt:
-        logger.info("Application stopped by user")
-        return True
+        print("\n🛑 Application stopped by user")
     except Exception as e:
-        logger.error(f"Failed to start with uvicorn: {e}")
+        print(f"❌ Failed to start application: {e}")
         return False
+    
+    return True
 
-def start_minimal_mode():
-    """Start in minimal mode without uvicorn"""
-    logger.info("Starting in minimal diagnostic mode...")
+def start_fallback_mode():
+    """Start in fallback mode without full dependencies"""
+    print("Starting in fallback mode...")
+    print("This mode provides basic functionality even without all dependencies.")
+    
     try:
-        from app.main import app
-        logger.info("Application imported successfully")
+        # Import and test the application
+        from app.main import app, AVAILABLE_SERVICES
         
-        # If we have a minimal app, show its status
-        if hasattr(app, 'get_status'):
-            status = app.get_status()
-            print("\n" + "="*60)
-            print("APPLICATION STATUS")
-            print("="*60)
-            print(f"Status: {status.get('status', 'unknown')}")
-            print(f"Version: {status.get('version', 'unknown')}")
-            print(f"Mode: {status.get('mode', 'unknown')}")
-            print("="*60)
+        print("\n📊 Service Status:")
+        for service, available in AVAILABLE_SERVICES.items():
+            status = "✅" if available else "❌"
+            print(f"  {status} {service}")
         
-        return True
+        print(f"\n🔗 Available routes: {len(app.routes)}")
+        
+        # Try to start a basic HTTP server
+        print("\n🚀 Starting basic HTTP server on http://localhost:8080")
+        print("Note: This is a demonstration mode with limited functionality")
+        print("Press Ctrl+C to stop")
+        
+        # This is a basic demo - in reality you'd use a proper server
+        import http.server
+        import socketserver
+        
+        class Handler(http.server.SimpleHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = {
+                    "message": "AI Financial Planning System (Fallback Mode)",
+                    "status": "running",
+                    "services": AVAILABLE_SERVICES,
+                    "note": "Limited functionality - install FastAPI for full features"
+                }
+                import json
+                self.wfile.write(json.dumps(response, indent=2).encode())
+        
+        with socketserver.TCPServer(("", 8080), Handler) as httpd:
+            httpd.serve_forever()
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Fallback server stopped by user")
     except Exception as e:
-        logger.error(f"Failed to start in minimal mode: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Failed to start fallback mode: {e}")
         return False
+    
+    return True
 
 def main():
-    """Main startup logic"""
-    print("AI Financial Planning System - Startup Script")
-    print("=" * 50)
+    """Main startup routine"""
+    print("🚀 AI Financial Planning System - Startup Script")
+    print("=" * 60)
     
-    # Check dependencies
-    deps = check_dependencies()
+    # Check current dependencies
+    available, missing = check_dependencies()
     
-    # Determine startup mode
-    if deps["fastapi"] and deps["uvicorn"]:
-        logger.info("Full FastAPI environment detected")
-        success = start_with_uvicorn()
-    elif deps["fastapi"]:
-        logger.info("FastAPI available but uvicorn missing")
-        logger.info("Install uvicorn with: pip install uvicorn")
-        success = start_minimal_mode()
+    print("\n📋 Dependency Status:")
+    for dep in available:
+        print(f"  {dep}")
+    
+    if missing:
+        print("\n⚠️  Missing Dependencies:")
+        for dep in missing:
+            print(f"  {dep}")
+        
+        print("\nOptions:")
+        print("1. Install minimal dependencies and start normally")
+        print("2. Start in fallback mode (limited functionality)")
+        print("3. Exit")
+        
+        try:
+            choice = input("\nEnter your choice (1-3): ").strip()
+        except KeyboardInterrupt:
+            print("\n🛑 Cancelled by user")
+            return 1
+        
+        if choice == "1":
+            if install_minimal_dependencies():
+                return start_with_uvicorn()
+            else:
+                print("❌ Installation failed. Try fallback mode.")
+                return start_fallback_mode()
+        elif choice == "2":
+            return start_fallback_mode()
+        else:
+            print("👋 Goodbye!")
+            return 0
     else:
-        logger.info("FastAPI not available, running minimal diagnostics")
-        success = start_minimal_mode()
-    
-    if not success:
-        print("\nTroubleshooting:")
-        print("1. Install dependencies: pip install fastapi uvicorn pydantic sqlalchemy")
-        print("2. Check Python path and working directory")
-        print("3. Try: python3 app/minimal_main.py")
-        sys.exit(1)
+        print("\n✅ All dependencies available!")
+        return start_with_uvicorn()
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
