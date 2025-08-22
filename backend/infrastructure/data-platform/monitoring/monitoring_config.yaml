@@ -1,0 +1,538 @@
+# Data Monitoring System Configuration
+# Complete configuration for monitoring data quality, pipeline health, KPIs, and system performance
+
+monitoring_system:
+  enabled: true
+  
+  # Database connections
+  databases:
+    postgres:
+      connection_string: "postgresql://financial_user:${POSTGRES_PASSWORD}@localhost:5432/financial_planning"
+      pool_size: 10
+      max_overflow: 20
+    
+    airflow:
+      connection_string: "postgresql://airflow:${AIRFLOW_DB_PASSWORD}@localhost:5432/airflow"
+      pool_size: 5
+      max_overflow: 10
+  
+  # Cache and search
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    password: "${REDIS_PASSWORD}"
+    ssl: false
+  
+  elasticsearch:
+    url: "http://localhost:9200"
+    index_prefix: "financial_monitoring"
+    username: "${ES_USERNAME}"
+    password: "${ES_PASSWORD}"
+
+# Data Quality Monitoring
+data_quality:
+  enabled: true
+  interval_seconds: 300  # 5 minutes
+  
+  # Tables to monitor
+  tables:
+    # Core business tables
+    - schema: "financial_planning"
+      table: "users"
+      priority: "high"
+      quality_threshold: 0.95
+      
+    - schema: "financial_planning"
+      table: "accounts"
+      priority: "high"
+      quality_threshold: 0.95
+      
+    - schema: "financial_planning"
+      table: "transactions"
+      priority: "critical"
+      quality_threshold: 0.98
+      
+    - schema: "financial_planning"
+      table: "portfolios"
+      priority: "high"
+      quality_threshold: 0.95
+      
+    - schema: "financial_planning"
+      table: "financial_goals"
+      priority: "medium"
+      quality_threshold: 0.90
+      
+    # Dimensional model tables
+    - schema: "dimensions"
+      table: "dim_user"
+      priority: "high"
+      quality_threshold: 0.95
+      
+    - schema: "dimensions"
+      table: "dim_account"
+      priority: "high"
+      quality_threshold: 0.95
+      
+    - schema: "dimensions"
+      table: "dim_security"
+      priority: "medium"
+      quality_threshold: 0.90
+      
+    - schema: "facts"
+      table: "fact_transaction"
+      priority: "critical"
+      quality_threshold: 0.98
+      
+    - schema: "facts"
+      table: "fact_portfolio_performance"
+      priority: "high"
+      quality_threshold: 0.95
+  
+  # Data quality rules
+  rules:
+    completeness:
+      critical_columns:
+        - "id"
+        - "user_id"
+        - "created_at"
+      max_null_percentage: 5.0
+      
+    uniqueness:
+      check_primary_keys: true
+      check_business_keys: true
+      max_duplicate_percentage: 1.0
+      
+    validity:
+      email_validation: true
+      phone_validation: true
+      date_range_validation: true
+      
+    freshness:
+      max_hours_old: 24
+      critical_tables_max_hours: 2
+      
+    consistency:
+      cross_table_validation: true
+      referential_integrity: true
+      
+  # Anomaly detection
+  anomaly_detection:
+    enabled: true
+    methods:
+      - "statistical_outliers"  # Z-score based
+      - "isolation_forest"      # Machine learning based
+      - "moving_average"        # Time series based
+    
+    thresholds:
+      outlier_percentage: 5.0
+      confidence_level: 0.95
+      
+# Pipeline Health Monitoring
+pipeline_health:
+  enabled: true
+  interval_seconds: 180  # 3 minutes
+  
+  # Airflow monitoring
+  airflow:
+    monitor_dags: true
+    monitor_tasks: true
+    monitor_sla: true
+    
+    # DAG-specific monitoring
+    critical_dags:
+      - "financial_data_ingestion"
+      - "real_time_streaming_pipeline"
+      - "data_quality_pipeline"
+      - "feature_engineering_pipeline"
+      
+    # Thresholds
+    thresholds:
+      success_rate_critical: 0.98  # 98% for critical DAGs
+      success_rate_normal: 0.95    # 95% for normal DAGs
+      max_duration_minutes: 60     # Alert if DAG takes longer than 1 hour
+      max_task_failures_per_hour: 5
+      
+  # Kafka monitoring (if applicable)
+  kafka:
+    enabled: true
+    brokers:
+      - "localhost:9092"
+    topics:
+      - "financial-transactions"
+      - "market-data"
+      - "user-events"
+    
+    thresholds:
+      max_lag_seconds: 30
+      min_throughput_msgs_per_sec: 100
+      
+  # Spark monitoring (if applicable)
+  spark:
+    enabled: true
+    applications:
+      - "predictive_analytics_job"
+      - "feature_engineering_job"
+      - "data_aggregation_job"
+    
+    thresholds:
+      max_duration_hours: 4
+      max_memory_usage_percentage: 85
+      max_failed_tasks: 3
+
+# Business KPI Monitoring
+business_kpis:
+  enabled: true
+  interval_seconds: 600  # 10 minutes
+  
+  # User metrics
+  user_metrics:
+    daily_active_users:
+      threshold_min: 50
+      alert_severity: "medium"
+      
+    monthly_active_users:
+      threshold_min: 200
+      alert_severity: "high"
+      
+    user_retention_rate:
+      threshold_min: 0.80  # 80%
+      alert_severity: "medium"
+      
+    new_user_registrations:
+      threshold_min_per_day: 5
+      alert_severity: "low"
+  
+  # Financial metrics
+  financial_metrics:
+    transaction_volume:
+      threshold_min_per_day: 100
+      alert_severity: "medium"
+      
+    average_transaction_amount:
+      threshold_min: 50.0
+      threshold_max: 10000.0
+      alert_severity: "low"
+      
+    total_portfolio_value:
+      threshold_min: 1000000  # $1M minimum
+      alert_severity: "medium"
+      
+    goal_completion_rate:
+      threshold_min: 0.60  # 60%
+      alert_severity: "medium"
+  
+  # Performance metrics
+  performance_metrics:
+    api_response_time:
+      threshold_max_ms: 500
+      alert_severity: "high"
+      
+    error_rate:
+      threshold_max_percentage: 1.0  # 1%
+      alert_severity: "critical"
+      
+    system_availability:
+      threshold_min: 0.999  # 99.9%
+      alert_severity: "critical"
+
+# System Performance Monitoring
+system_performance:
+  enabled: true
+  interval_seconds: 60  # 1 minute
+  
+  # Resource monitoring
+  resources:
+    cpu:
+      threshold_warning: 70.0
+      threshold_critical: 85.0
+      
+    memory:
+      threshold_warning: 75.0
+      threshold_critical: 90.0
+      
+    disk:
+      threshold_warning: 80.0
+      threshold_critical: 95.0
+      
+    network:
+      threshold_max_mbps: 1000
+      
+  # Database monitoring
+  database:
+    connection_pool:
+      threshold_max_connections: 80
+      
+    query_performance:
+      threshold_slow_query_seconds: 5.0
+      
+    storage:
+      threshold_max_size_gb: 500
+      
+  # Application monitoring
+  application:
+    jvm_heap:
+      threshold_max_percentage: 85.0
+      
+    thread_count:
+      threshold_max: 200
+      
+    garbage_collection:
+      threshold_max_pause_ms: 100
+
+# Alerting Configuration
+alerting:
+  enabled: true
+  
+  # Alert management
+  management:
+    auto_resolve_minutes: 60
+    escalation_minutes: 30
+    max_alerts_per_hour: 50
+    suppress_duplicate_minutes: 15
+  
+  # Severity levels and channels
+  channels:
+    critical:
+      - email
+      - slack
+      - pagerduty
+      - webhook
+      
+    high:
+      - email
+      - slack
+      
+    medium:
+      - slack
+      - email
+      
+    low:
+      - email
+      
+    info:
+      - slack
+  
+  # Email configuration
+  email:
+    enabled: true
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    use_tls: true
+    username: "${EMAIL_USERNAME}"
+    password: "${EMAIL_PASSWORD}"
+    from_address: "alerts@financial-planning.com"
+    to_addresses:
+      - "admin@financial-planning.com"
+      - "devops@financial-planning.com"
+      - "data-team@financial-planning.com"
+  
+  # Slack configuration
+  slack:
+    enabled: true
+    bot_token: "${SLACK_BOT_TOKEN}"
+    channels:
+      critical: "#alerts-critical"
+      high: "#alerts-high"
+      medium: "#alerts-medium"
+      low: "#alerts-low"
+      info: "#monitoring"
+  
+  # PagerDuty configuration
+  pagerduty:
+    enabled: true
+    api_key: "${PAGERDUTY_API_KEY}"
+    service_id: "${PAGERDUTY_SERVICE_ID}"
+    escalation_policy_id: "${PAGERDUTY_ESCALATION_POLICY_ID}"
+  
+  # Webhook configuration
+  webhook:
+    enabled: true
+    url: "${WEBHOOK_URL}"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer ${WEBHOOK_TOKEN}"
+  
+  # SMS configuration (via Twilio)
+  sms:
+    enabled: false
+    account_sid: "${TWILIO_ACCOUNT_SID}"
+    auth_token: "${TWILIO_AUTH_TOKEN}"
+    from_number: "${TWILIO_FROM_NUMBER}"
+    to_numbers:
+      - "${ADMIN_PHONE_NUMBER}"
+
+# Metrics and Observability
+metrics:
+  # Prometheus configuration
+  prometheus:
+    enabled: true
+    port: 8080
+    metrics_path: "/metrics"
+    
+    # Custom metrics
+    custom_metrics:
+      - name: "data_pipeline_success_rate"
+        type: "gauge"
+        description: "Success rate of data pipelines"
+        labels: ["pipeline_name", "environment"]
+        
+      - name: "business_kpi_score"
+        type: "gauge"
+        description: "Business KPI scores"
+        labels: ["kpi_name", "department"]
+        
+      - name: "data_quality_violations"
+        type: "counter"
+        description: "Data quality violations count"
+        labels: ["table_name", "rule_type", "severity"]
+  
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    url: "http://localhost:3000"
+    api_key: "${GRAFANA_API_KEY}"
+    
+    dashboards:
+      - name: "Data Quality Overview"
+        file: "dashboards/data_quality_overview.json"
+        
+      - name: "Pipeline Health"
+        file: "dashboards/pipeline_health.json"
+        
+      - name: "Business KPIs"
+        file: "dashboards/business_kpis.json"
+        
+      - name: "System Performance"
+        file: "dashboards/system_performance.json"
+  
+  # Custom reporting
+  reporting:
+    enabled: true
+    output_directory: "/var/log/financial-planning/monitoring"
+    
+    daily_reports:
+      - name: "data_quality_summary"
+        format: "json"
+        
+      - name: "pipeline_performance"
+        format: "csv"
+        
+      - name: "business_metrics"
+        format: "json"
+    
+    weekly_reports:
+      - name: "comprehensive_health_report"
+        format: "pdf"
+        recipients:
+          - "management@financial-planning.com"
+          - "data-team@financial-planning.com"
+
+# Integration Configuration
+integrations:
+  # Apache Airflow
+  airflow:
+    webserver_url: "http://localhost:8080"
+    username: "${AIRFLOW_USERNAME}"
+    password: "${AIRFLOW_PASSWORD}"
+    
+  # Kafka
+  kafka:
+    bootstrap_servers:
+      - "localhost:9092"
+    security_protocol: "PLAINTEXT"
+    
+  # Elasticsearch
+  elasticsearch:
+    hosts:
+      - "http://localhost:9200"
+    index_templates:
+      monitoring_logs: "monitoring-logs-*"
+      alert_history: "alert-history-*"
+      metrics_data: "metrics-data-*"
+  
+  # External APIs
+  external_apis:
+    market_data:
+      url: "https://api.marketdata.com"
+      api_key: "${MARKET_DATA_API_KEY}"
+      timeout_seconds: 30
+      
+    banking_api:
+      url: "https://api.bank.com"
+      api_key: "${BANKING_API_KEY}"
+      timeout_seconds: 45
+
+# Security and Compliance
+security:
+  # Encryption
+  encryption:
+    enabled: true
+    algorithm: "AES-256"
+    key_rotation_days: 90
+    
+  # Access control
+  access_control:
+    authentication_required: true
+    role_based_access: true
+    
+    roles:
+      admin:
+        permissions:
+          - "view_all_metrics"
+          - "manage_alerts"
+          - "configure_monitoring"
+          
+      data_engineer:
+        permissions:
+          - "view_data_quality"
+          - "view_pipeline_health"
+          - "acknowledge_alerts"
+          
+      business_analyst:
+        permissions:
+          - "view_business_kpis"
+          - "view_reports"
+          
+      viewer:
+        permissions:
+          - "view_dashboards"
+  
+  # Audit logging
+  audit_logging:
+    enabled: true
+    log_level: "INFO"
+    retention_days: 365
+    
+    events_to_log:
+      - "alert_created"
+      - "alert_acknowledged"
+      - "alert_resolved"
+      - "configuration_changed"
+      - "user_login"
+      - "report_generated"
+
+# Environment-specific configurations
+environments:
+  development:
+    alerting:
+      enabled: false
+    metrics:
+      prometheus:
+        port: 8081
+    
+  staging:
+    alerting:
+      channels:
+        critical: ["slack"]
+        high: ["slack"]
+        medium: ["slack"]
+        low: []
+    
+  production:
+    alerting:
+      enabled: true
+    system_performance:
+      interval_seconds: 30  # More frequent in production
+    data_quality:
+      interval_seconds: 180  # More frequent in production

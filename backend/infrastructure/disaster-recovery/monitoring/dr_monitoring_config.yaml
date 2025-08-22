@@ -1,569 +1,461 @@
 # Disaster Recovery Monitoring Configuration
-# Financial Planning System - Comprehensive Monitoring Setup
+# This file contains monitoring and alerting configuration for disaster recovery scenarios
+# All sensitive values should be provided via environment variables
 
-# Global Configuration
-global:
-  scrape_interval: 30s
-  evaluation_interval: 30s
-  external_labels:
-    cluster: 'financial-planning'
-    environment: 'production'
-    region: 'us-west-2'
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: PrometheusRule
+metadata:
+  name: disaster-recovery-alerts
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+    severity: critical
 
-# Rule Groups for DR Monitoring
-rule_groups:
-  # Critical Infrastructure Alerts
-  - name: dr_critical_infrastructure
-    interval: 30s
-    rules:
-      - alert: DatabaseMasterDown
-        expr: up{job="postgresql-master"} == 0
-        for: 2m
-        labels:
-          severity: critical
-          component: database
-          runbook: "https://runbook.company.com/database-down"
-        annotations:
-          summary: "PostgreSQL master database is down"
-          description: "The master database {{ $labels.instance }} has been down for more than 2 minutes."
-          action: "Execute automated failover to read replica"
+spec:
+  groups:
+    - name: disaster-recovery
+      rules:
+        # Database connectivity alerts
+        - alert: DatabaseConnectionLost
+          expr: up{job="postgresql"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: database
+            service: postgresql
+          annotations:
+            summary: "Database connection lost"
+            description: "PostgreSQL database is not responding"
+            action: "Check database service status and connectivity"
+            runbook: "https://runbooks.financial-planning.com/database-connection"
+
+        # Backup failure alerts
+        - alert: BackupFailure
+          expr: backup_job_success{job="backup-manager"} == 0
+          for: 5m
+          labels:
+            severity: high
+            component: backup
+            service: backup-manager
+          annotations:
+            summary: "Backup job failed"
+            description: "Automated backup process has failed"
+            action: "Investigate backup logs and retry backup process"
+            runbook: "https://runbooks.financial-planning.com/backup-failure"
+
+        # Replication lag alerts
+        - alert: ReplicationLag
+          expr: postgresql_replication_lag_seconds > 300
+          for: 2m
+          labels:
+            severity: warning
+            component: database
+            service: postgresql
+          annotations:
+            summary: "Database replication lag detected"
+            description: "Replication lag is {{ $value }} seconds"
+            action: "Monitor replication status and investigate lag causes"
+            runbook: "https://runbooks.financial-planning.com/replication-lag"
+
+        # Disk space alerts
+        - alert: DiskSpaceCritical
+          expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+          for: 5m
+          labels:
+            severity: critical
+            component: infrastructure
+            service: storage
+          annotations:
+            summary: "Critical disk space usage"
+            description: "Disk usage is {{ $value }}% available"
+            action: "Immediate disk cleanup or expansion required"
+            runbook: "https://runbooks.financial-planning.com/disk-space"
+
+        # Memory usage alerts
+        - alert: MemoryUsageCritical
+          expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 5
+          for: 5m
+          labels:
+            severity: critical
+            component: infrastructure
+            service: memory
+          annotations:
+            summary: "Critical memory usage"
+            description: "Memory usage is {{ $value }}% available"
+            action: "Investigate memory leaks or scale resources"
+            runbook: "https://runbooks.financial-planning.com/memory-usage"
+
+        # Network connectivity alerts
+        - alert: NetworkConnectivityLost
+          expr: up{job="network-monitor"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: network
+            service: connectivity
+          annotations:
+            summary: "Network connectivity lost"
+            description: "Network monitoring service is down"
+            action: "Check network infrastructure and routing"
+            runbook: "https://runbooks.financial-planning.com/network-connectivity"
+
+        # Service health alerts
+        - alert: ServiceUnhealthy
+          expr: health_check_status{service=~"financial-planning.*"} == 0
+          for: 1m
+          labels:
+            severity: high
+            component: application
+            service: financial-planning
+          annotations:
+            summary: "Service health check failed"
+            description: "Service {{ $labels.service }} is unhealthy"
+            action: "Investigate service logs and restart if necessary"
+            runbook: "https://runbooks.financial-planning.com/service-health"
+
+        # Certificate expiration alerts
+        - alert: CertificateExpiringSoon
+          expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+          for: 1m
+          labels:
+            severity: warning
+            component: security
+            service: ssl
+          annotations:
+            summary: "SSL certificate expiring soon"
+            description: "Certificate expires in {{ $value }} seconds"
+            action: "Renew SSL certificate before expiration"
+            runbook: "https://runbooks.financial-planning.com/certificate-renewal"
+
+        # Security incident alerts
+        - alert: SecurityIncident
+          expr: security_events_total{severity="high"} > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: security
+            service: security-monitor
+          annotations:
+            summary: "Security incident detected"
+            description: "High severity security event detected"
+            action: "Immediate security investigation required"
+            runbook: "https://runbooks.financial-planning.com/security-incident"
+
+        # Performance degradation alerts
+        - alert: PerformanceDegradation
+          expr: http_request_duration_seconds{quantile="0.95"} > 2
+          for: 5m
+          labels:
+            severity: warning
+            component: application
+            service: performance
+          annotations:
+            summary: "Performance degradation detected"
+            description: "95th percentile response time is {{ $value }} seconds"
+            action: "Investigate performance bottlenecks"
+            runbook: "https://runbooks.financial-planning.com/performance-degradation"
+
+---
+# Alertmanager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: monitoring
+
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: '${SMTP_SMARTHOST:localhost:587}'
+      smtp_from: '${SMTP_FROM:alerts@financial-planning.com}'
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+      pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+        # Critical alerts go to PagerDuty
+        - match:
+            severity: critical
+          receiver: 'pagerduty-critical'
+          group_wait: 10s
+          repeat_interval: 5m
           
-      - alert: DatabaseReplicationLag
-        expr: pg_stat_replication_lag_seconds > 300
-        for: 5m
-        labels:
-          severity: warning
-          component: database
-          runbook: "https://runbook.company.com/replication-lag"
-        annotations:
-          summary: "High database replication lag detected"
-          description: "Replication lag is {{ $value }} seconds on {{ $labels.instance }}"
-          action: "Check network connectivity and database load"
+        # High severity alerts go to Slack and email
+        - match:
+            severity: high
+          receiver: 'slack-high-severity'
+          group_wait: 30s
+          repeat_interval: 1h
           
-      - alert: PrimaryRegionDown
-        expr: probe_success{job="primary-region-health"} == 0
-        for: 5m
-        labels:
-          severity: critical
-          component: infrastructure
-          runbook: "https://runbook.company.com/region-failover"
-        annotations:
-          summary: "Primary region is unavailable"
-          description: "Primary region health check has failed for {{ $labels.instance }}"
-          action: "Initiate automated region failover"
-          
-      - alert: ApplicationPodsDown
-        expr: kube_deployment_status_replicas_available{deployment="financial-planning-web"} < kube_deployment_spec_replicas{deployment="financial-planning-web"} * 0.5
-        for: 3m
-        labels:
-          severity: critical
-          component: application
-          runbook: "https://runbook.company.com/pod-recovery"
-        annotations:
-          summary: "More than 50% of application pods are down"
-          description: "Only {{ $value }} out of {{ $labels.replicas }} pods are available"
-          action: "Investigate pod failures and scale up if necessary"
+        # Security alerts have special routing
+        - match:
+            component: security
+          receiver: 'security-team'
+          group_wait: 10s
+          repeat_interval: 30m
 
-  # Backup and Recovery Monitoring
-  - name: dr_backup_recovery
-    interval: 60s
-    rules:
-      - alert: BackupFailed
-        expr: backup_job_success{job="daily-backup"} == 0
-        for: 1m
-        labels:
-          severity: high
-          component: backup
-          runbook: "https://runbook.company.com/backup-failure"
-        annotations:
-          summary: "Database backup job failed"
-          description: "The backup job {{ $labels.job }} has failed"
-          action: "Check backup logs and retry backup process"
-          
-      - alert: BackupAgeHigh
-        expr: time() - backup_last_success_timestamp > 86400 * 2
-        for: 1m
-        labels:
-          severity: high
-          component: backup
-          runbook: "https://runbook.company.com/backup-aging"
-        annotations:
-          summary: "Latest backup is too old"
-          description: "Latest successful backup is {{ $value | humanizeDuration }} old"
-          action: "Check backup schedule and execute manual backup"
-          
-      - alert: BackupStorageSpaceLow
-        expr: backup_storage_usage_percent > 90
-        for: 5m
-        labels:
-          severity: warning
-          component: backup
-          runbook: "https://runbook.company.com/backup-storage"
-        annotations:
-          summary: "Backup storage space is running low"
-          description: "Backup storage is {{ $value }}% full"
-          action: "Clean up old backups or expand storage"
-          
-      - alert: CrossRegionReplicationFailed
-        expr: backup_cross_region_replication_success == 0
-        for: 10m
-        labels:
-          severity: high
-          component: backup
-          runbook: "https://runbook.company.com/cross-region-replication"
-        annotations:
-          summary: "Cross-region backup replication failed"
-          description: "Backup replication to {{ $labels.target_region }} has failed"
-          action: "Check network connectivity and storage permissions"
+    receivers:
+      - name: 'default'
+        email_configs:
+          - to: '${OPS_TEAM_EMAIL:ops-team@financial-planning.com}'
+            subject: '[{{ .GroupLabels.cluster }}] Alert: {{ .GroupLabels.alertname }}'
+            body: |
+              {{ range .Alerts }}
+              Alert: {{ .Annotations.summary }}
+              Description: {{ .Annotations.description }}
+              Severity: {{ .Labels.severity }}
+              Action: {{ .Annotations.action }}
+              Runbook: {{ .Annotations.runbook }}
+              {{ end }}
 
-  # Performance and Capacity Monitoring
-  - name: dr_performance_capacity
-    interval: 30s
-    rules:
-      - alert: HighCPUUsage
-        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
-        for: 10m
-        labels:
-          severity: warning
-          component: system
-          runbook: "https://runbook.company.com/high-cpu"
-        annotations:
-          summary: "High CPU usage detected"
-          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
-          action: "Scale up instances or investigate CPU-intensive processes"
-          
-      - alert: HighMemoryUsage
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
-        for: 5m
-        labels:
-          severity: critical
-          component: system
-          runbook: "https://runbook.company.com/high-memory"
-        annotations:
-          summary: "Critical memory usage detected"
-          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
-          action: "Restart memory-intensive processes or scale up"
-          
-      - alert: DiskSpaceCritical
-        expr: (1 - (node_filesystem_free_bytes / node_filesystem_size_bytes)) * 100 > 95
-        for: 5m
-        labels:
-          severity: critical
-          component: system
-          runbook: "https://runbook.company.com/disk-space"
-        annotations:
-          summary: "Critical disk space on {{ $labels.mountpoint }}"
-          description: "Disk usage is {{ $value }}% on {{ $labels.instance }}"
-          action: "Clean up logs and temporary files, or expand storage"
-          
-      - alert: DatabaseConnectionPoolExhausted
-        expr: pg_stat_activity_count / pg_settings_max_connections > 0.9
-        for: 2m
-        labels:
-          severity: high
-          component: database
-          runbook: "https://runbook.company.com/db-connections"
-        annotations:
-          summary: "Database connection pool nearly exhausted"
-          description: "{{ $value | humanizePercentage }} of database connections are in use"
-          action: "Check for connection leaks and increase pool size if necessary"
+      - name: 'pagerduty-critical'
+        pagerduty_configs:
+          - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+            description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.instance }}'
+            severity: '{{ .GroupLabels.severity }}'
+            details:
+              summary: '{{ .CommonAnnotations.summary }}'
+              description: '{{ .CommonAnnotations.description }}'
+              action: '{{ .CommonAnnotations.action }}'
+              runbook: '{{ .CommonAnnotations.runbook }}'
 
-  # Security and Compliance Monitoring
-  - name: dr_security_compliance
-    interval: 60s
-    rules:
-      - alert: SecurityIncidentDetected
-        expr: security_incident_severity{severity="high"} > 0
-        for: 1m
-        labels:
-          severity: critical
-          component: security
-          runbook: "https://runbook.company.com/security-incident"
-        annotations:
-          summary: "High severity security incident detected"
-          description: "Security incident of type {{ $labels.incident_type }} detected"
-          action: "Initiate security incident response procedures"
-          
-      - alert: UnauthorizedAccess
-        expr: increase(failed_login_attempts_total[5m]) > 50
-        for: 1m
-        labels:
-          severity: high
-          component: security
-          runbook: "https://runbook.company.com/unauthorized-access"
-        annotations:
-          summary: "High number of failed login attempts"
-          description: "{{ $value }} failed login attempts in the last 5 minutes"
-          action: "Check for brute force attacks and enable rate limiting"
-          
-      - alert: SSLCertificateExpiring
-        expr: ssl_certificate_expiry_days < 30
-        for: 1h
-        labels:
-          severity: warning
-          component: security
-          runbook: "https://runbook.company.com/ssl-renewal"
-        annotations:
-          summary: "SSL certificate expiring soon"
-          description: "SSL certificate for {{ $labels.domain }} expires in {{ $value }} days"
-          action: "Renew SSL certificate before expiration"
+      - name: 'slack-high-severity'
+        slack_configs:
+          - channel: '${SLACK_CHANNEL:#ops-alerts}'
+            title: 'High Severity Alert'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Severity:* {{ .Labels.severity }}
+              *Action:* {{ .Annotations.action }}
+              *Runbook:* {{ .Annotations.runbook }}
+              {{ end }}
 
-  # Application Health Monitoring
-  - name: dr_application_health
-    interval: 30s
-    rules:
-      - alert: ApplicationResponseTimeSlow
-        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
-        for: 10m
-        labels:
-          severity: warning
-          component: application
-          runbook: "https://runbook.company.com/slow-response"
-        annotations:
-          summary: "Application response time is slow"
-          description: "95th percentile response time is {{ $value }}s"
-          action: "Check application performance and database queries"
-          
-      - alert: ApplicationErrorRateHigh
-        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
-        for: 5m
-        labels:
-          severity: high
-          component: application
-          runbook: "https://runbook.company.com/high-error-rate"
-        annotations:
-          summary: "High application error rate"
-          description: "Error rate is {{ $value | humanizePercentage }}"
-          action: "Check application logs and recent deployments"
-          
-      - alert: ExternalServiceDown
-        expr: probe_success{job="external-services"} == 0
-        for: 3m
-        labels:
-          severity: high
-          component: integration
-          runbook: "https://runbook.company.com/external-service-down"
-        annotations:
-          summary: "External service {{ $labels.instance }} is down"
-          description: "External service health check failed for {{ $labels.service }}"
-          action: "Check external service status and enable fallback if available"
+      - name: 'security-team'
+        email_configs:
+          - to: '${SECURITY_TEAM_EMAIL:security-team@financial-planning.com}'
+            subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+            body: |
+              SECURITY ALERT DETECTED
+              
+              {{ range .Alerts }}
+              Alert: {{ .Annotations.summary }}
+              Description: {{ .Annotations.description }}
+              Severity: {{ .Labels.severity }}
+              Component: {{ .Labels.component }}
+              Instance: {{ .Labels.instance }}
+              Time: {{ .StartsAt }}
+              
+              Immediate Action Required: {{ .Annotations.action }}
+              Runbook: {{ .Annotations.runbook }}
+              {{ end }}
+        slack_configs:
+          - channel: '${SECURITY_SLACK_CHANNEL:#security-incidents}'
+            title: 'Security Alert'
+            color: 'danger'
+            text: |
+              🚨 *SECURITY ALERT* 🚨
+              {{ range .Alerts }}
+              *{{ .Annotations.summary }}*
+              {{ .Annotations.description }}
+              *Action:* {{ .Annotations.action }}
+              *Runbook:* {{ .Annotations.runbook }}
+              {{ end }}
 
-# Notification Configuration
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-          - alertmanager:9093
+---
+# Service Monitor for Disaster Recovery Services
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: disaster-recovery-monitor
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
 
-# Alert Manager Configuration
-alertmanager_config:
-  global:
-    smtp_smarthost: 'localhost:587'
-    smtp_from: 'alerts@financial-planning.com'
-    slack_api_url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
-    pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning
+      component: disaster-recovery
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      honorLabels: true
+      scrapeTimeout: 10s
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'backup_.*|replication_.*|health_.*'
+          action: keep
 
-  route:
-    group_by: ['alertname', 'cluster', 'service']
-    group_wait: 30s
-    group_interval: 5m
-    repeat_interval: 12h
-    receiver: 'default'
-    routes:
-      # Critical alerts go to PagerDuty
-      - match:
-          severity: critical
-        receiver: 'pagerduty-critical'
-        group_wait: 10s
-        repeat_interval: 5m
-        
-      # High severity alerts go to Slack and email
-      - match:
-          severity: high
-        receiver: 'slack-high-severity'
-        group_wait: 30s
-        repeat_interval: 1h
-        
-      # Security alerts have special routing
-      - match:
-          component: security
-        receiver: 'security-team'
-        group_wait: 10s
-        repeat_interval: 30m
+---
+# Pod Monitor for Disaster Recovery Pods
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: disaster-recovery-pods
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
 
-  receivers:
-    - name: 'default'
-      email_configs:
-        - to: 'ops-team@financial-planning.com'
-          subject: '[{{ .GroupLabels.cluster }}] Alert: {{ .GroupLabels.alertname }}'
-          body: |
-            {{ range .Alerts }}
-            Alert: {{ .Annotations.summary }}
-            Description: {{ .Annotations.description }}
-            Severity: {{ .Labels.severity }}
-            Action: {{ .Annotations.action }}
-            Runbook: {{ .Annotations.runbook }}
-            {{ end }}
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning
+      component: disaster-recovery
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      honorLabels: true
+      scrapeTimeout: 10s
 
-    - name: 'pagerduty-critical'
-      pagerduty_configs:
-        - routing_key: 'YOUR_PAGERDUTY_INTEGRATION_KEY'
-          description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.instance }}'
-          severity: '{{ .GroupLabels.severity }}'
-          details:
-            summary: '{{ .CommonAnnotations.summary }}'
-            description: '{{ .CommonAnnotations.description }}'
-            action: '{{ .CommonAnnotations.action }}'
-            runbook: '{{ .CommonAnnotations.runbook }}'
+---
+# Prometheus Rule for Disaster Recovery Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: disaster-recovery-metrics
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
 
-    - name: 'slack-high-severity'
-      slack_configs:
-        - channel: '#ops-alerts'
-          title: 'High Severity Alert'
-          text: |
-            {{ range .Alerts }}
-            *Alert:* {{ .Annotations.summary }}
-            *Description:* {{ .Annotations.description }}
-            *Severity:* {{ .Labels.severity }}
-            *Action:* {{ .Annotations.action }}
-            *Runbook:* {{ .Annotations.runbook }}
-            {{ end }}
+spec:
+  groups:
+    - name: disaster-recovery-metrics
+      rules:
+        # Backup success rate
+        - record: backup:success_rate
+          expr: rate(backup_job_success_total[1h]) / rate(backup_job_total[1h])
 
-    - name: 'security-team'
-      email_configs:
-        - to: 'security-team@financial-planning.com'
-          subject: '[SECURITY] {{ .GroupLabels.alertname }}'
-          body: |
-            SECURITY ALERT DETECTED
-            
-            {{ range .Alerts }}
-            Alert: {{ .Annotations.summary }}
-            Description: {{ .Annotations.description }}
-            Severity: {{ .Labels.severity }}
-            Component: {{ .Labels.component }}
-            Instance: {{ .Labels.instance }}
-            Time: {{ .StartsAt }}
-            
-            Immediate Action Required: {{ .Annotations.action }}
-            Runbook: {{ .Annotations.runbook }}
-            {{ end }}
-      slack_configs:
-        - channel: '#security-incidents'
-          title: 'Security Alert'
-          color: 'danger'
-          text: |
-            🚨 *SECURITY ALERT* 🚨
-            {{ range .Alerts }}
-            *{{ .Annotations.summary }}*
-            {{ .Annotations.description }}
-            *Action:* {{ .Annotations.action }}
-            {{ end }}
+        # Replication health score
+        - record: replication:health_score
+          expr: (1 - (postgresql_replication_lag_seconds / 3600)) * 100
 
-# Inhibition Rules
-inhibit_rules:
-  # Inhibit high severity alerts when critical alerts are firing
-  - source_match:
-      severity: 'critical'
-    target_match:
-      severity: 'high'
-    equal: ['alertname', 'instance']
+        # Service availability
+        - record: service:availability
+          expr: (up{job=~"financial-planning.*"} / count(up{job=~"financial-planning.*"})) * 100
 
-  # Inhibit application alerts when database is down
-  - source_match:
-      alertname: 'DatabaseMasterDown'
-    target_match_re:
-      alertname: 'Application.*'
-    equal: ['cluster']
+        # Response time percentiles
+        - record: http:response_time_p95
+          expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
 
-# Prometheus Scrape Configurations
-scrape_configs:
-  # Financial Planning Application Metrics
-  - job_name: 'financial-planning-app'
-    static_configs:
-      - targets: ['app-server-1:8000', 'app-server-2:8000', 'app-server-3:8000']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
-    scrape_timeout: 10s
+        - record: http:response_time_p99
+          expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
 
-  # Database Metrics
-  - job_name: 'postgresql-master'
-    static_configs:
-      - targets: ['db-master:9187']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
-
-  - job_name: 'postgresql-replica'
-    static_configs:
-      - targets: ['db-replica-1:9187', 'db-replica-2:9187']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
-
-  # Infrastructure Metrics
-  - job_name: 'node-exporter'
-    static_configs:
-      - targets: ['node-1:9100', 'node-2:9100', 'node-3:9100']
-    scrape_interval: 30s
-
-  # Kubernetes Metrics
-  - job_name: 'kubernetes-pods'
-    kubernetes_sd_configs:
-      - role: pod
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-        action: keep
-        regex: true
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-        action: replace
-        target_label: __metrics_path__
-        regex: (.+)
-
-  # External Service Health Checks
-  - job_name: 'blackbox-external-services'
-    metrics_path: /probe
-    params:
-      module: [http_2xx]
-    static_configs:
-      - targets:
-        - https://api.external-service.com/health
-        - https://payment-gateway.com/status
-        - https://notification-service.com/health
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-
-  # Backup Job Monitoring
-  - job_name: 'backup-jobs'
-    static_configs:
-      - targets: ['backup-server:8080']
-    metrics_path: '/backup-metrics'
-    scrape_interval: 60s
-
-# Recording Rules for DR Metrics
-recording_rules:
-  - name: dr_sli_slo_rules
-    interval: 30s
-    rules:
-      # Availability SLI
-      - record: sli:availability_1m
-        expr: up
-        
-      # Error Rate SLI
-      - record: sli:error_rate_1m
-        expr: rate(http_requests_total{status=~"5.."}[1m]) / rate(http_requests_total[1m])
-        
-      # Response Time SLI
-      - record: sli:response_time_p99_1m
-        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m]))
-        
-      # Database Performance SLI
-      - record: sli:db_query_time_p95_1m
-        expr: histogram_quantile(0.95, rate(pg_stat_statements_mean_time_bucket[1m]))
-
-  - name: dr_capacity_rules
-    interval: 60s
-    rules:
-      # CPU Capacity
-      - record: capacity:cpu_usage_percent
-        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
-        
-      # Memory Capacity
-      - record: capacity:memory_usage_percent
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
-        
-      # Disk Capacity
-      - record: capacity:disk_usage_percent
-        expr: (1 - (node_filesystem_free_bytes / node_filesystem_size_bytes)) * 100
-        
-      # Database Connection Capacity
-      - record: capacity:db_connections_percent
-        expr: pg_stat_activity_count / pg_settings_max_connections * 100
-
+---
 # Grafana Dashboard Configuration
-grafana_dashboards:
-  - name: "Financial Planning DR Overview"
-    uid: "fp-dr-overview"
-    panels:
-      - title: "System Health Overview"
-        type: "stat"
-        targets:
-          - expr: "up{job='financial-planning-app'}"
-            legendFormat: "Application"
-          - expr: "up{job='postgresql-master'}"
-            legendFormat: "Database"
-          - expr: "probe_success{job='external-services'}"
-            legendFormat: "External Services"
-            
-      - title: "RTO/RPO Metrics"
-        type: "graph"
-        targets:
-          - expr: "backup_age_hours"
-            legendFormat: "Backup Age (hours)"
-          - expr: "replication_lag_seconds"
-            legendFormat: "Replication Lag (seconds)"
-            
-      - title: "Error Rates"
-        type: "graph"
-        targets:
-          - expr: "rate(http_requests_total{status=~'5..'}[5m])"
-            legendFormat: "5xx Errors"
-          - expr: "rate(backup_errors_total[5m])"
-            legendFormat: "Backup Errors"
-            
-      - title: "Resource Utilization"
-        type: "graph"
-        targets:
-          - expr: "capacity:cpu_usage_percent"
-            legendFormat: "CPU %"
-          - expr: "capacity:memory_usage_percent"
-            legendFormat: "Memory %"
-          - expr: "capacity:disk_usage_percent"
-            legendFormat: "Disk %"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disaster-recovery-dashboard
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
 
-# Custom Metrics for DR Monitoring
-custom_metrics:
-  backup_metrics:
-    - name: backup_last_success_timestamp
-      help: "Timestamp of last successful backup"
-      type: gauge
-      
-    - name: backup_duration_seconds
-      help: "Duration of backup operation in seconds"
-      type: histogram
-      
-    - name: backup_size_bytes
-      help: "Size of backup file in bytes"
-      type: gauge
-      
-    - name: backup_cross_region_replication_success
-      help: "Success status of cross-region backup replication"
-      type: gauge
-
-  recovery_metrics:
-    - name: recovery_time_seconds
-      help: "Time taken for recovery operations"
-      type: histogram
-      
-    - name: recovery_success_total
-      help: "Total number of successful recovery operations"
-      type: counter
-      
-    - name: failover_time_seconds
-      help: "Time taken for failover operations"
-      type: histogram
-
-  business_metrics:
-    - name: active_user_sessions
-      help: "Number of active user sessions"
-      type: gauge
-      
-    - name: financial_transactions_total
-      help: "Total number of financial transactions"
-      type: counter
-      
-    - name: data_integrity_score
-      help: "Data integrity score (0-1)"
-      type: gauge
+data:
+  dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Disaster Recovery Monitoring",
+        "tags": ["financial-planning", "disaster-recovery", "monitoring"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Health Overview",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "service:availability",
+                "legendFormat": "Availability %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Backup Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "backup:success_rate * 100",
+                "legendFormat": "Success Rate %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Replication Health",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "replication:health_score",
+                "legendFormat": "Health Score %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "green", "value": 95}
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }

@@ -1,196 +1,487 @@
-# Advanced Backup Configuration for Financial Planning System
-# This configuration defines comprehensive backup strategy with cross-region replication
+# Disaster Recovery Backup Configuration
+# This file contains backup strategy configuration for the Financial Planning System
+# All sensitive values should be provided via environment variables
 
-# Database Configuration
-database:
-  host: "localhost"
-  port: 5432
-  name: "financial_planning"
-  user: "postgres"
-  password: "${POSTGRES_PASSWORD}"
-  ssl_mode: "require"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: disaster-recovery
+  labels:
+    app: financial-planning
+    component: backup
 
-# Backup Storage Configuration
-storage:
-  backup_root: "/var/backups/financial_planning"
-  temp_directory: "/tmp/backup_temp"
-  compression_enabled: true
-  compression_level: 6
-  encryption_enabled: true
-  encryption_key_path: "/etc/backup-encryption.key"
-  
-# Backup Schedules (cron format)
-schedules:
-  full_backup: "0 2 * * 0"     # Sunday 2 AM
-  incremental: "0 */6 * * *"   # Every 6 hours
-  point_in_time: "*/15 * * * *" # Every 15 minutes (WAL archiving)
-  
-# Retention Policies
-retention:
-  full_backup_days: 90
-  incremental_backup_days: 30
-  point_in_time_days: 7
-  wal_files_days: 14
-  
-  # Keep at least this many backups regardless of age
-  minimum_full_backups: 3
-  minimum_incremental_backups: 12
+data:
+  backup_config.yaml: |
+    # Backup Configuration
+    backup:
+      # Database backup configuration
+      database:
+        type: postgresql
+        host: "${POSTGRES_HOST:postgresql}"
+        port: "${POSTGRES_PORT:5432}"
+        name: "${POSTGRES_DB:financial_planning}"
+        user: "${POSTGRES_USER:financial_planning}"
+        password: "${POSTGRES_PASSWORD}"
+        ssl_mode: "${POSTGRES_SSL_MODE:require}"
+        ssl_cert: "${POSTGRES_SSL_CERT:/etc/ssl/certs/postgresql.crt}"
+        ssl_key: "${POSTGRES_SSL_KEY:/etc/ssl/private/postgresql.key}"
+        ssl_ca: "${POSTGRES_SSL_CA:/etc/ssl/certs/ca-certificates.crt}"
+        
+        # Backup options
+        format: "custom"
+        compression: "gzip"
+        parallel_jobs: 4
+        exclude_tables: ["audit_logs", "system_events"]
+        
+        # Encryption
+        encryption_enabled: true
+        encryption_key_path: "${BACKUP_ENCRYPTION_KEY_PATH:/etc/backup-encryption.key}"
+        encryption_algorithm: "AES-256-GCM"
+        
+        # Retention
+        retention_days: 30
+        retention_copies: 5
+        retention_size_gb: 100
+        
+        # Scheduling
+        schedule: "0 2 * * *"  # Daily at 2 AM
+        backup_window_hours: 4
+        max_backup_duration_hours: 6
+        
+        # Verification
+        verify_backup: true
+        verification_timeout_minutes: 30
+        
+        # Cross-region replication
+        cross_region_replication:
+          enabled: true
+          target_regions: ["us-east-1", "eu-west-1"]
+          replication_delay_hours: 2
+          replication_timeout_hours: 12
+          
+        # Storage configuration
+        storage:
+          type: "s3"
+          bucket: "${BACKUP_S3_BUCKET:financial-planning-backups}"
+          region: "${BACKUP_S3_REGION:us-west-2}"
+          path: "database/$(date +%Y/%m/%d)"
+          lifecycle_rules:
+            - name: "backup-lifecycle"
+              enabled: true
+              transitions:
+                - days: 30
+                  storage_class: "STANDARD_IA"
+                - days: 90
+                  storage_class: "GLACIER"
+                - days: 365
+                  storage_class: "DEEP_ARCHIVE"
+              expiration:
+                days: 2555  # 7 years
+                
+      # File system backup configuration
+      filesystem:
+        enabled: true
+        paths:
+          - "/app/uploads"
+          - "/app/logs"
+          - "/app/config"
+        exclude_patterns:
+          - "*.tmp"
+          - "*.log"
+          - "*.cache"
+        compression: "tar.gz"
+        encryption_enabled: true
+        retention_days: 90
+        
+      # Application state backup
+      application_state:
+        enabled: true
+        components:
+          - "user_sessions"
+          - "cache_data"
+          - "queue_jobs"
+        format: "json"
+        compression: "gzip"
+        retention_days: 7
+        
+      # Monitoring and alerting
+      monitoring:
+        enabled: true
+        metrics_endpoint: "/metrics"
+        alert_webhook_url: "${BACKUP_ALERT_WEBHOOK}"
+        pagerduty_integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
+        slack_webhook_url: "${SLACK_WEBHOOK_URL}"
+        
+        # Alert thresholds
+        backup_failure_threshold: 3
+        backup_duration_threshold_minutes: 120
+        backup_size_threshold_gb: 50
+        
+        # Notification channels
+        notification_channels:
+          - type: "email"
+            recipients: ["${BACKUP_TEAM_EMAIL:backup-team@financial-planning.com}"]
+            subject: "Backup Status Alert"
+          - type: "slack"
+            channel: "${BACKUP_SLACK_CHANNEL:#backup-alerts}"
+          - type: "pagerduty"
+            service: "${BACKUP_PAGERDUTY_SERVICE:backup-service}"
+            
+      # Recovery configuration
+      recovery:
+        enabled: true
+        test_recovery_enabled: true
+        test_recovery_schedule: "0 0 * * 0"  # Weekly on Sunday
+        recovery_timeout_hours: 4
+        parallel_recovery_jobs: 2
+        
+        # Point-in-time recovery
+        point_in_time_recovery:
+          enabled: true
+          retention_hours: 168  # 7 days
+          recovery_granularity_minutes: 15
+          
+        # Disaster recovery procedures
+        disaster_recovery:
+          rto_target_hours: 4  # Recovery Time Objective
+          rpo_target_minutes: 15  # Recovery Point Objective
+          automated_failover: true
+          failover_timeout_minutes: 30
+          
+      # Security configuration
+      security:
+        encryption:
+          enabled: true
+          algorithm: "AES-256-GCM"
+          key_rotation_days: 90
+          key_management: "aws-kms"  # or "azure-key-vault", "gcp-kms"
+          
+        access_control:
+          backup_user: "${BACKUP_USER:backup-service}"
+          backup_role: "backup-operator"
+          required_permissions:
+            - "backup:create"
+            - "backup:delete"
+            - "backup:restore"
+            - "backup:verify"
+            
+        audit_logging:
+          enabled: true
+          log_level: "INFO"
+          retention_days: 2555  # 7 years
+          log_format: "json"
+          
+      # Performance configuration
+      performance:
+        max_concurrent_backups: 2
+        max_concurrent_restores: 1
+        backup_io_limit_mbps: 100
+        restore_io_limit_mbps: 200
+        
+        # Resource limits
+        cpu_limit: "1000m"
+        memory_limit: "2Gi"
+        disk_io_limit: "1000"
+        
+        # Optimization
+        parallel_compression: true
+        incremental_backup: true
+        delta_backup: true
+        
+      # Testing and validation
+      testing:
+        enabled: true
+        test_schedule: "0 0 * * 0"  # Weekly on Sunday
+        test_timeout_hours: 2
+        test_verification:
+          - "data_integrity"
+          - "application_functionality"
+          - "performance_baseline"
+          
+        # Automated testing
+        automated_tests:
+          - name: "backup-restore-test"
+            description: "Test backup and restore functionality"
+            schedule: "0 0 * * 0"
+            timeout_minutes: 120
+            required: true
+            
+          - name: "recovery-time-test"
+            description: "Test recovery time objectives"
+            schedule: "0 0 * * 0"
+            timeout_minutes: 60
+            required: true
+            
+          - name: "data-integrity-test"
+            description: "Verify backup data integrity"
+            schedule: "0 0 * * 0"
+            timeout_minutes: 30
+            required: true
 
-# Recovery Time and Point Objectives
-rto_rpo:
-  target_rto_hours: 4          # Recovery Time Objective: 4 hours
-  target_rpo_minutes: 60       # Recovery Point Objective: 1 hour
-  maximum_downtime_hours: 8
-  
-# Cross-Region Replication
-replication:
-  enabled: true
-  
-  aws:
-    enabled: false
-    s3_bucket: "financial-planning-backups"
-    primary_region: "us-west-2"
-    backup_region: "us-east-1"
-    storage_class: "STANDARD_IA"
-    lifecycle_policy:
-      transition_to_glacier_days: 30
-      transition_to_deep_archive_days: 90
-      delete_after_days: 2555  # 7 years
-    
-  azure:
-    enabled: false
-    storage_account: "financialplanningbackups"
-    container: "backups"
-    access_tier: "cool"
-    replication_type: "GRS"  # Geo-redundant storage
-    
-  gcp:
-    enabled: false
-    bucket: "financial-planning-backups"
-    project_id: "financial-planning-prod"
-    storage_class: "COLDLINE"
-    location: "us-central1"
+---
+# Backup Service Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-service
+  namespace: disaster-recovery
+  labels:
+    app: financial-planning
+    component: backup
 
-# Monitoring and Alerting
-monitoring:
-  enabled: true
-  alert_webhook_url: "${BACKUP_ALERT_WEBHOOK}"
-  notification_email: "ops@company.com"
-  pagerduty_integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
-  
-  # Alert conditions
-  alerts:
-    backup_failure: true
-    backup_duration_threshold_hours: 6
-    backup_size_deviation_percent: 50
-    verification_failure: true
-    replication_failure: true
-    low_disk_space_percent: 10
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: financial-planning
+      component: backup
+  template:
+    metadata:
+      labels:
+        app: financial-planning
+        component: backup
+    spec:
+      serviceAccountName: backup-service-account
+      containers:
+        - name: backup-service
+          image: financial-planning/backup-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: postgres-host
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: postgres-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: postgres-password
+            - name: BACKUP_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: s3-bucket
+            - name: BACKUP_S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: s3-region
+            - name: BACKUP_ENCRYPTION_KEY_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: encryption-key-path
+            - name: BACKUP_ALERT_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: alert-webhook-url
+            - name: PAGERDUTY_INTEGRATION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: pagerduty-key
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: slack-webhook-url
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          volumeMounts:
+            - name: backup-config
+              mountPath: /app/config
+            - name: backup-storage
+              mountPath: /app/backups
+            - name: encryption-keys
+              mountPath: /etc/encryption-keys
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: backup-config
+          configMap:
+            name: backup-config
+        - name: backup-storage
+          persistentVolumeClaim:
+            claimName: backup-storage-pvc
+        - name: encryption-keys
+          secret:
+            secretName: backup-encryption-keys
 
-# Performance and Resource Limits
-performance:
-  max_parallel_jobs: 4
-  backup_timeout_hours: 12
-  verification_timeout_hours: 2
-  compression_threads: 4
-  max_memory_usage_gb: 8
-  network_bandwidth_limit_mbps: 100
+---
+# Backup Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-service-account
+  namespace: disaster-recovery
+  labels:
+    app: financial-planning
+    component: backup
 
-# Security Configuration
-security:
-  enable_backup_encryption: true
-  enable_transport_encryption: true
-  backup_user_permissions: "600"
-  backup_directory_permissions: "700"
-  
-  # Encryption settings
-  encryption:
-    algorithm: "AES256"
-    key_rotation_days: 90
-    verify_signatures: true
+---
+# Backup RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-operator
+  labels:
+    app: financial-planning
+    component: backup
 
-# Application-Specific Backup Components
-application_backups:
-  database_dump: true
-  application_state: true
-  configuration_files: true
-  log_files: false
-  
-  # File system paths to backup
-  additional_paths:
-    - "/etc/financial-planning/"
-    - "/var/lib/financial-planning/uploads/"
-    - "/var/lib/financial-planning/cache/"
-    
-  # Exclude patterns
-  exclude_patterns:
-    - "*.tmp"
-    - "*.log"
-    - "cache/*"
-    - "temp/*"
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "events", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors", "podmonitors", "prometheusrules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-# Testing and Validation
-testing:
-  enable_automated_testing: true
-  test_restore_frequency_days: 7
-  test_database_name: "financial_planning_test_restore"
-  
-  # Chaos engineering for backup systems
-  chaos_testing:
-    enabled: false
-    simulate_failures: true
-    test_schedule: "0 3 * * 1"  # Monday 3 AM
-    
-# Disaster Recovery Scenarios
-disaster_scenarios:
-  database_corruption:
-    recovery_method: "full_restore"
-    estimated_rto_hours: 2
-    estimated_rpo_minutes: 30
-    
-  hardware_failure:
-    recovery_method: "restore_to_new_hardware"
-    estimated_rto_hours: 4
-    estimated_rpo_minutes: 60
-    
-  data_center_outage:
-    recovery_method: "activate_secondary_site"
-    estimated_rto_hours: 8
-    estimated_rpo_minutes: 60
-    
-  ransomware_attack:
-    recovery_method: "restore_from_clean_backup"
-    estimated_rto_hours: 24
-    estimated_rpo_hours: 4
-    
-  user_error:
-    recovery_method: "point_in_time_recovery"
-    estimated_rto_minutes: 30
-    estimated_rpo_minutes: 15
+---
+# Backup RBAC Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-operator-binding
+  labels:
+    app: financial-planning
+    component: backup
 
-# Compliance and Auditing
-compliance:
-  enable_audit_logging: true
-  retain_audit_logs_days: 2555  # 7 years
-  backup_verification_required: true
-  encryption_required: true
-  
-  # Regulatory requirements
-  regulations:
-    - "SOX"
-    - "PCI-DSS"
-    - "GDPR"
-    - "CCPA"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-operator
 
-# Maintenance and Optimization
-maintenance:
-  auto_optimize_backup_sizes: true
-  compress_old_backups: true
-  defragment_backup_storage: true
-  update_statistics_frequency_hours: 24
-  
-  # Backup storage optimization
-  optimization:
-    enable_deduplication: true
-    enable_incremental_forever: false
-    compress_similar_backups: true
+subjects:
+  - kind: ServiceAccount
+    name: backup-service-account
+    namespace: disaster-recovery
+
+---
+# Backup Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-service
+  namespace: disaster-recovery
+  labels:
+    app: financial-planning
+    component: backup
+
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+    - port: 9090
+      targetPort: 9090
+      name: metrics
+  selector:
+    app: financial-planning
+    component: backup
+
+---
+# Backup CronJob
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-cronjob
+  namespace: disaster-recovery
+  labels:
+    app: financial-planning
+    component: backup
+
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: backup-service-account
+          containers:
+            - name: backup-job
+              image: financial-planning/backup-service:latest
+              imagePullPolicy: Always
+              command: ["/app/backup-service"]
+              args: ["--config", "/app/config/backup_config.yaml", "--run-backup"]
+              env:
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-secrets
+                      key: postgres-host
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-secrets
+                      key: postgres-password
+                - name: BACKUP_S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-secrets
+                      key: s3-bucket
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2000m"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: backup-config
+                  mountPath: /app/config
+                - name: backup-storage
+                  mountPath: /app/backups
+          volumes:
+            - name: backup-config
+              configMap:
+                name: backup-config
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-storage-pvc
+          restartPolicy: OnFailure

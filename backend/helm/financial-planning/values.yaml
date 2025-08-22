@@ -1,335 +1,412 @@
-# Default values for financial-planning.
-# This is a YAML-formatted file.
-# Declare variables to be substituted into templates.
+# Financial Planning System - Helm Chart Values
+# This file contains default values for the Financial Planning System
+# All sensitive values should be provided via environment variables or external secrets
 
-## Global parameters
-global:
-  imageRegistry: ""
-  imagePullSecrets: []
-  storageClass: ""
+apiVersion: v2
+name: financial-planning
+description: AI-driven financial planning and simulation system
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
 
-## Image parameters
+# Image configuration
 image:
-  registry: ghcr.io
-  repository: financial-planning/backend
-  tag: "latest"
+  repository: financial-planning
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
-  ## Optionally specify an array of imagePullSecrets.
-  pullSecrets: []
-  debug: false
+  imagePullSecrets: []
 
-## Application parameters
-app:
-  name: financial-planning-api
-  environment: production
-  logLevel: INFO
-  workers: 4
-  maxConnections: 1000
+# Image pull secrets for private registries
+pullSecrets: []
 
-## Deployment parameters
-replicaCount: 3
+# Service account configuration
+serviceAccount:
+  create: true
+  name: "financial-planning"
+  annotations: {}
+  automountServiceAccountToken: false
 
-## Update strategy
-updateStrategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 1
-    maxSurge: 1
-
-## Pod disruption budget
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 50%
-
-## Autoscaling parameters
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 20
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 80
-  customMetrics: []
-
-## Resource limits and requests
-resources:
-  limits:
-    cpu: 1000m
-    memory: 1Gi
-    ephemeral-storage: 2Gi
-  requests:
-    cpu: 250m
-    memory: 512Mi
-    ephemeral-storage: 1Gi
-
-## Pod security context
+# Pod security context
 podSecurityContext:
+  fsGroup: 1000
   runAsNonRoot: true
   runAsUser: 1000
   runAsGroup: 1000
-  fsGroup: 1000
-  seccompProfile:
-    type: RuntimeDefault
+  supplementalGroups: [1000]
 
-## Container security context
+# Container security context
 securityContext:
   allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
   runAsUser: 1000
   runAsGroup: 1000
-  capabilities:
-    drop:
-    - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
-## Service parameters
+# Service configuration
 service:
   type: ClusterIP
-  port: 80
+  port: 8000
   targetPort: 8000
   annotations: {}
-  loadBalancerIP: ""
-  loadBalancerSourceRanges: []
 
-## Ingress parameters
+# Ingress configuration
 ingress:
-  enabled: true
+  enabled: false
   className: "nginx"
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   hosts:
-    - host: api.financialplanning.com
+    - host: financial-planning.local
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: financial-planning-tls
       hosts:
-        - api.financialplanning.com
+        - financial-planning.local
 
-## Canary deployment
-canary:
-  enabled: false
-  weight: 10
-  header: "X-Canary"
-  headerValue: "true"
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
 
-## Blue-Green deployment
-blueGreen:
-  enabled: false
-  activeSlot: blue
-
-## Health checks
-healthCheck:
+# Pod disruption budget
+podDisruptionBudget:
   enabled: true
-  livenessProbe:
-    httpGet:
-      path: /health
-      port: http
-    initialDelaySeconds: 60
-    periodSeconds: 30
-    timeoutSeconds: 10
-    failureThreshold: 3
-  readinessProbe:
-    httpGet:
-      path: /api/v1/health
-      port: http
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-  startupProbe:
-    httpGet:
-      path: /health
-      port: http
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
+  minAvailable: 1
+  maxUnavailable: 0
 
-## Persistence
-persistence:
-  enabled: false
-  storageClass: ""
-  accessModes:
-    - ReadWriteOnce
-  size: 1Gi
-  annotations: {}
+# Horizontal pod autoscaler
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
 
-## Node selection
-nodeSelector: {}
-
-tolerations: []
-
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-    - weight: 100
-      podAffinityTerm:
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: financial-planning
-        topologyKey: kubernetes.io/hostname
-
-## Service account
-serviceAccount:
-  create: true
-  automountServiceAccountToken: false
-  annotations: {}
-  name: ""
-
-## RBAC
-rbac:
-  create: true
-
-## Network policies
+# Network policies
 networkPolicy:
   enabled: true
-  policyTypes:
-    - Ingress
-    - Egress
   ingress:
-    - from: []
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
       ports:
         - protocol: TCP
           port: 8000
-  egress:
-    - to: []
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 5432
-        - protocol: TCP
-          port: 6379
-        - protocol: UDP
-          port: 53
 
-## Monitoring
+# Pod anti-affinity for high availability
+podAntiAffinity:
+  enabled: true
+  type: preferredDuringSchedulingIgnoredDuringExecution
+  weight: 100
+  topologyKey: kubernetes.io/hostname
+
+# Node affinity
+nodeAffinity:
+  enabled: false
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: node-role.kubernetes.io/worker
+            operator: In
+            values:
+              - "true"
+
+# Tolerations
+tolerations: []
+
+# Annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# Labels
+podLabels:
+  app: financial-planning
+  version: "1.0.0"
+
+# Environment variables
+env:
+  - name: ENVIRONMENT
+    value: "production"
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: financial-planning-secrets
+        key: database-url
+  - name: SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: financial-planning-secrets
+        key: secret-key
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: financial-planning-secrets
+        key: redis-url
+
+# Configuration files
+config:
+  database:
+    pool_size: 20
+    max_overflow: 30
+    pool_timeout: 30
+  security:
+    access_token_expire_minutes: 1440
+    refresh_token_expire_minutes: 10080
+    min_password_length: 8
+    password_hash_rounds: 12
+  rate_limiting:
+    per_minute: 60
+    per_hour: 1000
+  simulation:
+    default_monte_carlo_iterations: 50000
+    max_monte_carlo_iterations: 100000
+    simulation_timeout_seconds: 300
+    max_concurrent_simulations: 10
+
+# External secrets configuration
+externalSecrets:
+  enabled: true
+  secretStore:
+    name: aws-secrets-manager
+    kind: SecretStore
+  externalSecret:
+    name: financial-planning-secrets
+    refreshInterval: "1h"
+    secretStoreRef:
+      name: aws-secrets-manager
+      kind: SecretStore
+    target:
+      name: financial-planning-secrets
+      type: Opaque
+    data:
+      - secretKey: database-url
+        remoteRef:
+          key: financial-planning/database-url
+      - secretKey: secret-key
+        remoteRef:
+          key: financial-planning/secret-key
+      - secretKey: redis-url
+        remoteRef:
+          key: financial-planning/redis-url
+      - secretKey: openai-api-key
+        remoteRef:
+          key: financial-planning/openai-api-key
+      - secretKey: anthropic-api-key
+        remoteRef:
+          key: financial-planning/anthropic-api-key
+      - secretKey: alpha-vantage-api-key
+        remoteRef:
+          key: financial-planning/alpha-vantage-api-key
+      - secretKey: iex-cloud-api-key
+        remoteRef:
+          key: financial-planning/iex-cloud-api-key
+      - secretKey: plaid-secret
+        remoteRef:
+          key: financial-planning/plaid-secret
+      - secretKey: encryption-key
+        remoteRef:
+          key: financial-planning/encryption-key
+
+# Database configuration
+database:
+  enabled: true
+  type: postgresql
+  host: postgresql
+  port: 5432
+  name: financial_planning
+  user: financial_planning
+  password: "${POSTGRES_PASSWORD}"
+  pool_size: 20
+  max_overflow: 30
+  pool_timeout: 30
+
+# Redis configuration
+redis:
+  enabled: true
+  host: redis
+  port: 6379
+  password: "${REDIS_PASSWORD}"
+  database: 0
+
+# Monitoring configuration
 monitoring:
   enabled: true
   serviceMonitor:
     enabled: true
     interval: 30s
     scrapeTimeout: 10s
-    path: /metrics
+  podMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
   prometheusRule:
     enabled: true
-    rules: []
 
-## Configuration
-config:
-  # Database configuration
-  database:
-    host: postgresql
-    port: 5432
-    name: financial_planning
-    poolSize: 20
-    maxOverflow: 30
-    poolTimeout: 30
-    poolRecycle: 3600
-  
-  # Redis configuration  
-  redis:
-    host: redis
-    port: 6379
-    db: 0
-    maxConnections: 100
-    socketTimeout: 5
-    socketConnectTimeout: 5
-  
-  # API configuration
-  api:
-    v1Str: "/api/v1"
-    projectName: "Financial Planning API"
-    allowedHosts: "*.financialplanning.com,localhost,127.0.0.1"
-  
-  # Security configuration
-  security:
-    accessTokenExpireMinutes: 1440
-    refreshTokenExpireMinutes: 10080
-    algorithm: "HS256"
-  
-  # External services
-  external:
-    rateLimitPerMinute: 100
-    rateLimitBurst: 200
-  
-  # Features
-  features:
-    enableVoice: true
-    enableAI: true
-    enableBlockchain: true
-    enablePDF: true
-  
-  # Performance
-  performance:
-    maxRequestSize: 10485760
-    timeoutSeconds: 120
-    keepaliveTimeout: 5
-
-## Secrets (these should be overridden in production)
-secrets:
-  databaseUrl: "postgresql://user:password@postgresql:5432/financial_planning"
-  redisUrl: "redis://redis:6379/0"
-  secretKey: "your-secret-key"
-  openaiApiKey: ""
-  anthropicApiKey: ""
-  alphaVantageApiKey: ""
-  iexCloudApiKey: ""
-  plaidClientId: ""
-  plaidSecret: ""
-  sentryDsn: ""
-  encryptionKey: ""
-
-## External services configuration
-postgresql:
+# Backup configuration
+backup:
   enabled: true
-  auth:
-    postgresPassword: "postgres"
-    username: "financial_planning"
-    password: "financial_planning"
-    database: "financial_planning"
-  primary:
-    persistence:
-      enabled: true
-      size: 50Gi
-    resources:
-      requests:
-        memory: 512Mi
-        cpu: 250m
-      limits:
-        memory: 1Gi
-        cpu: 1000m
+  schedule: "0 2 * * *"
+  retention:
+    days: 30
+    copies: 5
+  storage:
+    type: s3
+    bucket: financial-planning-backups
+    region: us-west-2
 
-redis:
+# Security configuration
+security:
   enabled: true
-  auth:
+  networkPolicy:
     enabled: true
-    password: "redis"
-  master:
-    persistence:
-      enabled: true
-      size: 10Gi
-    resources:
-      requests:
-        memory: 256Mi
-        cpu: 100m
-      limits:
-        memory: 512Mi
-        cpu: 500m
+  podSecurityStandards:
+    enabled: true
+    level: restricted
+  securityContext:
+    enabled: true
+  rbac:
+    enabled: true
+    create: true
 
-ingress-nginx:
-  enabled: false
-  controller:
-    replicaCount: 2
-    resources:
-      requests:
-        cpu: 100m
-        memory: 90Mi
-      limits:
-        cpu: 1000m
-        memory: 512Mi
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /startup
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "sleep 10"
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Volumes
+volumes: []
+
+# Volume mounts
+volumeMounts: []
+
+# Affinity
+affinity: {}
+
+# Tolerations
+tolerations: []
+
+# Node selector
+nodeSelector: {}
+
+# Host aliases
+hostAliases: []
+
+# Dns policy
+dnsPolicy: ClusterFirst
+
+# Restart policy
+restartPolicy: Always
+
+# Termination grace period seconds
+terminationGracePeriodSeconds: 30
+
+# Topology spread constraints
+topologySpreadConstraints: []
+
+# Security context
+securityContext: {}
+
+# Service account
+serviceAccount: {}
+
+# Automount service account token
+automountServiceAccountToken: false
+
+# Priority class name
+priorityClassName: ""
+
+# Host network
+hostNetwork: false
+
+# Host PID
+hostPID: false
+
+# Host IPC
+hostIPC: false
+
+# Share process namespace
+shareProcessNamespace: false
+
+# Security context
+securityContext: {}
+
+# Runtime class name
+runtimeClassName: ""
+
+# Enable service links
+enableServiceLinks: true
+
+# Set hostname as FQDN
+setHostnameAsFQDN: false
+
+# DNS config
+dnsConfig: {}
+
+# Readiness gates
+readinessGates: []
+
+# Preemption policy
+preemptionPolicy: PreemptLowerOrNewer
+
+# Overhead
+overhead: {}
+
+# Scheduling gates
+schedulingGates: []
