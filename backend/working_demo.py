@@ -144,7 +144,7 @@ class FinancialProfile(BaseModel):
     current_income: float = Field(gt=0)
     current_savings: float = Field(ge=0)
     monthly_expenses: float = Field(gt=0)
-    risk_tolerance: str = Field(regex="^(conservative|moderate|aggressive)$")
+    risk_tolerance: str = Field(pattern="^(conservative|moderate|aggressive)$")
 
 class FinancialGoal(BaseModel):
     user_id: int
@@ -159,13 +159,13 @@ class SimulationRequest(BaseModel):
     years_to_retirement: int = Field(ge=1, le=50)
     monthly_contribution: float = Field(gt=0)
     initial_amount: float = Field(ge=0)
-    risk_level: str = Field(regex="^(conservative|moderate|aggressive)$")
+    risk_level: str = Field(pattern="^(conservative|moderate|aggressive)$")
     num_simulations: Optional[int] = Field(default=10000, ge=1000, le=50000)
     
 class PortfolioOptimizationRequest(BaseModel):
     user_id: int
     target_return: Optional[float] = Field(default=None, ge=0.01, le=0.30)
-    risk_tolerance: str = Field(regex="^(conservative|moderate|aggressive)$")
+    risk_tolerance: str = Field(pattern="^(conservative|moderate|aggressive)$")
     investment_amount: float = Field(gt=0)
     
 class PDFReportRequest(BaseModel):

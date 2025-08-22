@@ -1,0 +1,448 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Financial Planning Demo - Azure ARM Template",
+    "author": "Financial Planning Team"
+  },
+  "parameters": {
+    "projectName": {
+      "type": "string",
+      "defaultValue": "finplan",
+      "metadata": {
+        "description": "Project name for resource naming"
+      }
+    },
+    "environment": {
+      "type": "string",
+      "defaultValue": "demo",
+      "allowedValues": [
+        "demo",
+        "staging",
+        "production"
+      ],
+      "metadata": {
+        "description": "Environment name"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources"
+      }
+    },
+    "administratorLogin": {
+      "type": "string",
+      "defaultValue": "dbadmin",
+      "metadata": {
+        "description": "Administrator username for PostgreSQL"
+      }
+    },
+    "administratorPassword": {
+      "type": "securestring",
+      "minLength": 8,
+      "metadata": {
+        "description": "Administrator password for PostgreSQL"
+      }
+    },
+    "backendImage": {
+      "type": "string",
+      "defaultValue": "DOCKER|finplan/backend:latest",
+      "metadata": {
+        "description": "Docker image for backend"
+      }
+    },
+    "frontendImage": {
+      "type": "string",
+      "defaultValue": "DOCKER|finplan/frontend:latest",
+      "metadata": {
+        "description": "Docker image for frontend"
+      }
+    }
+  },
+  "variables": {
+    "uniqueString": "[uniqueString(resourceGroup().id)]",
+    "appServicePlanName": "[concat(parameters('projectName'), '-plan-', parameters('environment'))]",
+    "backendAppName": "[concat(parameters('projectName'), '-backend-', variables('uniqueString'))]",
+    "frontendAppName": "[concat(parameters('projectName'), '-frontend-', variables('uniqueString'))]",
+    "postgresServerName": "[concat(parameters('projectName'), '-db-', variables('uniqueString'))]",
+    "redisCacheName": "[concat(parameters('projectName'), '-redis-', variables('uniqueString'))]",
+    "storageAccountName": "[concat('finplan', variables('uniqueString'))]",
+    "containerRegistryName": "[concat('finplan', variables('uniqueString'))]",
+    "vnetName": "[concat(parameters('projectName'), '-vnet')]",
+    "subnetName": "[concat(parameters('projectName'), '-subnet')]",
+    "appInsightsName": "[concat(parameters('projectName'), '-insights-', parameters('environment'))]",
+    "keyVaultName": "[concat(parameters('projectName'), '-kv-', variables('uniqueString'))]",
+    "environmentConfig": {
+      "demo": {
+        "appServiceSku": "B1",
+        "postgresSkuTier": "Burstable",
+        "postgresSkuName": "Standard_B1ms",
+        "redisSkuName": "Basic",
+        "redisSkuFamily": "C",
+        "redisSkuCapacity": 0
+      },
+      "staging": {
+        "appServiceSku": "B2",
+        "postgresSkuTier": "Burstable",
+        "postgresSkuName": "Standard_B2s",
+        "redisSkuName": "Basic",
+        "redisSkuFamily": "C",
+        "redisSkuCapacity": 1
+      },
+      "production": {
+        "appServiceSku": "P1v2",
+        "postgresSkuTier": "GeneralPurpose",
+        "postgresSkuName": "Standard_D2s_v3",
+        "redisSkuName": "Standard",
+        "redisSkuFamily": "C",
+        "redisSkuCapacity": 1
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-04-01",
+      "name": "[variables('vnetName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "10.0.1.0/24",
+              "serviceEndpoints": [
+                {
+                  "service": "Microsoft.Sql"
+                },
+                {
+                  "service": "Microsoft.Storage"
+                },
+                {
+                  "service": "Microsoft.KeyVault"
+                }
+              ],
+              "delegations": [
+                {
+                  "name": "delegation",
+                  "properties": {
+                    "serviceName": "Microsoft.Web/serverfarms"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "supportsHttpsTrafficOnly": true,
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "virtualNetworkRules": [
+            {
+              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-01-01-preview",
+      "name": "[variables('containerRegistryName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": true
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "apiVersion": "2023-03-01-preview",
+      "name": "[variables('postgresServerName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[variables('environmentConfig')[parameters('environment')].postgresSkuName]",
+        "tier": "[variables('environmentConfig')[parameters('environment')].postgresSkuTier]"
+      },
+      "properties": {
+        "version": "15",
+        "administratorLogin": "[parameters('administratorLogin')]",
+        "administratorLoginPassword": "[parameters('administratorPassword')]",
+        "storage": {
+          "storageSizeGB": 32
+        },
+        "backup": {
+          "backupRetentionDays": "[if(equals(parameters('environment'), 'production'), 30, 7)]",
+          "geoRedundantBackup": "[if(equals(parameters('environment'), 'production'), 'Enabled', 'Disabled')]"
+        },
+        "highAvailability": {
+          "mode": "[if(equals(parameters('environment'), 'production'), 'ZoneRedundant', 'Disabled')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+      "apiVersion": "2023-03-01-preview",
+      "name": "[concat(variables('postgresServerName'), '/financial_planning')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]"
+      ],
+      "properties": {
+        "charset": "UTF8",
+        "collation": "en_US.utf8"
+      }
+    },
+    {
+      "type": "Microsoft.Cache/redis",
+      "apiVersion": "2023-08-01",
+      "name": "[variables('redisCacheName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "[variables('environmentConfig')[parameters('environment')].redisSkuName]",
+          "family": "[variables('environmentConfig')[parameters('environment')].redisSkuFamily]",
+          "capacity": "[variables('environmentConfig')[parameters('environment')].redisSkuCapacity]"
+        },
+        "enableNonSslPort": false,
+        "minimumTlsVersion": "1.2",
+        "redisConfiguration": {
+          "maxmemory-policy": "allkeys-lru"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "kind": "linux",
+      "properties": {
+        "reserved": true
+      },
+      "sku": {
+        "name": "[variables('environmentConfig')[parameters('environment')].appServiceSku]"
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('backendAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux,container",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "siteConfig": {
+          "linuxFxVersion": "[parameters('backendImage')]",
+          "alwaysOn": "[equals(parameters('environment'), 'production')]",
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "appSettings": [
+            {
+              "name": "ENVIRONMENT",
+              "value": "[parameters('environment')]"
+            },
+            {
+              "name": "DATABASE_URL",
+              "value": "[concat('postgresql://', parameters('administratorLogin'), ':', parameters('administratorPassword'), '@', reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))).fullyQualifiedDomainName, '/financial_planning')]"
+            },
+            {
+              "name": "REDIS_URL",
+              "value": "[concat('redis://:', listKeys(resourceId('Microsoft.Cache/redis', variables('redisCacheName')), '2023-08-01').primaryKey, '@', reference(resourceId('Microsoft.Cache/redis', variables('redisCacheName'))).hostName, ':6380?ssl=true')]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName'))).ConnectionString]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_URL",
+              "value": "[concat('https://', reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))).loginServer)]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-01-01-preview').username]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-01-01-preview').passwords[0].value]"
+            }
+          ]
+        },
+        "virtualNetworkSubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]",
+        "httpsOnly": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]",
+        "[resourceId('Microsoft.Cache/redis', variables('redisCacheName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('frontendAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux,container",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "siteConfig": {
+          "linuxFxVersion": "[parameters('frontendImage')]",
+          "alwaysOn": "[equals(parameters('environment'), 'production')]",
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "appSettings": [
+            {
+              "name": "NEXT_PUBLIC_API_URL",
+              "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('backendAppName'))).defaultHostName, '/api')]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName'))).ConnectionString]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_URL",
+              "value": "[concat('https://', reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))).loginServer)]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-01-01-preview').username]"
+            },
+            {
+              "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName')), '2023-01-01-preview').passwords[0].value]"
+            }
+          ]
+        },
+        "httpsOnly": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('backendAppName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "RetentionInDays": "[if(equals(parameters('environment'), 'production'), 90, 30)]"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-02-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "tenantId": "[subscription().tenantId]",
+        "accessPolicies": [],
+        "enabledForDeployment": true,
+        "enabledForTemplateDeployment": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "networkAcls": {
+          "defaultAction": "Allow",
+          "virtualNetworkRules": [
+            {
+              "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2022-09-01",
+      "name": "[concat(variables('backendAppName'), '/web')]",
+      "properties": {
+        "numberOfWorkers": 1,
+        "defaultDocuments": [],
+        "netFrameworkVersion": "v4.0",
+        "requestTracingEnabled": false,
+        "remoteDebuggingEnabled": false,
+        "httpLoggingEnabled": true,
+        "detailedErrorLoggingEnabled": true,
+        "use32BitWorkerProcess": false,
+        "webSocketsEnabled": false,
+        "alwaysOn": "[equals(parameters('environment'), 'production')]",
+        "managedPipelineMode": "Integrated",
+        "virtualApplications": [
+          {
+            "virtualPath": "/",
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": "[equals(parameters('environment'), 'production')]"
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "autoHealEnabled": true,
+        "vnetRouteAllEnabled": true,
+        "healthCheckPath": "/health"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('backendAppName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "frontendUrl": {
+      "type": "string",
+      "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('frontendAppName'))).defaultHostName)]"
+    },
+    "backendUrl": {
+      "type": "string",
+      "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', variables('backendAppName'))).defaultHostName)]"
+    },
+    "containerRegistryLoginServer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('containerRegistryName'))).loginServer]"
+    },
+    "applicationInsightsInstrumentationKey": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName'))).InstrumentationKey]"
+    },
+    "estimatedMonthlyCost": {
+      "type": "string",
+      "value": "Demo: ~$75/month | Staging: ~$150/month | Production: ~$400/month"
+    }
+  }
+}

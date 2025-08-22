@@ -183,6 +183,7 @@ except ImportError as e:
 api_router = None
 try:
     from app.api.v1.api import api_router
+from app.routes.demo_metrics import router as demo_metrics_router
     AVAILABLE_SERVICES["api_router"] = True
     logger.info("API router imported successfully")
 except ImportError as e:
@@ -356,6 +357,18 @@ if AVAILABLE_SERVICES["middleware"] and hasattr(settings, 'ALLOWED_HOSTS'):
 
 # Include API router if available
 if api_router and AVAILABLE_SERVICES["api_router"]:
+    # Add demo metrics routes
+    api_router.include_router(demo_metrics_router, prefix="/demo")
+    
+    def get_available_demo_routes() -> List[dict]:
+        """Retrieve available demo metric routes"""
+        return [
+            {"path": route.path, "methods": list(route.methods)} 
+            for route in demo_metrics_router.routes
+        ]
+    
+    app.state.demo_routes = get_available_demo_routes()
+    
     try:
         api_prefix = getattr(settings, 'API_V1_STR', '/api/v1')
         app.include_router(api_router, prefix=api_prefix)

@@ -92,3 +92,182 @@ repos:
       - id: debug-statements
       - id: name-tests-test
       - id: requirements-txt-fixer
+
+  # Demo validation hooks (local)
+  - repo: local
+    hooks:
+      # Demo smoke tests before commit
+      - id: demo-smoke-tests
+        name: Demo Smoke Tests
+        entry: ./demo-smoke-tests.sh --quick
+        language: script
+        files: '.*\.(py|sh|yml|yaml|json|ts|tsx)$'
+        pass_filenames: false
+        stages: [commit]
+        always_run: false
+        
+      # Python demo files syntax check
+      - id: demo-python-syntax
+        name: Demo Python Syntax Check
+        entry: python3 -m py_compile
+        language: python
+        files: '^.*demo.*\.py$'
+        
+      # Demo configuration validation
+      - id: demo-config-validation
+        name: Demo Configuration Validation
+        entry: bash -c
+        args: 
+          - |
+            set -e
+            echo "Validating demo configuration files..."
+            
+            # Check docker-compose files
+            for compose_file in docker-compose*.yml; do
+              if [[ -f "$compose_file" ]]; then
+                echo "Validating $compose_file..."
+                if command -v docker-compose >/dev/null; then
+                  docker-compose -f "$compose_file" config >/dev/null
+                else
+                  docker compose -f "$compose_file" config >/dev/null
+                fi
+                echo "✅ $compose_file is valid"
+              fi
+            done
+            
+            # Check requirements files
+            for req_file in backend/requirements*.txt; do
+              if [[ -f "$req_file" ]]; then
+                echo "Validating $req_file..."
+                python3 -c "
+import pkg_resources
+try:
+    with open('$req_file') as f:
+        requirements = f.read().strip().split('\n')
+    for req in requirements:
+        if req and not req.startswith('#') and not req.startswith('-'):
+            pkg_resources.Requirement.parse(req)
+    print('✅ $req_file syntax is valid')
+except Exception as e:
+    print('⚠️  $req_file may have syntax issues:', e)
+                "
+              fi
+            done
+            
+            # Check package.json files
+            for package_file in */package.json */*/package.json; do
+              if [[ -f "$package_file" ]]; then
+                echo "Validating $package_file..."
+                if command -v node >/dev/null; then
+                  node -e "JSON.parse(require('fs').readFileSync('$package_file'))"
+                  echo "✅ $package_file is valid JSON"
+                else
+                  python3 -c "import json; json.load(open('$package_file'))"
+                  echo "✅ $package_file is valid JSON (checked with Python)"
+                fi
+              fi
+            done
+            
+            echo "All demo configuration files validated successfully!"
+        language: script
+        files: '(docker-compose.*\.yml|requirements.*\.txt|package\.json)$'
+        pass_filenames: false
+        
+      # Demo script permissions check
+      - id: demo-scripts-executable
+        name: Demo Scripts Executable Check
+        entry: bash -c
+        args:
+          - |
+            set -e
+            echo "Checking demo script permissions..."
+            
+            demo_scripts=(
+              "demo-smoke-tests.sh"
+              "validate_demo.sh" 
+              "start_docker_demo.sh"
+              "backend/start_demo.sh"
+              "backend/stop_demo.sh"
+              "backend/reset_demo.sh"
+              "backend/scripts/monitor_demo.sh"
+              "mobile/demo-app/start-demo.sh"
+              "launch_demo.sh"
+            )
+            
+            for script in "${demo_scripts[@]}"; do
+              if [[ -f "$script" ]]; then
+                if [[ ! -x "$script" ]]; then
+                  echo "Making $script executable..."
+                  chmod +x "$script"
+                fi
+                echo "✅ $script is executable"
+              fi
+            done
+            
+            echo "All demo scripts have correct permissions!"
+        language: script
+        files: '.*\.(sh|py)$'
+        pass_filenames: false
+
+      # Demo environment check
+      - id: demo-env-check
+        name: Demo Environment Check  
+        entry: bash -c
+        args:
+          - |
+            set -e
+            echo "Checking demo environment setup..."
+            
+            # Check if env.template exists
+            if [[ -f "backend/env.template" ]]; then
+              echo "✅ Environment template found"
+            else
+              echo "❌ backend/env.template not found - required for demo setup"
+              exit 1
+            fi
+            
+            # Check for sensitive data in demo files
+            echo "Scanning for potential sensitive data in demo files..."
+            
+            if grep -r -i "password.*=.*[^<]" --include="*demo*.py" --include="*demo*.sh" . | grep -v "your-password-here" | grep -v "change-me" | grep -v "example.com" | head -5; then
+              echo "❌ Potential hardcoded credentials found in demo files"
+              exit 1
+            fi
+            
+            if grep -r -i "secret.*=.*[^<]" --include="*demo*.py" --include="*demo*.sh" . | grep -v "your-secret-here" | grep -v "change-me" | head -5; then
+              echo "❌ Potential hardcoded secrets found in demo files"
+              exit 1
+            fi
+            
+            echo "✅ No sensitive data detected in demo files"
+            echo "Demo environment check completed successfully!"
+        language: script
+        files: '.*demo.*\.(py|sh|yml|yaml)$'
+        pass_filenames: false
+        
+      # Performance test for critical demo paths
+      - id: demo-performance-check
+        name: Demo Performance Check
+        entry: bash -c
+        args:
+          - |
+            set -e
+            echo "Running basic demo performance check..."
+            
+            # Check if any demo files are unusually large
+            large_files=$(find . -name "*demo*.py" -size +500k 2>/dev/null | head -5)
+            if [[ -n "$large_files" ]]; then
+              echo "⚠️  Large demo files detected (>500KB):"
+              echo "$large_files"
+              echo "Consider optimizing for faster startup times"
+            fi
+            
+            # Check for potential performance bottlenecks in demo code
+            if grep -r "time\.sleep([5-9]\|[1-9][0-9])" --include="*demo*.py" .; then
+              echo "⚠️  Long sleep() calls detected in demo files - may slow down testing"
+            fi
+            
+            echo "✅ Demo performance check completed"
+        language: script
+        files: '.*demo.*\.py$'
+        pass_filenames: false

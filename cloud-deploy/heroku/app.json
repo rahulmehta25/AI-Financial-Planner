@@ -1,0 +1,131 @@
+{
+  "name": "Financial Planning Demo",
+  "description": "A comprehensive financial planning system with Monte Carlo simulations and portfolio recommendations",
+  "repository": "https://github.com/yourusername/financial-planning",
+  "logo": "https://raw.githubusercontent.com/yourusername/financial-planning/main/logo.png",
+  "keywords": [
+    "financial-planning",
+    "monte-carlo",
+    "portfolio-management",
+    "python",
+    "fastapi",
+    "nextjs",
+    "react"
+  ],
+  "stack": "container",
+  "success_url": "/",
+  "env": {
+    "ENVIRONMENT": {
+      "description": "Application environment",
+      "value": "demo",
+      "required": true
+    },
+    "SECRET_KEY": {
+      "description": "Secret key for JWT tokens",
+      "generator": "secret"
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL database URL (automatically provisioned)",
+      "value": "",
+      "required": false
+    },
+    "REDIS_URL": {
+      "description": "Redis URL (automatically provisioned)",
+      "value": "",
+      "required": false
+    },
+    "CORS_ORIGINS": {
+      "description": "CORS allowed origins",
+      "value": "*",
+      "required": false
+    },
+    "LOG_LEVEL": {
+      "description": "Logging level",
+      "value": "INFO",
+      "required": false
+    },
+    "MAX_WORKERS": {
+      "description": "Maximum number of worker processes",
+      "value": "2",
+      "required": false
+    },
+    "RATE_LIMIT_REQUESTS": {
+      "description": "Rate limit requests per minute",
+      "value": "60",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "standard-1x"
+    },
+    "worker": {
+      "quantity": 0,
+      "size": "standard-1x"
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:mini",
+      "options": {
+        "version": "15"
+      }
+    },
+    {
+      "plan": "heroku-redis:mini"
+    },
+    {
+      "plan": "papertrail:choklad"
+    },
+    {
+      "plan": "newrelic:wayne"
+    }
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "python backend/app/database/init_db.py && cd frontend && npm run build"
+  },
+  "environments": {
+    "test": {
+      "env": {
+        "ENVIRONMENT": "test"
+      },
+      "formation": {
+        "web": {
+          "quantity": 1,
+          "size": "standard-1x"
+        }
+      },
+      "addons": [
+        "heroku-postgresql:mini",
+        "heroku-redis:mini"
+      ],
+      "scripts": {
+        "test": "cd backend && pytest && cd ../frontend && npm test"
+      }
+    },
+    "review": {
+      "env": {
+        "ENVIRONMENT": "review"
+      },
+      "formation": {
+        "web": {
+          "quantity": 1,
+          "size": "standard-1x"
+        }
+      },
+      "addons": [
+        "heroku-postgresql:mini",
+        "heroku-redis:mini"
+      ]
+    }
+  }
+}
