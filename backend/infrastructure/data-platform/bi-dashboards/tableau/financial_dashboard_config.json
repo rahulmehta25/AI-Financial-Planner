@@ -1,0 +1,407 @@
+{
+  "dashboards": [
+    {
+      "name": "Executive Financial Overview",
+      "description": "High-level KPIs and metrics for executive reporting",
+      "refresh_schedule": "daily",
+      "data_sources": [
+        "analytics.portfolio_performance",
+        "analytics.customer_segments",
+        "marts.monthly_financial_summary"
+      ],
+      "sheets": [
+        {
+          "name": "Key Performance Indicators",
+          "type": "scorecard",
+          "metrics": [
+            {
+              "name": "Total Assets Under Management",
+              "query": "SUM([total_portfolio_value])",
+              "format": "currency",
+              "comparison": "month_over_month"
+            },
+            {
+              "name": "Active Users",
+              "query": "COUNTD([user_key])",
+              "format": "number",
+              "comparison": "month_over_month"
+            },
+            {
+              "name": "Average Portfolio Return",
+              "query": "AVG([annualized_return])",
+              "format": "percentage",
+              "comparison": "year_over_year"
+            },
+            {
+              "name": "Customer Acquisition Cost",
+              "query": "SUM([marketing_spend]) / COUNT([new_users])",
+              "format": "currency",
+              "comparison": "quarter_over_quarter"
+            }
+          ]
+        },
+        {
+          "name": "Portfolio Performance Trends",
+          "type": "line_chart",
+          "x_axis": "date_key",
+          "y_axis": "total_portfolio_value",
+          "grouping": "risk_category",
+          "filters": ["date_range", "user_segment"],
+          "trend_lines": true,
+          "forecasting": {
+            "enabled": true,
+            "periods": 90,
+            "confidence_interval": 0.95
+          }
+        },
+        {
+          "name": "Customer Segmentation Distribution",
+          "type": "treemap",
+          "dimension": "rfm_segment",
+          "measure": "COUNT([user_key])",
+          "color": "value_tier",
+          "tooltips": [
+            "avg_portfolio_value",
+            "retention_rate",
+            "lifetime_value"
+          ]
+        },
+        {
+          "name": "Revenue by Product Line",
+          "type": "stacked_bar",
+          "x_axis": "product_category",
+          "y_axis": "revenue",
+          "stack": "revenue_type",
+          "sort": "descending"
+        }
+      ],
+      "filters": [
+        {
+          "name": "Date Range",
+          "type": "date_range",
+          "default": "last_30_days"
+        },
+        {
+          "name": "Customer Segment",
+          "type": "multi_select",
+          "values": ["Champions", "Loyal Customers", "At Risk", "New Customers"]
+        },
+        {
+          "name": "Risk Category",
+          "type": "single_select",
+          "values": ["Low Risk", "Medium Risk", "High Risk"]
+        }
+      ],
+      "actions": [
+        {
+          "name": "Drill Down to Customer Detail",
+          "type": "navigate",
+          "target_dashboard": "Customer Detail Analysis"
+        }
+      ]
+    },
+    {
+      "name": "Portfolio Analytics Dashboard",
+      "description": "Detailed portfolio performance and risk analysis",
+      "refresh_schedule": "hourly",
+      "data_sources": [
+        "facts.fact_portfolio_performance",
+        "analytics.risk_analysis",
+        "dimensions.dim_security"
+      ],
+      "sheets": [
+        {
+          "name": "Portfolio Performance Heatmap",
+          "type": "heatmap",
+          "rows": "security_symbol",
+          "columns": "date_key",
+          "values": "daily_return",
+          "color_scale": "red_green",
+          "aggregation": "average"
+        },
+        {
+          "name": "Risk-Return Scatter Plot",
+          "type": "scatter_plot",
+          "x_axis": "portfolio_volatility",
+          "y_axis": "annualized_return",
+          "size": "total_portfolio_value",
+          "color": "sharpe_ratio",
+          "reference_lines": [
+            {
+              "type": "constant",
+              "value": 0.1,
+              "axis": "y",
+              "label": "Minimum Return Threshold"
+            }
+          ]
+        },
+        {
+          "name": "Asset Allocation Breakdown",
+          "type": "pie_chart",
+          "dimension": "asset_class",
+          "measure": "allocation_percentage",
+          "show_labels": true,
+          "show_percentages": true
+        },
+        {
+          "name": "Value at Risk Analysis",
+          "type": "histogram",
+          "x_axis": "portfolio_return",
+          "bins": 50,
+          "overlay_lines": [
+            {
+              "type": "percentile",
+              "value": 5,
+              "label": "VaR 95%",
+              "color": "red"
+            },
+            {
+              "type": "percentile",
+              "value": 1,
+              "label": "VaR 99%",
+              "color": "darkred"
+            }
+          ]
+        },
+        {
+          "name": "Sector Concentration",
+          "type": "horizontal_bar",
+          "x_axis": "sector_allocation_percentage",
+          "y_axis": "sector",
+          "color": "risk_contribution",
+          "sort": "descending",
+          "reference_lines": [
+            {
+              "type": "constant",
+              "value": 20,
+              "axis": "x",
+              "label": "Concentration Limit"
+            }
+          ]
+        }
+      ],
+      "parameters": [
+        {
+          "name": "Confidence Level",
+          "type": "slider",
+          "min": 90,
+          "max": 99,
+          "default": 95,
+          "step": 1
+        },
+        {
+          "name": "Time Horizon",
+          "type": "dropdown",
+          "values": ["1D", "1W", "1M", "3M", "6M", "1Y"],
+          "default": "1M"
+        }
+      ]
+    },
+    {
+      "name": "Customer Behavior Analytics",
+      "description": "Deep dive into customer spending patterns and behavior",
+      "refresh_schedule": "daily",
+      "data_sources": [
+        "analytics.spending_patterns",
+        "analytics.transaction_analytics",
+        "facts.fact_user_activity"
+      ],
+      "sheets": [
+        {
+          "name": "Spending Patterns Heatmap",
+          "type": "heatmap",
+          "rows": "category",
+          "columns": "hour_of_day",
+          "values": "avg_transaction_amount",
+          "color_scale": "blue_white_red"
+        },
+        {
+          "name": "Customer Journey Funnel",
+          "type": "funnel",
+          "stages": [
+            "Registration",
+            "First Transaction", 
+            "First Investment",
+            "Regular Usage",
+            "Premium Upgrade"
+          ],
+          "measure": "user_count"
+        },
+        {
+          "name": "Cohort Retention Heatmap",
+          "type": "heatmap",
+          "rows": "registration_cohort",
+          "columns": "period_number",
+          "values": "retention_rate",
+          "color_scale": "green_white_red",
+          "format": "percentage"
+        },
+        {
+          "name": "Transaction Volume Trends",
+          "type": "area_chart",
+          "x_axis": "date",
+          "y_axis": "transaction_count",
+          "grouping": "transaction_category",
+          "stacked": true
+        }
+      ]
+    },
+    {
+      "name": "Real-time Monitoring Dashboard",
+      "description": "Live monitoring of system health and data quality",
+      "refresh_schedule": "real_time",
+      "data_sources": [
+        "monitoring.system_metrics",
+        "monitoring.data_quality_metrics",
+        "monitoring.alert_summary"
+      ],
+      "sheets": [
+        {
+          "name": "System Health Indicators",
+          "type": "gauge_chart",
+          "metrics": [
+            {
+              "name": "API Response Time",
+              "value": "AVG([response_time_ms])",
+              "min": 0,
+              "max": 5000,
+              "thresholds": [
+                {"value": 1000, "color": "green"},
+                {"value": 3000, "color": "yellow"},
+                {"value": 5000, "color": "red"}
+              ]
+            },
+            {
+              "name": "Data Pipeline Success Rate",
+              "value": "AVG([success_rate])",
+              "min": 0,
+              "max": 100,
+              "format": "percentage"
+            }
+          ]
+        },
+        {
+          "name": "Alert Summary",
+          "type": "table",
+          "columns": [
+            "alert_type",
+            "severity",
+            "count",
+            "last_occurrence",
+            "status"
+          ],
+          "sort": [
+            {"column": "severity", "direction": "desc"},
+            {"column": "last_occurrence", "direction": "desc"}
+          ],
+          "conditional_formatting": [
+            {
+              "column": "severity",
+              "conditions": [
+                {"value": "CRITICAL", "background_color": "red", "text_color": "white"},
+                {"value": "HIGH", "background_color": "orange"},
+                {"value": "MEDIUM", "background_color": "yellow"},
+                {"value": "LOW", "background_color": "lightgreen"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "data_connections": [
+    {
+      "name": "Financial Data Warehouse",
+      "type": "postgresql",
+      "server": "localhost",
+      "port": 5432,
+      "database": "financial_dw",
+      "authentication": "username_password",
+      "ssl_mode": "require",
+      "connection_pooling": true,
+      "max_connections": 10
+    },
+    {
+      "name": "Real-time Analytics",
+      "type": "apache_kafka",
+      "bootstrap_servers": ["localhost:9092"],
+      "security_protocol": "PLAINTEXT",
+      "topics": [
+        "market_analytics",
+        "transaction_analytics",
+        "user_analytics"
+      ]
+    },
+    {
+      "name": "Cloud Storage",
+      "type": "amazon_s3",
+      "bucket": "financial-platform-data",
+      "region": "us-east-1",
+      "access_key_id": "${AWS_ACCESS_KEY_ID}",
+      "secret_access_key": "${AWS_SECRET_ACCESS_KEY}"
+    }
+  ],
+  "security": {
+    "row_level_security": [
+      {
+        "table": "facts.fact_portfolio_performance",
+        "filter": "[user_id] = USERNAME()",
+        "description": "Users can only see their own portfolio data"
+      },
+      {
+        "table": "facts.fact_transaction", 
+        "filter": "[user_id] = USERNAME() OR ISMEMBEROF('Advisors')",
+        "description": "Users see own transactions, advisors see all"
+      }
+    ],
+    "column_level_security": [
+      {
+        "table": "dimensions.dim_user",
+        "column": "email",
+        "access_level": "admin_only"
+      },
+      {
+        "table": "dimensions.dim_account",
+        "column": "account_number_masked",
+        "access_level": "user_and_advisor"
+      }
+    ]
+  },
+  "performance_optimization": {
+    "extract_refresh": {
+      "enabled": true,
+      "schedule": "incremental_daily",
+      "partition_by": "date_key"
+    },
+    "aggregation_tables": [
+      {
+        "name": "agg_daily_portfolio_summary",
+        "base_table": "facts.fact_portfolio_performance",
+        "dimensions": ["user_key", "date_key"],
+        "measures": ["total_value", "daily_return", "volatility"]
+      },
+      {
+        "name": "agg_monthly_transaction_summary",
+        "base_table": "facts.fact_transaction",
+        "dimensions": ["user_key", "category_key", "year_month"],
+        "measures": ["transaction_count", "total_amount", "avg_amount"]
+      }
+    ]
+  },
+  "alerting": {
+    "data_alerts": [
+      {
+        "name": "High Portfolio Volatility",
+        "condition": "AVG([portfolio_volatility]) > 0.05",
+        "frequency": "daily",
+        "recipients": ["risk-team@company.com"]
+      },
+      {
+        "name": "Low Data Quality Score",
+        "condition": "AVG([data_quality_score]) < 0.95",
+        "frequency": "hourly",
+        "recipients": ["data-team@company.com"]
+      }
+    ]
+  }
+}

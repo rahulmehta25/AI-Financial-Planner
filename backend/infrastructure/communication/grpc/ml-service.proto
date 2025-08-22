@@ -1,0 +1,574 @@
+// ML Service gRPC Definition
+syntax = "proto3";
+
+package financial_planning.ml.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/financial-planning/proto/ml/v1";
+
+// ML Service for recommendations and predictions
+service MLService {
+  // Recommendation operations
+  rpc GetRecommendations(GetRecommendationsRequest) returns (GetRecommendationsResponse);
+  rpc GenerateRecommendation(GenerateRecommendationRequest) returns (GenerateRecommendationResponse);
+  rpc UpdateRecommendationFeedback(UpdateRecommendationFeedbackRequest) returns (google.protobuf.Empty);
+  
+  // Risk analysis
+  rpc AnalyzeRisk(AnalyzeRiskRequest) returns (AnalyzeRiskResponse);
+  rpc GetRiskProfile(GetRiskProfileRequest) returns (GetRiskProfileResponse);
+  
+  // Portfolio optimization
+  rpc OptimizePortfolio(OptimizePortfolioRequest) returns (OptimizePortfolioResponse);
+  rpc GetOptimalAllocation(GetOptimalAllocationRequest) returns (GetOptimalAllocationResponse);
+  
+  // Behavioral analysis
+  rpc AnalyzeBehavior(AnalyzeBehaviorRequest) returns (AnalyzeBehaviorResponse);
+  rpc GetSpendingInsights(GetSpendingInsightsRequest) returns (GetSpendingInsightsResponse);
+  
+  // Prediction operations
+  rpc PredictGoalAchievement(PredictGoalAchievementRequest) returns (PredictGoalAchievementResponse);
+  rpc PredictLifeEvents(PredictLifeEventsRequest) returns (PredictLifeEventsResponse);
+  
+  // Model operations
+  rpc GetModelStatus(GetModelStatusRequest) returns (GetModelStatusResponse);
+  rpc TrainModel(TrainModelRequest) returns (TrainModelResponse);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Recommendation messages
+message GetRecommendationsRequest {
+  string user_id = 1;
+  repeated RecommendationType types = 2;
+  int32 limit = 3;
+  bool active_only = 4;
+}
+
+message GetRecommendationsResponse {
+  repeated Recommendation recommendations = 1;
+}
+
+message GenerateRecommendationRequest {
+  string user_id = 1;
+  RecommendationType type = 2;
+  map<string, string> context = 3;
+}
+
+message GenerateRecommendationResponse {
+  Recommendation recommendation = 1;
+}
+
+message UpdateRecommendationFeedbackRequest {
+  string recommendation_id = 1;
+  string user_id = 2;
+  RecommendationFeedback feedback = 3;
+  string notes = 4;
+}
+
+// Risk analysis messages
+message AnalyzeRiskRequest {
+  string user_id = 1;
+  PortfolioData portfolio = 2;
+  UserProfile user_profile = 3;
+  map<string, double> market_conditions = 4;
+}
+
+message AnalyzeRiskResponse {
+  RiskAnalysis analysis = 1;
+}
+
+message GetRiskProfileRequest {
+  string user_id = 1;
+}
+
+message GetRiskProfileResponse {
+  RiskProfile profile = 1;
+}
+
+// Portfolio optimization messages
+message OptimizePortfolioRequest {
+  string user_id = 1;
+  PortfolioData current_portfolio = 2;
+  OptimizationConstraints constraints = 3;
+  OptimizationObjective objective = 4;
+  map<string, double> expected_returns = 5;
+  repeated repeated double covariance_matrix = 6;
+}
+
+message OptimizePortfolioResponse {
+  OptimizedPortfolio optimized_portfolio = 1;
+  OptimizationMetrics metrics = 2;
+}
+
+message GetOptimalAllocationRequest {
+  string user_id = 1;
+  double target_return = 2;
+  double risk_tolerance = 3;
+  int32 time_horizon_years = 4;
+}
+
+message GetOptimalAllocationResponse {
+  repeated AssetAllocation allocations = 1;
+  double expected_return = 2;
+  double expected_risk = 3;
+  double sharpe_ratio = 4;
+}
+
+// Behavioral analysis messages
+message AnalyzeBehaviorRequest {
+  string user_id = 1;
+  repeated Transaction transactions = 2;
+  google.protobuf.Timestamp analysis_period_start = 3;
+  google.protobuf.Timestamp analysis_period_end = 4;
+}
+
+message AnalyzeBehaviorResponse {
+  BehavioralAnalysis analysis = 1;
+}
+
+message GetSpendingInsightsRequest {
+  string user_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+}
+
+message GetSpendingInsightsResponse {
+  SpendingInsights insights = 1;
+}
+
+// Prediction messages
+message PredictGoalAchievementRequest {
+  string user_id = 1;
+  string goal_id = 2;
+  FinancialData financial_data = 3;
+}
+
+message PredictGoalAchievementResponse {
+  GoalPrediction prediction = 1;
+}
+
+message PredictLifeEventsRequest {
+  string user_id = 1;
+  UserProfile profile = 2;
+  FinancialData financial_data = 3;
+  int32 prediction_horizon_months = 4;
+}
+
+message PredictLifeEventsResponse {
+  repeated LifeEventPrediction predictions = 1;
+}
+
+// Model operations messages
+message GetModelStatusRequest {
+  string model_name = 1;
+}
+
+message GetModelStatusResponse {
+  ModelStatus status = 1;
+}
+
+message TrainModelRequest {
+  string model_name = 1;
+  map<string, string> parameters = 2;
+  bool force_retrain = 3;
+}
+
+message TrainModelResponse {
+  string training_job_id = 1;
+  TrainingStatus status = 2;
+  google.protobuf.Timestamp started_at = 3;
+}
+
+// Health check
+message HealthResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  repeated ModelHealth model_health = 3;
+}
+
+// Data models
+message Recommendation {
+  string id = 1;
+  string user_id = 2;
+  RecommendationType type = 3;
+  string title = 4;
+  string description = 5;
+  repeated string action_items = 6;
+  double priority_score = 7;
+  double confidence_score = 8;
+  PotentialImpact impact = 9;
+  repeated string tags = 10;
+  RecommendationStatus status = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp expires_at = 13;
+  map<string, string> metadata = 14;
+}
+
+message RecommendationFeedback {
+  bool accepted = 1;
+  bool implemented = 2;
+  int32 usefulness_rating = 3; // 1-5 scale
+  string feedback_text = 4;
+}
+
+message RiskAnalysis {
+  double overall_risk_score = 1;
+  RiskLevel risk_level = 2;
+  repeated RiskFactor risk_factors = 3;
+  double value_at_risk = 4;
+  double expected_shortfall = 5;
+  double volatility = 6;
+  double max_drawdown = 7;
+  repeated string recommendations = 8;
+}
+
+message RiskProfile {
+  string user_id = 1;
+  RiskTolerance tolerance = 2;
+  RiskCapacity capacity = 3;
+  double computed_risk_score = 4;
+  repeated RiskComponent components = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message RiskFactor {
+  string name = 1;
+  double score = 2;
+  double contribution = 3;
+  string description = 4;
+}
+
+message RiskComponent {
+  string component_name = 1;
+  double weight = 2;
+  double score = 3;
+}
+
+message PortfolioData {
+  repeated Holding holdings = 1;
+  double total_value = 2;
+  google.protobuf.Timestamp as_of_date = 3;
+}
+
+message Holding {
+  string asset_id = 1;
+  string symbol = 2;
+  double value = 3;
+  double weight = 4;
+  AssetClass asset_class = 5;
+}
+
+message OptimizationConstraints {
+  repeated AssetConstraint asset_constraints = 1;
+  double min_weight = 2;
+  double max_weight = 3;
+  double target_return = 4;
+  double max_risk = 5;
+  bool long_only = 6;
+}
+
+message AssetConstraint {
+  AssetClass asset_class = 1;
+  double min_weight = 2;
+  double max_weight = 3;
+}
+
+message OptimizedPortfolio {
+  repeated AssetAllocation allocations = 1;
+  double expected_return = 2;
+  double expected_risk = 3;
+  double sharpe_ratio = 4;
+  repeated string rebalancing_actions = 5;
+}
+
+message AssetAllocation {
+  AssetClass asset_class = 1;
+  string asset_name = 2;
+  double current_weight = 3;
+  double target_weight = 4;
+  double weight_change = 5;
+}
+
+message OptimizationMetrics {
+  double efficient_frontier_position = 1;
+  double diversification_ratio = 2;
+  double turnover = 3;
+  double transaction_costs = 4;
+}
+
+message BehavioralAnalysis {
+  SpendingPersonality personality = 1;
+  repeated BehaviorPattern patterns = 2;
+  repeated BehaviorAnomaly anomalies = 3;
+  RiskBehavior risk_behavior = 4;
+  SavingsBehavior savings_behavior = 5;
+}
+
+message BehaviorPattern {
+  string pattern_type = 1;
+  string description = 2;
+  double frequency = 3;
+  double impact_score = 4;
+  repeated string examples = 5;
+}
+
+message BehaviorAnomaly {
+  string anomaly_type = 1;
+  string description = 2;
+  double severity = 3;
+  google.protobuf.Timestamp detected_at = 4;
+  repeated string recommendations = 5;
+}
+
+message SpendingInsights {
+  repeated CategoryInsight category_insights = 1;
+  repeated TrendInsight trend_insights = 2;
+  repeated PredictiveInsight predictive_insights = 3;
+  BudgetRecommendations budget_recommendations = 4;
+}
+
+message CategoryInsight {
+  string category = 1;
+  double current_spending = 2;
+  double previous_spending = 3;
+  double change_percentage = 4;
+  string insight_text = 5;
+}
+
+message TrendInsight {
+  string trend_type = 1;
+  string description = 2;
+  double confidence = 3;
+  repeated double historical_values = 4;
+  repeated double predicted_values = 5;
+}
+
+message PredictiveInsight {
+  string prediction_type = 1;
+  double predicted_value = 2;
+  double confidence_interval_lower = 3;
+  double confidence_interval_upper = 4;
+  int32 horizon_days = 5;
+}
+
+message BudgetRecommendations {
+  repeated CategoryBudget recommended_budgets = 1;
+  double total_recommended_spending = 2;
+  double potential_savings = 3;
+}
+
+message CategoryBudget {
+  string category = 1;
+  double current_budget = 2;
+  double recommended_budget = 3;
+  string reasoning = 4;
+}
+
+message GoalPrediction {
+  string goal_id = 1;
+  double achievement_probability = 2;
+  google.protobuf.Timestamp predicted_achievement_date = 3;
+  double required_monthly_savings = 4;
+  repeated string improvement_suggestions = 5;
+  PredictionConfidence confidence = 6;
+}
+
+message LifeEventPrediction {
+  LifeEventType event_type = 1;
+  double probability = 2;
+  google.protobuf.Timestamp predicted_date = 3;
+  double estimated_financial_impact = 4;
+  repeated string preparation_recommendations = 5;
+}
+
+message PotentialImpact {
+  double financial_impact = 1;
+  string impact_description = 2;
+  int32 time_to_impact_months = 3;
+  ImpactLevel impact_level = 4;
+}
+
+message UserProfile {
+  string user_id = 1;
+  int32 age = 2;
+  double annual_income = 3;
+  string employment_status = 4;
+  string marital_status = 5;
+  int32 dependents = 6;
+}
+
+message FinancialData {
+  double total_assets = 1;
+  double total_liabilities = 2;
+  double monthly_income = 3;
+  double monthly_expenses = 4;
+  double emergency_fund = 5;
+  repeated Goal goals = 6;
+}
+
+message Goal {
+  string id = 1;
+  string name = 2;
+  double target_amount = 3;
+  google.protobuf.Timestamp target_date = 4;
+  double current_amount = 5;
+}
+
+message Transaction {
+  string id = 1;
+  double amount = 2;
+  string category = 3;
+  string merchant = 4;
+  google.protobuf.Timestamp date = 5;
+}
+
+message ModelStatus {
+  string model_name = 1;
+  string version = 2;
+  ModelState state = 3;
+  double accuracy = 4;
+  google.protobuf.Timestamp last_trained = 5;
+  google.protobuf.Timestamp last_evaluated = 6;
+  int64 training_samples = 7;
+  map<string, double> metrics = 8;
+}
+
+message ModelHealth {
+  string model_name = 1;
+  bool healthy = 2;
+  double response_time_ms = 3;
+  double error_rate = 4;
+  google.protobuf.Timestamp last_check = 5;
+}
+
+// Enums
+enum RecommendationType {
+  RECOMMENDATION_TYPE_UNSPECIFIED = 0;
+  RECOMMENDATION_TYPE_SAVINGS_OPTIMIZATION = 1;
+  RECOMMENDATION_TYPE_INVESTMENT_ALLOCATION = 2;
+  RECOMMENDATION_TYPE_DEBT_REDUCTION = 3;
+  RECOMMENDATION_TYPE_GOAL_ADJUSTMENT = 4;
+  RECOMMENDATION_TYPE_RISK_MANAGEMENT = 5;
+  RECOMMENDATION_TYPE_TAX_OPTIMIZATION = 6;
+  RECOMMENDATION_TYPE_SPENDING_REDUCTION = 7;
+}
+
+enum RecommendationStatus {
+  RECOMMENDATION_STATUS_UNSPECIFIED = 0;
+  RECOMMENDATION_STATUS_ACTIVE = 1;
+  RECOMMENDATION_STATUS_ACCEPTED = 2;
+  RECOMMENDATION_STATUS_DISMISSED = 3;
+  RECOMMENDATION_STATUS_EXPIRED = 4;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_LOW = 1;
+  RISK_LEVEL_MODERATE = 2;
+  RISK_LEVEL_HIGH = 3;
+  RISK_LEVEL_VERY_HIGH = 4;
+}
+
+enum RiskTolerance {
+  RISK_TOLERANCE_UNSPECIFIED = 0;
+  RISK_TOLERANCE_CONSERVATIVE = 1;
+  RISK_TOLERANCE_MODERATE_CONSERVATIVE = 2;
+  RISK_TOLERANCE_MODERATE = 3;
+  RISK_TOLERANCE_MODERATE_AGGRESSIVE = 4;
+  RISK_TOLERANCE_AGGRESSIVE = 5;
+}
+
+enum RiskCapacity {
+  RISK_CAPACITY_UNSPECIFIED = 0;
+  RISK_CAPACITY_LOW = 1;
+  RISK_CAPACITY_MODERATE = 2;
+  RISK_CAPACITY_HIGH = 3;
+}
+
+enum AssetClass {
+  ASSET_CLASS_UNSPECIFIED = 0;
+  ASSET_CLASS_STOCKS = 1;
+  ASSET_CLASS_BONDS = 2;
+  ASSET_CLASS_REAL_ESTATE = 3;
+  ASSET_CLASS_COMMODITIES = 4;
+  ASSET_CLASS_CASH = 5;
+  ASSET_CLASS_ALTERNATIVES = 6;
+}
+
+enum OptimizationObjective {
+  OPTIMIZATION_OBJECTIVE_UNSPECIFIED = 0;
+  OPTIMIZATION_OBJECTIVE_MAX_RETURN = 1;
+  OPTIMIZATION_OBJECTIVE_MIN_RISK = 2;
+  OPTIMIZATION_OBJECTIVE_MAX_SHARPE = 3;
+  OPTIMIZATION_OBJECTIVE_EQUAL_WEIGHT = 4;
+}
+
+enum SpendingPersonality {
+  SPENDING_PERSONALITY_UNSPECIFIED = 0;
+  SPENDING_PERSONALITY_SAVER = 1;
+  SPENDING_PERSONALITY_SPENDER = 2;
+  SPENDING_PERSONALITY_BALANCED = 3;
+  SPENDING_PERSONALITY_IMPULSIVE = 4;
+}
+
+enum RiskBehavior {
+  RISK_BEHAVIOR_UNSPECIFIED = 0;
+  RISK_BEHAVIOR_RISK_AVERSE = 1;
+  RISK_BEHAVIOR_RISK_NEUTRAL = 2;
+  RISK_BEHAVIOR_RISK_SEEKING = 3;
+}
+
+enum SavingsBehavior {
+  SAVINGS_BEHAVIOR_UNSPECIFIED = 0;
+  SAVINGS_BEHAVIOR_CONSISTENT = 1;
+  SAVINGS_BEHAVIOR_IRREGULAR = 2;
+  SAVINGS_BEHAVIOR_MINIMAL = 3;
+  SAVINGS_BEHAVIOR_AGGRESSIVE = 4;
+}
+
+enum LifeEventType {
+  LIFE_EVENT_TYPE_UNSPECIFIED = 0;
+  LIFE_EVENT_TYPE_JOB_CHANGE = 1;
+  LIFE_EVENT_TYPE_MARRIAGE = 2;
+  LIFE_EVENT_TYPE_DIVORCE = 3;
+  LIFE_EVENT_TYPE_NEW_CHILD = 4;
+  LIFE_EVENT_TYPE_HOME_PURCHASE = 5;
+  LIFE_EVENT_TYPE_MAJOR_EXPENSE = 6;
+  LIFE_EVENT_TYPE_INHERITANCE = 7;
+  LIFE_EVENT_TYPE_RETIREMENT = 8;
+}
+
+enum PredictionConfidence {
+  PREDICTION_CONFIDENCE_UNSPECIFIED = 0;
+  PREDICTION_CONFIDENCE_LOW = 1;
+  PREDICTION_CONFIDENCE_MEDIUM = 2;
+  PREDICTION_CONFIDENCE_HIGH = 3;
+  PREDICTION_CONFIDENCE_VERY_HIGH = 4;
+}
+
+enum ImpactLevel {
+  IMPACT_LEVEL_UNSPECIFIED = 0;
+  IMPACT_LEVEL_LOW = 1;
+  IMPACT_LEVEL_MEDIUM = 2;
+  IMPACT_LEVEL_HIGH = 3;
+  IMPACT_LEVEL_CRITICAL = 4;
+}
+
+enum ModelState {
+  MODEL_STATE_UNSPECIFIED = 0;
+  MODEL_STATE_TRAINING = 1;
+  MODEL_STATE_READY = 2;
+  MODEL_STATE_UPDATING = 3;
+  MODEL_STATE_ERROR = 4;
+}
+
+enum TrainingStatus {
+  TRAINING_STATUS_UNSPECIFIED = 0;
+  TRAINING_STATUS_QUEUED = 1;
+  TRAINING_STATUS_RUNNING = 2;
+  TRAINING_STATUS_COMPLETED = 3;
+  TRAINING_STATUS_FAILED = 4;
+}

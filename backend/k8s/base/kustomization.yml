@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: financial-planning-base
+
+resources:
+  - namespace.yml
+  - configmap.yml
+  - secret.yml
+  - service-account.yml
+  - deployment.yml
+  - service.yml
+  - hpa.yml
+  - pdb.yml
+  - network-policy.yml
+  - service-monitor.yml
+
+commonLabels:
+  app: financial-planning-api
+  component: backend
+  part-of: financial-planning
+
+commonAnnotations:
+  app.kubernetes.io/name: financial-planning-api
+  app.kubernetes.io/component: backend
+  app.kubernetes.io/part-of: financial-planning

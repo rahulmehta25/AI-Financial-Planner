@@ -1,0 +1,321 @@
+# Event Sourcing and CQRS Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-sourcing-config
+  namespace: financial-planning
+data:
+  event-store-config.yml: |
+    # Event Store Configuration
+    event_store:
+      type: "postgresql"  # postgresql, eventstore, kafka
+      connection:
+        host: "postgresql"
+        port: 5432
+        database: "financial_planning_events"
+        username: "event_store_user"
+        password: "${EVENT_STORE_PASSWORD}"
+        pool_size: 20
+        
+      tables:
+        events: "events"
+        snapshots: "snapshots"
+        
+      serialization:
+        format: "json"  # json, avro, protobuf
+        compression: "gzip"
+        
+      retention:
+        events_retention_days: 2555  # 7 years
+        snapshots_retention_days: 365
+        
+    # CQRS Configuration
+    cqrs:
+      command_handlers:
+        user_service: "http://user-service:8002"
+        banking_service: "http://banking-service:8003"
+        simulation_service: "http://simulation-service:8001"
+        ml_service: "http://ml-service:8004"
+        notification_service: "http://notification-service:8005"
+        document_service: "http://document-service:8006"
+        
+      query_handlers:
+        read_model_db:
+          host: "postgresql-read"
+          port: 5432
+          database: "financial_planning_read"
+          username: "read_model_user"
+          password: "${READ_MODEL_PASSWORD}"
+          
+      projections:
+        - name: "user_profile_projection"
+          events: ["user-events"]
+          handler: "user_service"
+          table: "user_profiles_read"
+          
+        - name: "account_balance_projection"
+          events: ["banking-events"]
+          handler: "banking_service"
+          table: "account_balances_read"
+          
+        - name: "simulation_results_projection"
+          events: ["simulation-events"]
+          handler: "simulation_service"
+          table: "simulation_results_read"
+          
+        - name: "ml_recommendations_projection"
+          events: ["ml-events"]
+          handler: "ml_service"
+          table: "ml_recommendations_read"
+          
+        - name: "notification_history_projection"
+          events: ["notification-events"]
+          handler: "notification_service"
+          table: "notification_history_read"
+          
+    # Saga Configuration
+    saga:
+      orchestrator_type: "choreography"  # orchestration, choreography
+      persistence:
+        type: "postgresql"
+        connection_string: "postgresql://saga_user:${SAGA_PASSWORD}@postgresql:5432/financial_planning_saga"
+        
+      timeout_seconds: 300
+      retry_policy:
+        max_attempts: 3
+        backoff_multiplier: 2
+        initial_delay_ms: 1000
+        
+      sagas:
+        - name: "user_onboarding_saga"
+          steps:
+            - service: "user_service"
+              command: "create_user"
+              compensate: "delete_user"
+            - service: "notification_service"
+              command: "send_welcome_email"
+              compensate: "send_cancellation_email"
+              
+        - name: "bank_account_connection_saga"
+          steps:
+            - service: "banking_service"
+              command: "connect_account"
+              compensate: "disconnect_account"
+            - service: "banking_service"
+              command: "sync_transactions"
+              compensate: "clear_transactions"
+            - service: "notification_service"
+              command: "send_connection_confirmation"
+              compensate: "send_connection_failure_notification"
+              
+        - name: "simulation_processing_saga"
+          steps:
+            - service: "simulation_service"
+              command: "run_simulation"
+              compensate: "cancel_simulation"
+            - service: "ml_service"
+              command: "analyze_results"
+              compensate: "clear_analysis"
+            - service: "document_service"
+              command: "generate_report"
+              compensate: "delete_report"
+            - service: "notification_service"
+              command: "notify_completion"
+              compensate: "notify_failure"
+              
+        - name: "monthly_report_saga"
+          steps:
+            - service: "banking_service"
+              command: "sync_all_accounts"
+              compensate: "rollback_sync"
+            - service: "ml_service"
+              command: "generate_insights"
+              compensate: "clear_insights"
+            - service: "document_service"
+              command: "create_monthly_report"
+              compensate: "delete_monthly_report"
+            - service: "notification_service"
+              command: "send_monthly_report"
+              compensate: "send_failure_notification"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-handlers-config
+  namespace: financial-planning
+data:
+  handlers.yml: |
+    # Event Handlers Configuration
+    event_handlers:
+      user_events:
+        - handler: "user_profile_updater"
+          events: ["USER_CREATED", "USER_UPDATED"]
+          service: "user-service"
+          
+        - handler: "welcome_notification_sender"
+          events: ["USER_CREATED"]
+          service: "notification-service"
+          
+        - handler: "analytics_tracker"
+          events: ["USER_LOGIN", "USER_LOGOUT"]
+          service: "analytics-service"
+          
+      banking_events:
+        - handler: "transaction_categorizer"
+          events: ["TRANSACTION_CREATED"]
+          service: "banking-service"
+          
+        - handler: "balance_updater"
+          events: ["TRANSACTION_CREATED", "BALANCE_UPDATED"]
+          service: "banking-service"
+          
+        - handler: "spending_analyzer"
+          events: ["TRANSACTION_CREATED"]
+          service: "ml-service"
+          
+        - handler: "alert_generator"
+          events: ["BALANCE_UPDATED", "SYNC_FAILED"]
+          service: "notification-service"
+          
+      simulation_events:
+        - handler: "results_processor"
+          events: ["SIMULATION_COMPLETED"]
+          service: "simulation-service"
+          
+        - handler: "recommendation_generator"
+          events: ["SIMULATION_COMPLETED"]
+          service: "ml-service"
+          
+        - handler: "report_generator"
+          events: ["SIMULATION_COMPLETED"]
+          service: "document-service"
+          
+        - handler: "completion_notifier"
+          events: ["SIMULATION_COMPLETED", "SIMULATION_FAILED"]
+          service: "notification-service"
+          
+      ml_events:
+        - handler: "recommendation_deliverer"
+          events: ["RECOMMENDATION_CREATED"]
+          service: "notification-service"
+          
+        - handler: "model_monitor"
+          events: ["PREDICTION_GENERATED"]
+          service: "ml-service"
+          
+      notification_events:
+        - handler: "delivery_tracker"
+          events: ["NOTIFICATION_SENT", "NOTIFICATION_DELIVERED", "NOTIFICATION_FAILED"]
+          service: "notification-service"
+          
+      document_events:
+        - handler: "storage_manager"
+          events: ["DOCUMENT_GENERATED"]
+          service: "document-service"
+          
+        - handler: "access_logger"
+          events: ["DOCUMENT_DOWNLOADED"]
+          service: "audit-service"
+          
+      audit_events:
+        - handler: "compliance_logger"
+          events: ["*"]
+          service: "audit-service"
+          
+        - handler: "security_monitor"
+          events: ["LOGIN_FAILED", "UNAUTHORIZED_ACCESS"]
+          service: "security-service"
+
+---
+# Event Processing Pipeline Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-pipeline-config
+  namespace: financial-planning
+data:
+  pipeline.yml: |
+    # Event Processing Pipeline
+    pipelines:
+      - name: "real_time_pipeline"
+        input_topics: 
+          - "user-events"
+          - "banking-events"
+          - "notification-events"
+        processing:
+          type: "stream"
+          parallelism: 8
+          checkpointing_interval: 5000
+          
+        transformations:
+          - name: "event_enrichment"
+            type: "enrich"
+            source: "user_service"
+            
+          - name: "event_filtering"
+            type: "filter"
+            condition: "event_type != 'HEARTBEAT'"
+            
+          - name: "event_routing"
+            type: "route"
+            rules:
+              - condition: "service == 'banking'"
+                topic: "banking-processed"
+              - condition: "service == 'user'"
+                topic: "user-processed"
+                
+        outputs:
+          - type: "kafka"
+            topics: ["processed-events"]
+          - type: "elasticsearch"
+            index: "events-real-time"
+            
+      - name: "batch_analytics_pipeline"
+        input_topics:
+          - "banking-events"
+          - "simulation-events"
+          - "ml-events"
+        processing:
+          type: "batch"
+          window_size: "1 hour"
+          parallelism: 4
+          
+        transformations:
+          - name: "aggregation"
+            type: "aggregate"
+            functions: ["count", "sum", "avg"]
+            group_by: ["user_id", "event_type"]
+            
+          - name: "anomaly_detection"
+            type: "ml"
+            model: "isolation_forest"
+            
+        outputs:
+          - type: "postgresql"
+            table: "event_analytics"
+          - type: "s3"
+            bucket: "financial-planning-analytics"
+            
+    # Stream Processing Configuration
+    stream_processing:
+      framework: "kafka_streams"  # kafka_streams, flink, spark
+      
+      kafka_streams:
+        application_id: "financial-planning-streams"
+        bootstrap_servers: "kafka:9092"
+        default_key_serde: "org.apache.kafka.common.serialization.Serdes$StringSerde"
+        default_value_serde: "org.apache.kafka.common.serialization.Serdes$StringSerde"
+        
+        processing_guarantee: "exactly_once"
+        commit_interval_ms: 30000
+        cache_max_bytes_buffering: 10485760
+        
+      state_stores:
+        - name: "user_state_store"
+          type: "key_value"
+          retention_ms: 86400000
+          
+        - name: "session_state_store"
+          type: "session"
+          retention_ms: 3600000

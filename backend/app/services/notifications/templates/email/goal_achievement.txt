@@ -1,0 +1,24 @@
+Hi {{user_name}},
+
+Congratulations! You've successfully achieved your "{{goal_name}}" goal!
+
+Goal Details:
+- Goal: {{goal_name}}
+- Target Amount: ${{target_amount}}
+- Achieved On: {{achievement_date}}
+- Time to Complete: {{time_taken}}
+
+This is a significant milestone in your financial journey. Your dedication and consistent efforts have paid off!
+
+What's Next?
+- Review your achievement in your dashboard
+- Set your next financial goal
+- Consider increasing your savings rate
+- Explore new investment opportunities
+
+Keep up the excellent work!
+
+Best regards,
+The Financial Planning Team
+
+View your achievement: {{achievement_url}}

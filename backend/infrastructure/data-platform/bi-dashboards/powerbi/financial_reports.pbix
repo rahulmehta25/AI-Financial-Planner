@@ -1,0 +1,411 @@
+# PowerBI Report Configuration for Financial Planning Platform
+# This would typically be a .pbix file, but represented here as configuration
+
+# Note: This is a template configuration that would be used to generate
+# the actual PowerBI reports programmatically
+
+{
+  "report_metadata": {
+    "name": "Financial Planning Analytics Suite",
+    "version": "1.0",
+    "created_date": "2024-01-01",
+    "author": "Data Engineering Team",
+    "description": "Comprehensive financial analytics and reporting suite"
+  },
+  
+  "data_model": {
+    "tables": [
+      {
+        "name": "DimUsers",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM dimensions.dim_user WHERE is_current = TRUE",
+        "refresh_schedule": "daily",
+        "relationships": [
+          {
+            "to_table": "FactTransactions",
+            "from_column": "user_key",
+            "to_column": "user_key",
+            "cardinality": "one_to_many"
+          }
+        ]
+      },
+      {
+        "name": "DimAccounts",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM dimensions.dim_account WHERE is_current = TRUE",
+        "refresh_schedule": "daily"
+      },
+      {
+        "name": "DimSecurities",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM dimensions.dim_security WHERE is_active = TRUE",
+        "refresh_schedule": "daily"
+      },
+      {
+        "name": "DimDate",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM dimensions.dim_date",
+        "refresh_schedule": "weekly"
+      },
+      {
+        "name": "FactTransactions",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM facts.fact_transaction WHERE date_key >= 20240101",
+        "refresh_schedule": "hourly",
+        "incremental": true,
+        "partition_column": "date_key"
+      },
+      {
+        "name": "FactPortfolioPerformance",
+        "source": "postgresql://localhost:5432/financial_dw", 
+        "query": "SELECT * FROM facts.fact_portfolio_performance WHERE date_key >= 20240101",
+        "refresh_schedule": "daily"
+      },
+      {
+        "name": "AnalyticsCustomerSegments",
+        "source": "postgresql://localhost:5432/financial_dw",
+        "query": "SELECT * FROM analytics.customer_segments",
+        "refresh_schedule": "daily"
+      }
+    ],
+    
+    "measures": [
+      {
+        "name": "Total Portfolio Value",
+        "expression": "SUM(FactPortfolioPerformance[total_value])",
+        "format": "currency"
+      },
+      {
+        "name": "Average Daily Return",
+        "expression": "AVERAGE(FactPortfolioPerformance[daily_return])",
+        "format": "percentage"
+      },
+      {
+        "name": "Total Transaction Amount",
+        "expression": "SUM(FactTransactions[amount])",
+        "format": "currency"
+      },
+      {
+        "name": "Transaction Count",
+        "expression": "COUNT(FactTransactions[transaction_key])",
+        "format": "number"
+      },
+      {
+        "name": "Active Users",
+        "expression": "DISTINCTCOUNT(DimUsers[user_key])",
+        "format": "number"
+      },
+      {
+        "name": "Portfolio Volatility",
+        "expression": "STDEV.P(FactPortfolioPerformance[daily_return])",
+        "format": "percentage"
+      },
+      {
+        "name": "Sharpe Ratio",
+        "expression": "DIVIDE([Average Daily Return], [Portfolio Volatility], 0)",
+        "format": "number"
+      },
+      {
+        "name": "Month over Month Growth",
+        "expression": "DIVIDE([Total Portfolio Value] - [Previous Month Portfolio Value], [Previous Month Portfolio Value], 0)",
+        "format": "percentage"
+      }
+    ],
+    
+    "calculated_columns": [
+      {
+        "table": "FactTransactions",
+        "name": "Transaction Size Category",
+        "expression": "SWITCH(TRUE(), FactTransactions[amount] >= 10000, \"Large\", FactTransactions[amount] >= 1000, \"Medium\", FactTransactions[amount] >= 100, \"Small\", \"Micro\")"
+      },
+      {
+        "table": "DimUsers", 
+        "name": "Age Group",
+        "expression": "SWITCH(TRUE(), DimUsers[age] >= 65, \"65+\", DimUsers[age] >= 45, \"45-64\", DimUsers[age] >= 25, \"25-44\", \"Under 25\")"
+      },
+      {
+        "table": "FactPortfolioPerformance",
+        "name": "Return Category",
+        "expression": "SWITCH(TRUE(), FactPortfolioPerformance[daily_return] > 0.02, \"High Positive\", FactPortfolioPerformance[daily_return] > 0, \"Positive\", FactPortfolioPerformance[daily_return] > -0.02, \"Negative\", \"High Negative\")"
+      }
+    ]
+  },
+  
+  "report_pages": [
+    {
+      "name": "Executive Summary",
+      "visuals": [
+        {
+          "type": "card",
+          "title": "Total AUM",
+          "measure": "Total Portfolio Value",
+          "position": {"x": 0, "y": 0, "width": 200, "height": 100}
+        },
+        {
+          "type": "card", 
+          "title": "Active Users",
+          "measure": "Active Users",
+          "position": {"x": 220, "y": 0, "width": 200, "height": 100}
+        },
+        {
+          "type": "line_chart",
+          "title": "Portfolio Value Trend",
+          "x_axis": "DimDate[date_actual]",
+          "y_axis": "Total Portfolio Value",
+          "position": {"x": 0, "y": 120, "width": 600, "height": 300}
+        },
+        {
+          "type": "donut_chart",
+          "title": "Customer Segments",
+          "values": "Active Users",
+          "legend": "AnalyticsCustomerSegments[rfm_segment]",
+          "position": {"x": 620, "y": 120, "width": 300, "height": 300}
+        }
+      ]
+    },
+    {
+      "name": "Portfolio Analytics",
+      "visuals": [
+        {
+          "type": "scatter_chart",
+          "title": "Risk vs Return",
+          "x_axis": "Portfolio Volatility",
+          "y_axis": "Average Daily Return", 
+          "size": "Total Portfolio Value",
+          "color": "DimUsers[risk_tolerance]",
+          "position": {"x": 0, "y": 0, "width": 500, "height": 400}
+        },
+        {
+          "type": "heatmap",
+          "title": "Returns by Asset Class",
+          "rows": "DimSecurities[sector]",
+          "columns": "DimDate[month_name]",
+          "values": "Average Daily Return",
+          "position": {"x": 520, "y": 0, "width": 400, "height": 400}
+        },
+        {
+          "type": "histogram",
+          "title": "Return Distribution",
+          "x_axis": "FactPortfolioPerformance[daily_return]",
+          "bins": 50,
+          "position": {"x": 0, "y": 420, "width": 460, "height": 300}
+        },
+        {
+          "type": "table",
+          "title": "Top Holdings",
+          "columns": [
+            "DimSecurities[symbol]",
+            "DimSecurities[security_name]", 
+            "Total Portfolio Value",
+            "Average Daily Return"
+          ],
+          "sort": "Total Portfolio Value DESC",
+          "position": {"x": 480, "y": 420, "width": 440, "height": 300}
+        }
+      ]
+    },
+    {
+      "name": "Transaction Analysis", 
+      "visuals": [
+        {
+          "type": "area_chart",
+          "title": "Transaction Volume Over Time",
+          "x_axis": "DimDate[date_actual]",
+          "y_axis": "Transaction Count",
+          "legend": "FactTransactions[Transaction Size Category]",
+          "position": {"x": 0, "y": 0, "width": 600, "height": 250}
+        },
+        {
+          "type": "treemap",
+          "title": "Spending by Category",
+          "values": "Total Transaction Amount",
+          "category": "DimTransactionCategory[category_name]",
+          "position": {"x": 620, "y": 0, "width": 300, "height": 250}
+        },
+        {
+          "type": "matrix",
+          "title": "Spending Patterns",
+          "rows": "DimDate[day_name]",
+          "columns": "DimTime[hour_24]",
+          "values": "Total Transaction Amount",
+          "position": {"x": 0, "y": 270, "width": 920, "height": 350}
+        }
+      ]
+    },
+    {
+      "name": "Customer Insights",
+      "visuals": [
+        {
+          "type": "funnel",
+          "title": "Customer Journey",
+          "stages": [
+            {"name": "Registered", "measure": "DISTINCTCOUNT(DimUsers[user_key])"},
+            {"name": "First Transaction", "measure": "DISTINCTCOUNT(FactTransactions[user_key])"},
+            {"name": "Regular User", "measure": "CALCULATE(DISTINCTCOUNT(FactTransactions[user_key]), FactTransactions[Transaction Count] >= 10)"}
+          ],
+          "position": {"x": 0, "y": 0, "width": 400, "height": 300}
+        },
+        {
+          "type": "clustered_column_chart",
+          "title": "Segment Performance",
+          "x_axis": "AnalyticsCustomerSegments[rfm_segment]",
+          "y_axis": ["Total Portfolio Value", "Average Daily Return"],
+          "position": {"x": 420, "y": 0, "width": 500, "height": 300}
+        },
+        {
+          "type": "line_chart",
+          "title": "Cohort Retention",
+          "x_axis": "AnalyticsCohorts[period_number]",
+          "y_axis": "AnalyticsCohorts[retention_rate]", 
+          "legend": "AnalyticsCohorts[registration_month]",
+          "position": {"x": 0, "y": 320, "width": 920, "height": 300}
+        }
+      ]
+    },
+    {
+      "name": "Risk Management",
+      "visuals": [
+        {
+          "type": "gauge",
+          "title": "Portfolio Risk Score",
+          "value": "AVERAGE(FactPortfolioPerformance[risk_score])",
+          "min": 0,
+          "max": 100,
+          "target": 75,
+          "position": {"x": 0, "y": 0, "width": 200, "height": 200}
+        },
+        {
+          "type": "waterfall_chart",
+          "title": "Risk Contribution by Asset Class",
+          "category": "DimSecurities[asset_class]",
+          "values": "Risk Contribution",
+          "position": {"x": 220, "y": 0, "width": 400, "height": 200}
+        },
+        {
+          "type": "line_chart",
+          "title": "Value at Risk Trend",
+          "x_axis": "DimDate[date_actual]",
+          "y_axis": "FactRiskAnalysis[var_95]",
+          "position": {"x": 0, "y": 220, "width": 620, "height": 250}
+        },
+        {
+          "type": "table",
+          "title": "Risk Alerts",
+          "columns": [
+            "Alert Type",
+            "Severity", 
+            "User",
+            "Date",
+            "Description"
+          ],
+          "position": {"x": 640, "y": 220, "width": 280, "height": 250}
+        }
+      ]
+    }
+  ],
+  
+  "filters": [
+    {
+      "name": "Date Range",
+      "type": "date_range_slicer",
+      "table": "DimDate",
+      "column": "date_actual",
+      "default": "last_30_days"
+    },
+    {
+      "name": "User Segment",
+      "type": "list_slicer",
+      "table": "AnalyticsCustomerSegments", 
+      "column": "rfm_segment",
+      "multi_select": true
+    },
+    {
+      "name": "Risk Tolerance",
+      "type": "dropdown_slicer",
+      "table": "DimUsers",
+      "column": "risk_tolerance"
+    },
+    {
+      "name": "Asset Class",
+      "type": "checkbox_slicer",
+      "table": "DimSecurities",
+      "column": "asset_class",
+      "multi_select": true
+    }
+  ],
+  
+  "bookmarks": [
+    {
+      "name": "High Risk Portfolio View",
+      "description": "Focus on high-risk portfolios and their performance",
+      "filters": {
+        "DimUsers[risk_tolerance]": "High",
+        "FactPortfolioPerformance[volatility]": "> 0.02"
+      }
+    },
+    {
+      "name": "New Customer Analysis",
+      "description": "Analysis focused on recently acquired customers",
+      "filters": {
+        "AnalyticsCustomerSegments[rfm_segment]": "New Customers",
+        "DimDate[date_actual]": "last_90_days"
+      }
+    }
+  ],
+  
+  "row_level_security": [
+    {
+      "role": "User",
+      "filter": "[DimUsers].[user_id] = USERNAME()"
+    },
+    {
+      "role": "Advisor", 
+      "filter": "[DimUsers].[advisor_id] = USERNAME() OR [DimUsers].[user_id] = USERNAME()"
+    },
+    {
+      "role": "Manager",
+      "filter": "1=1"
+    }
+  ],
+  
+  "refresh_schedule": {
+    "automatic_refresh": true,
+    "frequency": "daily",
+    "time": "06:00",
+    "timezone": "UTC",
+    "incremental_refresh": {
+      "enabled": true,
+      "tables": ["FactTransactions", "FactPortfolioPerformance"],
+      "partition_column": "date_key",
+      "range": "last_30_days"
+    }
+  },
+  
+  "alerts": [
+    {
+      "name": "High Volatility Alert",
+      "condition": "Portfolio Volatility > 0.05",
+      "frequency": "daily",
+      "recipients": ["risk-team@company.com"]
+    },
+    {
+      "name": "Large Transaction Alert",
+      "condition": "Total Transaction Amount > 100000",
+      "frequency": "real_time",
+      "recipients": ["fraud-team@company.com"]
+    }
+  ],
+  
+  "export_options": {
+    "formats": ["PDF", "Excel", "PowerPoint"],
+    "scheduled_exports": [
+      {
+        "name": "Weekly Executive Report",
+        "pages": ["Executive Summary"],
+        "format": "PDF",
+        "schedule": "weekly",
+        "recipients": ["executives@company.com"]
+      }
+    ]
+  }
+}

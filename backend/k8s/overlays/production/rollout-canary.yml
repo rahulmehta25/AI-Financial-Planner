@@ -1,0 +1,292 @@
+# Argo Rollouts configuration for canary deployments
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: financial-planning
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    version: stable
+spec:
+  replicas: 5
+  strategy:
+    canary:
+      # Canary service and stable service
+      canaryService: financial-planning-canary
+      stableService: financial-planning-stable
+      
+      # Traffic routing via Istio (optional) or Ingress
+      trafficRouting:
+        nginx:
+          stableIngress: financial-planning-stable
+          annotationPrefix: nginx.ingress.kubernetes.io
+          additionalIngressAnnotations:
+            canary-by-header: X-Canary
+            canary-by-header-value: "true"
+      
+      # Canary steps
+      steps:
+      - setWeight: 5    # Start with 5% traffic
+      - pause: 
+          duration: 2m  # Wait 2 minutes
+      
+      - setWeight: 10   # Increase to 10%
+      - pause: 
+          duration: 2m
+      
+      - setWeight: 20   # Increase to 20%
+      - pause: 
+          duration: 5m
+      
+      - setWeight: 50   # Increase to 50%
+      - pause: 
+          duration: 10m
+      
+      # Analysis template for automated rollback
+      - analysis:
+          templates:
+          - templateName: success-rate
+          args:
+          - name: service-name
+            value: financial-planning-canary
+          - name: namespace
+            value: financial-planning-production
+      
+      - setWeight: 75   # Increase to 75%
+      - pause: 
+          duration: 5m
+      
+      - analysis:
+          templates:
+          - templateName: success-rate
+          - templateName: latency
+          args:
+          - name: service-name
+            value: financial-planning-canary
+          - name: namespace
+            value: financial-planning-production
+  
+  # Rollback configuration
+  rollbackWindow:
+    revisions: 10
+  
+  # Workload reference
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning
+  
+  selector:
+    matchLabels:
+      app: financial-planning
+  
+  template:
+    metadata:
+      labels:
+        app: financial-planning
+        version: stable
+    spec:
+      containers:
+      - name: financial-planning
+        image: ghcr.io/financial-planning/backend:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: REDIS_URL
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: SECRET_KEY
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Node selection for production workloads
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload-type: general
+      
+      # Pod anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: financial-planning
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: financial-planning
+              topologyKey: topology.kubernetes.io/zone
+
+---
+# Analysis Templates for automated rollback decisions
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: financial-planning-production
+spec:
+  args:
+  - name: service-name
+  - name: namespace
+  metrics:
+  - name: success-rate
+    interval: 30s
+    count: 5
+    successCondition: result[0] >= 0.99  # 99% success rate required
+    failureLimit: 2
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring:9090
+        query: |
+          sum(rate(http_requests_total{service="{{args.service-name}}",namespace="{{args.namespace}}",code!~"5.."}[2m])) /
+          sum(rate(http_requests_total{service="{{args.service-name}}",namespace="{{args.namespace}}"}[2m]))
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency
+  namespace: financial-planning-production
+spec:
+  args:
+  - name: service-name
+  - name: namespace
+  metrics:
+  - name: latency-p95
+    interval: 30s
+    count: 5
+    successCondition: result[0] <= 0.5  # 500ms P95 latency threshold
+    failureLimit: 2
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring:9090
+        query: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{service="{{args.service-name}}",namespace="{{args.namespace}}"}[2m])) by (le)
+          )
+
+---
+# Services for canary deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-stable
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    service: stable
+spec:
+  selector:
+    app: financial-planning
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-canary
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    service: canary
+spec:
+  selector:
+    app: financial-planning
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+# Main service for load balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+spec:
+  selector:
+    app: financial-planning
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP

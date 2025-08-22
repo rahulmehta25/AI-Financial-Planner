@@ -1,0 +1,27 @@
+Hi {{user_name}},
+
+We wanted to alert you about important market activity affecting your portfolio.
+
+Alert Details:
+- Security: {{security_name}} ({{symbol}})
+- Alert Type: {{alert_type}}
+- Current Price: ${{current_price}}
+- Change: {{price_change}} ({{percentage_change}}%)
+- Triggered At: {{alert_time}}
+
+{{alert_description}}
+
+Your Portfolio Impact:
+- Position: {{position_size}} shares
+- Value: ${{position_value}}
+- Impact: {{portfolio_impact}}
+
+Recommended Actions:
+{{recommended_actions}}
+
+This alert was triggered based on your notification preferences. You can update your alert settings in your dashboard.
+
+Monitor your portfolio: {{portfolio_url}}
+
+Best regards,
+The Financial Planning Team

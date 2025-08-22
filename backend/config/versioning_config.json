@@ -1,0 +1,24 @@
+{
+  "enabled": true,
+  "default_version": "1.0.0",
+  "deprecation_policy": {
+    "min_deprecation_period_days": 180,
+    "stable_support_period_days": 365,
+    "beta_support_period_days": 90,
+    "advance_notice_days": 60,
+    "retirement_warning_thresholds": [90, 30, 7]
+  },
+  "documentation_enabled": true,
+  "sdk_management_enabled": true,
+  "ab_testing_enabled": true,
+  "gateway_config_enabled": true,
+  "config_dir": "config/versioning",
+  "docs_output_dir": "docs/api",
+  "sdk_output_dir": "docs/sdk",
+  "ab_test_reports_dir": "reports/ab_tests",
+  "auto_generate_docs": true,
+  "auto_export_gateway_configs": false,
+  "auto_advance_rollouts": true,
+  "metrics_enabled": true,
+  "metrics_retention_days": 90
+}

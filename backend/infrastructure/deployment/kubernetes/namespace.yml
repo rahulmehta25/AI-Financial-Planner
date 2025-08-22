@@ -1,0 +1,305 @@
+# Kubernetes Namespace and RBAC Configuration
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning
+  labels:
+    name: financial-planning
+    environment: production
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-sa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning
+automountServiceAccountToken: true
+
+---
+# ClusterRole for the application
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: financial-planning-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses", "networkpolicies"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: financial-planning-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: financial-planning-role
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-sa
+  namespace: financial-planning
+
+---
+# Resource Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: financial-planning-quota
+  namespace: financial-planning
+spec:
+  hard:
+    # Compute Resources
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    
+    # Storage Resources
+    requests.storage: 100Gi
+    persistentvolumeclaims: "10"
+    
+    # Object Counts
+    pods: "50"
+    services: "20"
+    secrets: "30"
+    configmaps: "30"
+    
+    # Load Balancers
+    services.loadbalancers: "5"
+
+---
+# Limit Ranges
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: financial-planning-limits
+  namespace: financial-planning
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"
+      memory: "1Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+    min:
+      cpu: "50m"
+      memory: "128Mi"
+    max:
+      cpu: "4"
+      memory: "8Gi"
+  - type: Pod
+    max:
+      cpu: "8"
+      memory: "16Gi"
+  - type: PersistentVolumeClaim
+    min:
+      storage: "1Gi"
+    max:
+      storage: "50Gi"
+
+---
+# Network Policy - Default Deny All
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: financial-planning
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Network Policy - Allow Internal Communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal
+  namespace: financial-planning
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy - Allow Database Access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-access
+  namespace: financial-planning
+spec:
+  podSelector:
+    matchLabels:
+      tier: backend
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Priority Classes
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: financial-planning-critical
+value: 1000
+globalDefault: false
+description: "Priority class for critical financial planning services"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: financial-planning-high
+value: 500
+globalDefault: false
+description: "Priority class for high priority financial planning services"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: financial-planning-normal
+value: 100
+globalDefault: true
+description: "Priority class for normal financial planning services"
+
+---
+# Pod Disruption Budgets
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: user-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: banking-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: banking-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: simulation-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: simulation-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ml-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: ml-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: document-service-pdb
+  namespace: financial-planning
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: document-service

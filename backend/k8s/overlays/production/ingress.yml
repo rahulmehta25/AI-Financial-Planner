@@ -1,0 +1,90 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: financial-planning-api-ingress
+  namespace: financial-planning-prod
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+      more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none';";
+spec:
+  tls:
+  - hosts:
+    - api.financialplanning.com
+    secretName: financial-planning-tls
+  rules:
+  - host: api.financialplanning.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planning-api
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planning-api
+            port:
+              number: 80
+      - path: /docs
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planning-api
+            port:
+              number: 80
+      - path: /openapi.json
+        pathType: Exact
+        backend:
+          service:
+            name: financial-planning-api
+            port:
+              number: 80
+
+---
+# Canary Ingress for deployment testing
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: financial-planning-api-canary
+  namespace: financial-planning-prod
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "true"
+spec:
+  tls:
+  - hosts:
+    - api.financialplanning.com
+    secretName: financial-planning-tls
+  rules:
+  - host: api.financialplanning.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planning-api-canary
+            port:
+              number: 80

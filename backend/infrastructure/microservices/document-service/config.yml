@@ -1,0 +1,183 @@
+# Document Service Configuration
+service:
+  name: document-service
+  version: "1.0.0"
+  port: 8006
+  host: "0.0.0.0"
+  debug: false
+  workers: 2
+  
+pdf_generation:
+  engine: "weasyprint"  # weasyprint, reportlab, wkhtmltopdf
+  temp_directory: "/app/temp"
+  output_directory: "/app/generated"
+  font_directory: "/app/fonts"
+  max_generation_time_seconds: 180
+  cleanup_temp_files: true
+  
+templates:
+  path: "/app/templates"
+  cache_enabled: true
+  cache_ttl: 3600
+  supported_formats:
+    - "html"
+    - "jinja2"
+  
+document_types:
+  financial_plan:
+    template: "financial_plan.html"
+    max_pages: 50
+    include_charts: true
+    watermark: false
+  monthly_report:
+    template: "monthly_report.html"
+    max_pages: 20
+    include_charts: true
+    watermark: false
+  goal_summary:
+    template: "goal_summary.html"
+    max_pages: 10
+    include_charts: true
+    watermark: false
+  simulation_report:
+    template: "simulation_report.html"
+    max_pages: 30
+    include_charts: true
+    watermark: false
+    
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-document_service_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 8
+  password: "${REDIS_PASSWORD}"
+  max_connections: 10
+  
+storage:
+  type: "s3"  # s3, local, gcs
+  s3:
+    bucket: "${S3_BUCKET:-financial-planning-documents}"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "${AWS_REGION:-us-east-1}"
+    prefix: "documents/"
+  local:
+    path: "/app/storage"
+    max_storage_gb: 10
+  retention_days: 90
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/document-service.log"
+  max_file_size: 50MB
+  backup_count: 5
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9095
+  generation_metrics: true
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  
+api:
+  title: "Financial Planning Document Service"
+  description: "PDF generation and document management service"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+generation_limits:
+  max_file_size_mb: 50
+  max_concurrent_generations: 5
+  queue_size: 100
+  
+chart_generation:
+  enabled: true
+  chart_types:
+    - "line"
+    - "bar"
+    - "pie"
+    - "scatter"
+    - "area"
+  default_dpi: 300
+  max_chart_width: 1200
+  max_chart_height: 800
+  
+security:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  document_encryption: false
+  watermark_enabled: false
+  access_control: true
+  
+rate_limiting:
+  generation_requests_per_minute: 10
+  download_requests_per_minute: 100
+  
+queue_management:
+  enabled: true
+  priority_levels: 3
+  max_queue_size: 500
+  processing_timeout_seconds: 300
+  
+external_services:
+  user_service:
+    url: "http://user-service:8002"
+    timeout: 30
+  simulation_service:
+    url: "http://simulation-service:8001"
+    timeout: 60
+  banking_service:
+    url: "http://banking-service:8003"
+    timeout: 30
+  ml_service:
+    url: "http://ml-service:8004"
+    timeout: 60
+    
+pdf_options:
+  page_size: "A4"
+  margins:
+    top: "1in"
+    right: "0.75in"
+    bottom: "1in"
+    left: "0.75in"
+  print_media_type: true
+  enable_local_file_access: false
+  javascript_delay: 0
+  
+fonts:
+  default_family: "DejaVu Sans"
+  supported_families:
+    - "DejaVu Sans"
+    - "Liberation Sans"
+    - "Arial"
+    - "Helvetica"
+  embed_fonts: true
+  
+monitoring:
+  generation_success_rate: true
+  average_generation_time: true
+  queue_length_monitoring: true
+  error_rate_tracking: true
+  
+compliance:
+  document_retention_policy: true
+  audit_trail: true
+  access_logging: true

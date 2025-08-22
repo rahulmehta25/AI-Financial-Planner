@@ -1,0 +1,196 @@
+# Advanced Backup Configuration for Financial Planning System
+# This configuration defines comprehensive backup strategy with cross-region replication
+
+# Database Configuration
+database:
+  host: "localhost"
+  port: 5432
+  name: "financial_planning"
+  user: "postgres"
+  password: "${POSTGRES_PASSWORD}"
+  ssl_mode: "require"
+
+# Backup Storage Configuration
+storage:
+  backup_root: "/var/backups/financial_planning"
+  temp_directory: "/tmp/backup_temp"
+  compression_enabled: true
+  compression_level: 6
+  encryption_enabled: true
+  encryption_key_path: "/etc/backup-encryption.key"
+  
+# Backup Schedules (cron format)
+schedules:
+  full_backup: "0 2 * * 0"     # Sunday 2 AM
+  incremental: "0 */6 * * *"   # Every 6 hours
+  point_in_time: "*/15 * * * *" # Every 15 minutes (WAL archiving)
+  
+# Retention Policies
+retention:
+  full_backup_days: 90
+  incremental_backup_days: 30
+  point_in_time_days: 7
+  wal_files_days: 14
+  
+  # Keep at least this many backups regardless of age
+  minimum_full_backups: 3
+  minimum_incremental_backups: 12
+
+# Recovery Time and Point Objectives
+rto_rpo:
+  target_rto_hours: 4          # Recovery Time Objective: 4 hours
+  target_rpo_minutes: 60       # Recovery Point Objective: 1 hour
+  maximum_downtime_hours: 8
+  
+# Cross-Region Replication
+replication:
+  enabled: true
+  
+  aws:
+    enabled: false
+    s3_bucket: "financial-planning-backups"
+    primary_region: "us-west-2"
+    backup_region: "us-east-1"
+    storage_class: "STANDARD_IA"
+    lifecycle_policy:
+      transition_to_glacier_days: 30
+      transition_to_deep_archive_days: 90
+      delete_after_days: 2555  # 7 years
+    
+  azure:
+    enabled: false
+    storage_account: "financialplanningbackups"
+    container: "backups"
+    access_tier: "cool"
+    replication_type: "GRS"  # Geo-redundant storage
+    
+  gcp:
+    enabled: false
+    bucket: "financial-planning-backups"
+    project_id: "financial-planning-prod"
+    storage_class: "COLDLINE"
+    location: "us-central1"
+
+# Monitoring and Alerting
+monitoring:
+  enabled: true
+  alert_webhook_url: "${BACKUP_ALERT_WEBHOOK}"
+  notification_email: "ops@company.com"
+  pagerduty_integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
+  
+  # Alert conditions
+  alerts:
+    backup_failure: true
+    backup_duration_threshold_hours: 6
+    backup_size_deviation_percent: 50
+    verification_failure: true
+    replication_failure: true
+    low_disk_space_percent: 10
+
+# Performance and Resource Limits
+performance:
+  max_parallel_jobs: 4
+  backup_timeout_hours: 12
+  verification_timeout_hours: 2
+  compression_threads: 4
+  max_memory_usage_gb: 8
+  network_bandwidth_limit_mbps: 100
+
+# Security Configuration
+security:
+  enable_backup_encryption: true
+  enable_transport_encryption: true
+  backup_user_permissions: "600"
+  backup_directory_permissions: "700"
+  
+  # Encryption settings
+  encryption:
+    algorithm: "AES256"
+    key_rotation_days: 90
+    verify_signatures: true
+
+# Application-Specific Backup Components
+application_backups:
+  database_dump: true
+  application_state: true
+  configuration_files: true
+  log_files: false
+  
+  # File system paths to backup
+  additional_paths:
+    - "/etc/financial-planning/"
+    - "/var/lib/financial-planning/uploads/"
+    - "/var/lib/financial-planning/cache/"
+    
+  # Exclude patterns
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - "cache/*"
+    - "temp/*"
+
+# Testing and Validation
+testing:
+  enable_automated_testing: true
+  test_restore_frequency_days: 7
+  test_database_name: "financial_planning_test_restore"
+  
+  # Chaos engineering for backup systems
+  chaos_testing:
+    enabled: false
+    simulate_failures: true
+    test_schedule: "0 3 * * 1"  # Monday 3 AM
+    
+# Disaster Recovery Scenarios
+disaster_scenarios:
+  database_corruption:
+    recovery_method: "full_restore"
+    estimated_rto_hours: 2
+    estimated_rpo_minutes: 30
+    
+  hardware_failure:
+    recovery_method: "restore_to_new_hardware"
+    estimated_rto_hours: 4
+    estimated_rpo_minutes: 60
+    
+  data_center_outage:
+    recovery_method: "activate_secondary_site"
+    estimated_rto_hours: 8
+    estimated_rpo_minutes: 60
+    
+  ransomware_attack:
+    recovery_method: "restore_from_clean_backup"
+    estimated_rto_hours: 24
+    estimated_rpo_hours: 4
+    
+  user_error:
+    recovery_method: "point_in_time_recovery"
+    estimated_rto_minutes: 30
+    estimated_rpo_minutes: 15
+
+# Compliance and Auditing
+compliance:
+  enable_audit_logging: true
+  retain_audit_logs_days: 2555  # 7 years
+  backup_verification_required: true
+  encryption_required: true
+  
+  # Regulatory requirements
+  regulations:
+    - "SOX"
+    - "PCI-DSS"
+    - "GDPR"
+    - "CCPA"
+
+# Maintenance and Optimization
+maintenance:
+  auto_optimize_backup_sizes: true
+  compress_old_backups: true
+  defragment_backup_storage: true
+  update_statistics_frequency_hours: 24
+  
+  # Backup storage optimization
+  optimization:
+    enable_deduplication: true
+    enable_incremental_forever: false
+    compress_similar_backups: true

@@ -1,0 +1,557 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main, develop, 'feature/*', 'hotfix/*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  # Build configuration
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: financial-planning-backend
+  IMAGE_NAME_FRONTEND: financial-planning-frontend
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+  
+  # Test configuration
+  POSTGRES_DB: financial_planning_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  REDIS_URL: redis://localhost:6379
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Detect changes for conditional workflows
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      mobile: ${{ steps.changes.outputs.mobile }}
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'requirements.txt'
+              - 'docker-compose.yml'
+              - 'Dockerfile*'
+            frontend:
+              - 'frontend/**'
+              - 'frontend/package*.json'
+              - 'frontend/Dockerfile'
+            mobile:
+              - 'mobile/**'
+              - 'mobile/package*.json'
+            infrastructure:
+              - 'terraform/**'
+              - 'k8s/**'
+              - 'helm/**'
+              - 'infrastructure/**'
+            docs:
+              - 'docs/**'
+              - '*.md'
+
+  # Backend Testing and Quality Checks
+  backend-tests:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            postgresql-client \
+            build-essential \
+            libpq-dev \
+            python3-dev \
+            redis-tools
+
+      - name: Install Python dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements_performance.txt
+
+      - name: Set up environment
+        working-directory: ./backend
+        run: |
+          cp env.template .env
+          echo "DATABASE_URL=postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}" >> .env
+          echo "REDIS_URL=${{ env.REDIS_URL }}" >> .env
+          echo "SECRET_KEY=test-secret-key-for-ci" >> .env
+          echo "ENVIRONMENT=test" >> .env
+
+      - name: Run database migrations
+        working-directory: ./backend
+        run: |
+          alembic upgrade head
+
+      - name: Code quality checks
+        working-directory: ./backend
+        run: |
+          # Type checking
+          mypy app/ --ignore-missing-imports --disallow-untyped-defs
+          
+          # Code formatting check
+          black --check app/ tests/
+          
+          # Import sorting check
+          isort --check-only app/ tests/
+          
+          # Linting
+          flake8 app/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+          
+          # Security check
+          bandit -r app/ -f json -o bandit-report.json || true
+          
+          # Dependency vulnerability check
+          safety check --json --output safety-report.json || true
+
+      - name: Run unit tests
+        working-directory: ./backend
+        run: |
+          pytest tests/unit/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-fail-under=80 \
+            --junitxml=pytest-unit.xml \
+            --benchmark-skip
+
+      - name: Run integration tests
+        working-directory: ./backend
+        run: |
+          pytest tests/integration/ \
+            --cov-append \
+            --cov=app \
+            --cov-report=xml \
+            --junitxml=pytest-integration.xml \
+            --benchmark-skip
+
+      - name: Run performance tests
+        working-directory: ./backend
+        run: |
+          pytest tests/performance/ \
+            --benchmark-only \
+            --benchmark-json=benchmark-results.json
+
+      - name: Run security tests
+        working-directory: ./backend
+        run: |
+          pytest tests/security/ \
+            --junitxml=pytest-security.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: backend-test-results
+          path: |
+            backend/pytest-*.xml
+            backend/htmlcov/
+            backend/coverage.xml
+            backend/benchmark-results.json
+            backend/bandit-report.json
+            backend/safety-report.json
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  # Frontend Testing and Quality Checks
+  frontend-tests:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Type checking
+        working-directory: ./frontend
+        run: npm run type-check
+
+      - name: Linting
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Code formatting check
+        working-directory: ./frontend
+        run: |
+          npx prettier --check "src/**/*.{ts,tsx,js,jsx,json,css,md}"
+
+      - name: Build application
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Run unit tests
+        working-directory: ./frontend
+        run: npm run test:coverage
+
+      - name: Run Storybook build test
+        working-directory: ./frontend
+        run: npm run build-storybook
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: frontend-test-results
+          path: |
+            frontend/coverage/
+            frontend/test-results/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+  # Mobile Testing and Quality Checks
+  mobile-tests:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mobile
+        run: npm ci
+
+      - name: Linting
+        working-directory: ./mobile
+        run: npm run lint
+
+      - name: Type checking
+        working-directory: ./mobile
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: ./mobile
+        run: npm test -- --coverage --watchAll=false
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: mobile-test-results
+          path: |
+            mobile/coverage/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./mobile/coverage/lcov.info
+          flags: mobile
+          name: mobile-coverage
+
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs.backend == 'true' || 
+      needs.changes.outputs.frontend == 'true' || 
+      needs.changes.outputs.mobile == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/setup@master
+      
+      - name: Backend security scan
+        if: needs.changes.outputs.backend == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd backend
+          snyk test --severity-threshold=high --json-file-output=snyk-backend.json || true
+        continue-on-error: true
+
+      - name: Frontend security scan
+        if: needs.changes.outputs.frontend == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd frontend
+          snyk test --severity-threshold=high --json-file-output=snyk-frontend.json || true
+        continue-on-error: true
+
+      - name: Mobile security scan
+        if: needs.changes.outputs.mobile == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd mobile
+          snyk test --severity-threshold=high --json-file-output=snyk-mobile.json || true
+        continue-on-error: true
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            backend/snyk-*.json
+            frontend/snyk-*.json
+            mobile/snyk-*.json
+
+  # Docker Build and Scan
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [changes, backend-tests, frontend-tests]
+    if: |
+      always() && 
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') &&
+      (needs.backend-tests.result == 'success' || needs.backend-tests.result == 'skipped') &&
+      (needs.frontend-tests.result == 'success' || needs.frontend-tests.result == 'skipped')
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        if: needs.changes.outputs.backend == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.optimized
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push frontend image
+        if: needs.changes.outputs.frontend == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Infrastructure Validation
+  infrastructure-validation:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.infrastructure == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.6
+
+      - name: Terraform format check
+        working-directory: ./backend/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validation
+        working-directory: ./backend/terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Run TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: TFLint validation
+        working-directory: ./backend/terraform
+        run: |
+          tflint --init
+          tflint
+
+      - name: Run Checkov security scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ./backend/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+
+      - name: Upload Checkov scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+      - name: Validate Kubernetes manifests
+        run: |
+          # Install kubeval for K8s manifest validation
+          wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin
+          
+          # Validate K8s manifests
+          find backend/k8s -name "*.yml" -o -name "*.yaml" | xargs kubeval
+
+      - name: Validate Helm charts
+        run: |
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          
+          # Lint Helm charts
+          helm lint backend/helm/financial-planning/
+
+  # Final status check
+  ci-status:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, mobile-tests, security-scan, docker-build, infrastructure-validation]
+    if: always()
+
+    steps:
+      - name: Check CI status
+        run: |
+          echo "Backend tests: ${{ needs.backend-tests.result }}"
+          echo "Frontend tests: ${{ needs.frontend-tests.result }}"
+          echo "Mobile tests: ${{ needs.mobile-tests.result }}"
+          echo "Security scan: ${{ needs.security-scan.result }}"
+          echo "Docker build: ${{ needs.docker-build.result }}"
+          echo "Infrastructure validation: ${{ needs.infrastructure-validation.result }}"
+          
+          if [[ "${{ needs.backend-tests.result }}" == "failure" ]] || 
+             [[ "${{ needs.frontend-tests.result }}" == "failure" ]] ||
+             [[ "${{ needs.mobile-tests.result }}" == "failure" ]] ||
+             [[ "${{ needs.docker-build.result }}" == "failure" ]] ||
+             [[ "${{ needs.infrastructure-validation.result }}" == "failure" ]]; then
+            echo "CI pipeline failed"
+            exit 1
+          fi
+          
+          echo "CI pipeline completed successfully"
+
+      - name: Post status to Slack
+        if: always() && github.ref == 'refs/heads/main'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}

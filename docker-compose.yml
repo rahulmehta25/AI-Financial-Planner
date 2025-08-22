@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: financial_planning_db
+    environment:
+      POSTGRES_DB: financial_planning
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - financial_network
+    restart: unless-stopped
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    container_name: financial_planning_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: financial_planning_backend
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=financial_planning
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+      - DEBUG=true
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    networks:
+      - financial_network
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: financial_planning_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - financial_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Nginx Reverse Proxy (Production)
+  nginx:
+    image: nginx:alpine
+    container_name: financial_planning_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      - financial_network
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    profiles:
+      - production
+
+  # Celery Worker for background tasks
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: financial_planning_celery
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=financial_planning
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+    networks:
+      - financial_network
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    command: celery -A app.celery worker --loglevel=info
+    profiles:
+      - full
+
+  # Celery Beat for scheduled tasks
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: financial_planning_beat
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=financial_planning
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+    networks:
+      - financial_network
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    command: celery -A app.celery beat --loglevel=info
+    profiles:
+      - full
+
+  # Flower for monitoring Celery
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: financial_planning_flower
+    environment:
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "5555:5555"
+    networks:
+      - financial_network
+    depends_on:
+      - redis
+    restart: unless-stopped
+    command: celery -A app.celery flower
+    profiles:
+      - full
+
+networks:
+  financial_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

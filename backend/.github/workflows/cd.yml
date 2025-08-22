@@ -1,0 +1,662 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      deployment_strategy:
+        description: 'Deployment strategy'
+        required: true
+        default: 'rolling'
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  KUBECTL_VERSION: v1.28.0
+  HELM_VERSION: v3.13.0
+
+jobs:
+  # Determine deployment environment and strategy
+  setup:
+    name: Setup Deployment
+    runs-on: ubuntu-latest
+    
+    outputs:
+      environment: ${{ steps.config.outputs.environment }}
+      strategy: ${{ steps.config.outputs.strategy }}
+      should_deploy: ${{ steps.config.outputs.should_deploy }}
+      
+    steps:
+    - name: Determine Deployment Configuration
+      id: config
+      run: |
+        # Determine environment based on trigger
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          ENV="${{ github.event.inputs.environment }}"
+          STRATEGY="${{ github.event.inputs.deployment_strategy }}"
+          SHOULD_DEPLOY="true"
+        elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          ENV="staging"
+          STRATEGY="rolling"
+          SHOULD_DEPLOY="true"
+        elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          ENV="production"
+          STRATEGY="blue-green"
+          SHOULD_DEPLOY="true"
+        else
+          ENV="development"
+          STRATEGY="rolling"
+          SHOULD_DEPLOY="false"
+        fi
+        
+        echo "environment=$ENV" >> $GITHUB_OUTPUT
+        echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+        echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+        
+        echo "Deployment Configuration:"
+        echo "- Environment: $ENV"
+        echo "- Strategy: $STRATEGY"
+        echo "- Should Deploy: $SHOULD_DEPLOY"
+
+  # Pre-deployment checks
+  pre-deployment:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should_deploy == 'true'
+    
+    environment:
+      name: ${{ needs.setup.outputs.environment }}-approval
+      url: https://financial-planning-${{ needs.setup.outputs.environment }}.example.com
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Validate Configuration
+      run: |
+        echo "Validating deployment to ${{ needs.setup.outputs.environment }}"
+        
+        # Check if required secrets are available
+        if [[ "${{ needs.setup.outputs.environment }}" == "production" ]]; then
+          if [[ -z "${{ secrets.PROD_DB_PASSWORD }}" ]]; then
+            echo "❌ Production database password not configured"
+            exit 1
+          fi
+        fi
+        
+        echo "✅ Configuration validation passed"
+    
+    - name: Check Container Image
+      run: |
+        # Verify that the container image exists and is scannable
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          aquasec/trivy:latest image \
+          --exit-code 1 \
+          --severity HIGH,CRITICAL \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # Database Migration
+  database-migration:
+    name: Database Migration
+    runs-on: ubuntu-latest
+    needs: [setup, pre-deployment]
+    if: needs.setup.outputs.should_deploy == 'true'
+    
+    environment:
+      name: ${{ needs.setup.outputs.environment }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install alembic psycopg2-binary
+    
+    - name: Create Database Backup
+      if: needs.setup.outputs.environment == 'production'
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        # Create backup before migration (production only)
+        BACKUP_FILE="backup-$(date +%Y%m%d-%H%M%S).sql"
+        pg_dump $DATABASE_URL > $BACKUP_FILE
+        
+        # Upload backup to S3 or secure storage
+        # aws s3 cp $BACKUP_FILE s3://backups/database/
+        echo "Database backup created: $BACKUP_FILE"
+    
+    - name: Run Database Migrations
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "Running database migrations for ${{ needs.setup.outputs.environment }}"
+        
+        # Run migrations with timeout and error handling
+        timeout 300 alembic upgrade head
+        
+        # Verify migration success
+        python -c "
+        import os
+        from sqlalchemy import create_engine, text
+        
+        engine = create_engine(os.environ['DATABASE_URL'])
+        with engine.connect() as conn:
+            result = conn.execute(text('SELECT version_num FROM alembic_version'))
+            version = result.fetchone()[0]
+            print(f'Current database version: {version}')
+        "
+    
+    - name: Verify Database Health
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        python -c "
+        import os
+        from sqlalchemy import create_engine
+        
+        engine = create_engine(os.environ['DATABASE_URL'])
+        
+        # Test database connectivity and basic operations
+        with engine.connect() as conn:
+            # Test basic query
+            conn.execute('SELECT 1')
+            
+            # Check critical tables exist
+            tables_query = '''
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            '''
+            result = conn.execute(tables_query)
+            tables = [row[0] for row in result]
+            
+            expected_tables = ['users', 'financial_profiles', 'goals', 'investments']
+            missing_tables = set(expected_tables) - set(tables)
+            
+            if missing_tables:
+                print(f'❌ Missing critical tables: {missing_tables}')
+                exit(1)
+            
+            print('✅ Database health check passed')
+        "
+
+  # Deploy to Development Environment
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [setup, database-migration]
+    if: needs.setup.outputs.environment == 'development' && needs.setup.outputs.should_deploy == 'true'
+    
+    environment:
+      name: development
+      url: https://financial-planning-dev.example.com
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+    
+    - name: Configure kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        aws eks update-kubeconfig --region us-west-2 --name financial-planning-dev
+    
+    - name: Deploy to Development
+      run: |
+        # Simple rolling deployment for development
+        kubectl set image deployment/financial-planning-api \
+          api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --namespace=development
+        
+        kubectl rollout status deployment/financial-planning-api \
+          --namespace=development \
+          --timeout=600s
+    
+    - name: Run Smoke Tests
+      run: |
+        # Wait for deployment to be ready
+        kubectl wait --for=condition=ready pod \
+          -l app=financial-planning-api \
+          --namespace=development \
+          --timeout=300s
+        
+        # Get service URL
+        SERVICE_URL=$(kubectl get service financial-planning-api \
+          --namespace=development \
+          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Run basic health checks
+        curl -f "http://$SERVICE_URL/health" || exit 1
+        curl -f "http://$SERVICE_URL/api/v1/health" || exit 1
+        
+        echo "✅ Development deployment successful"
+
+  # Deploy to Staging Environment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [setup, database-migration]
+    if: needs.setup.outputs.environment == 'staging' && needs.setup.outputs.should_deploy == 'true'
+    
+    environment:
+      name: staging
+      url: https://financial-planning-staging.example.com
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+    
+    - name: Configure kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        aws eks update-kubeconfig --region us-west-2 --name financial-planning-staging
+    
+    - name: Deploy to Staging
+      run: |
+        # Rolling deployment with readiness checks
+        kubectl set image deployment/financial-planning-api \
+          api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          --namespace=staging
+        
+        kubectl rollout status deployment/financial-planning-api \
+          --namespace=staging \
+          --timeout=600s
+    
+    - name: Run Integration Tests
+      run: |
+        # Wait for deployment to be ready
+        kubectl wait --for=condition=ready pod \
+          -l app=financial-planning-api \
+          --namespace=staging \
+          --timeout=300s
+        
+        # Get service URL
+        SERVICE_URL=$(kubectl get service financial-planning-api \
+          --namespace=staging \
+          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Run comprehensive integration tests
+        python -m pytest tests/integration/ \
+          --base-url="http://$SERVICE_URL" \
+          --junitxml=integration-test-results.xml
+        
+        echo "✅ Staging deployment and integration tests successful"
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: staging-test-results
+        path: integration-test-results.xml
+
+  # Deploy to Production Environment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [setup, database-migration]
+    if: needs.setup.outputs.environment == 'production' && needs.setup.outputs.should_deploy == 'true'
+    
+    environment:
+      name: production
+      url: https://financial-planning.example.com
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+    
+    - name: Configure kubectl and Helm
+      run: |
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        
+        # Install Helm
+        curl -LO "https://get.helm.sh/helm-${{ env.HELM_VERSION }}-linux-amd64.tar.gz"
+        tar -zxvf helm-${{ env.HELM_VERSION }}-linux-amd64.tar.gz
+        sudo mv linux-amd64/helm /usr/local/bin/
+        
+        # Configure kubeconfig
+        aws eks update-kubeconfig --region us-west-2 --name financial-planning-prod
+    
+    - name: Blue-Green Deployment
+      if: needs.setup.outputs.strategy == 'blue-green'
+      run: |
+        # Blue-Green deployment strategy
+        
+        # Get current active environment (blue or green)
+        CURRENT_ENV=$(kubectl get service financial-planning-api \
+          --namespace=production \
+          -o jsonpath='{.spec.selector.version}' || echo "blue")
+        
+        # Determine target environment
+        if [[ "$CURRENT_ENV" == "blue" ]]; then
+          TARGET_ENV="green"
+        else
+          TARGET_ENV="blue"
+        fi
+        
+        echo "Current environment: $CURRENT_ENV"
+        echo "Target environment: $TARGET_ENV"
+        
+        # Deploy to target environment
+        helm upgrade --install financial-planning-$TARGET_ENV ./helm/financial-planning \
+          --namespace=production \
+          --set image.tag=${{ github.sha }} \
+          --set environment=$TARGET_ENV \
+          --set replicaCount=3 \
+          --wait \
+          --timeout=600s
+        
+        # Health check on new environment
+        kubectl wait --for=condition=ready pod \
+          -l app=financial-planning-api,version=$TARGET_ENV \
+          --namespace=production \
+          --timeout=300s
+        
+        # Run smoke tests against new environment
+        NEW_SERVICE_URL=$(kubectl get service financial-planning-api-$TARGET_ENV \
+          --namespace=production \
+          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Smoke tests
+        curl -f "http://$NEW_SERVICE_URL/health" || exit 1
+        curl -f "http://$NEW_SERVICE_URL/api/v1/health" || exit 1
+        
+        # Switch traffic to new environment
+        kubectl patch service financial-planning-api \
+          --namespace=production \
+          -p '{"spec":{"selector":{"version":"'$TARGET_ENV'"}}}'
+        
+        # Wait and verify traffic switch
+        sleep 30
+        
+        # Final verification
+        MAIN_SERVICE_URL=$(kubectl get service financial-planning-api \
+          --namespace=production \
+          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        curl -f "http://$MAIN_SERVICE_URL/health" || exit 1
+        
+        echo "✅ Blue-Green deployment successful. Traffic switched to $TARGET_ENV"
+        echo "target_env=$TARGET_ENV" >> $GITHUB_ENV
+    
+    - name: Canary Deployment
+      if: needs.setup.outputs.strategy == 'canary'
+      run: |
+        # Canary deployment strategy
+        
+        # Deploy canary version (10% traffic)
+        helm upgrade --install financial-planning-canary ./helm/financial-planning \
+          --namespace=production \
+          --set image.tag=${{ github.sha }} \
+          --set environment=canary \
+          --set replicaCount=1 \
+          --set traffic.weight=10 \
+          --wait \
+          --timeout=600s
+        
+        # Health check canary
+        kubectl wait --for=condition=ready pod \
+          -l app=financial-planning-api,version=canary \
+          --namespace=production \
+          --timeout=300s
+        
+        echo "✅ Canary deployment (10% traffic) successful"
+        
+        # Wait for metrics collection
+        sleep 180
+        
+        # Check canary metrics (error rate, response time)
+        # This would integrate with your monitoring system
+        echo "Monitoring canary metrics..."
+        
+        # If metrics are good, promote canary to 50%
+        helm upgrade financial-planning-canary ./helm/financial-planning \
+          --namespace=production \
+          --set traffic.weight=50 \
+          --reuse-values
+        
+        sleep 300
+        
+        # Final promotion to 100%
+        helm upgrade financial-planning ./helm/financial-planning \
+          --namespace=production \
+          --set image.tag=${{ github.sha }} \
+          --reuse-values
+        
+        # Remove canary
+        helm uninstall financial-planning-canary --namespace=production
+        
+        echo "✅ Canary deployment promoted to 100%"
+    
+    - name: Rolling Deployment
+      if: needs.setup.outputs.strategy == 'rolling'
+      run: |
+        # Standard rolling deployment
+        helm upgrade --install financial-planning ./helm/financial-planning \
+          --namespace=production \
+          --set image.tag=${{ github.sha }} \
+          --set replicaCount=5 \
+          --wait \
+          --timeout=600s
+        
+        echo "✅ Rolling deployment successful"
+    
+    - name: Production Smoke Tests
+      run: |
+        # Wait for all pods to be ready
+        kubectl wait --for=condition=ready pod \
+          -l app=financial-planning-api \
+          --namespace=production \
+          --timeout=300s
+        
+        # Get service URL
+        SERVICE_URL=$(kubectl get service financial-planning-api \
+          --namespace=production \
+          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        
+        # Comprehensive smoke tests
+        curl -f "http://$SERVICE_URL/health" || exit 1
+        curl -f "http://$SERVICE_URL/api/v1/health" || exit 1
+        curl -f "http://$SERVICE_URL/api/v1/auth/health" || exit 1
+        curl -f "http://$SERVICE_URL/api/v1/users/me" \
+          -H "Authorization: Bearer ${{ secrets.SMOKE_TEST_TOKEN }}" || exit 1
+        
+        echo "✅ Production smoke tests passed"
+    
+    - name: Rollback on Failure
+      if: failure()
+      run: |
+        echo "🚨 Deployment failed. Initiating rollback..."
+        
+        if [[ "${{ needs.setup.outputs.strategy }}" == "blue-green" && -n "${{ env.target_env }}" ]]; then
+          # Rollback blue-green by switching traffic back
+          PREVIOUS_ENV=$(if [[ "${{ env.target_env }}" == "blue" ]]; then echo "green"; else echo "blue"; fi)
+          kubectl patch service financial-planning-api \
+            --namespace=production \
+            -p '{"spec":{"selector":{"version":"'$PREVIOUS_ENV'"}}}'
+          echo "Traffic switched back to $PREVIOUS_ENV"
+        else
+          # Rollback using Helm
+          helm rollback financial-planning --namespace=production
+          echo "Helm rollback completed"
+        fi
+        
+        exit 1
+
+  # Post-deployment verification
+  post-deployment:
+    name: Post-deployment Verification
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-development, deploy-staging, deploy-production]
+    if: always() && needs.setup.outputs.should_deploy == 'true'
+    
+    steps:
+    - name: Run Post-deployment Tests
+      run: |
+        ENV="${{ needs.setup.outputs.environment }}"
+        
+        # Determine service URL based on environment
+        case $ENV in
+          "development")
+            SERVICE_URL="https://financial-planning-dev.example.com"
+            ;;
+          "staging")
+            SERVICE_URL="https://financial-planning-staging.example.com"
+            ;;
+          "production")
+            SERVICE_URL="https://financial-planning.example.com"
+            ;;
+        esac
+        
+        echo "Running post-deployment verification for $ENV"
+        echo "Service URL: $SERVICE_URL"
+        
+        # API health checks
+        curl -f "$SERVICE_URL/health" || exit 1
+        curl -f "$SERVICE_URL/api/v1/health" || exit 1
+        
+        # Database connectivity check
+        response=$(curl -s "$SERVICE_URL/api/v1/health/database")
+        echo $response | grep -q "healthy" || exit 1
+        
+        # Redis connectivity check
+        response=$(curl -s "$SERVICE_URL/api/v1/health/cache")
+        echo $response | grep -q "healthy" || exit 1
+        
+        echo "✅ Post-deployment verification passed"
+    
+    - name: Update Deployment Status
+      run: |
+        ENV="${{ needs.setup.outputs.environment }}"
+        
+        # Create deployment status summary
+        cat << EOF >> $GITHUB_STEP_SUMMARY
+        ## Deployment Summary
+        
+        - **Environment**: $ENV
+        - **Strategy**: ${{ needs.setup.outputs.strategy }}
+        - **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        - **Status**: ✅ Success
+        - **Deployed At**: $(date -u)
+        
+        ### Services Status
+        - Health Check: ✅ Passed
+        - Database: ✅ Connected
+        - Cache: ✅ Connected
+        EOF
+        
+        echo "Deployment to $ENV completed successfully"
+    
+    - name: Notify Teams
+      if: needs.setup.outputs.environment == 'production'
+      run: |
+        # Send notification to Slack/Teams about production deployment
+        curl -X POST -H 'Content-type: application/json' \
+          --data '{"text":"🚀 Financial Planning API deployed to production successfully!"}' \
+          ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Cleanup old deployments
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [setup, post-deployment]
+    if: needs.setup.outputs.environment == 'production' && success()
+    
+    steps:
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+    
+    - name: Cleanup Old Container Images
+      run: |
+        # Keep only the last 10 images in the registry
+        aws ecr describe-images \
+          --repository-name financial-planning \
+          --query 'sort_by(imageDetails,&imagePushedAt)[:-10].[imageDigest]' \
+          --output text | \
+        while read digest; do
+          if [[ -n "$digest" ]]; then
+            aws ecr batch-delete-image \
+              --repository-name financial-planning \
+              --image-ids imageDigest=$digest
+          fi
+        done
+        
+        echo "✅ Old container images cleaned up"
+    
+    - name: Configure kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        aws eks update-kubeconfig --region us-west-2 --name financial-planning-prod
+    
+    - name: Cleanup Old Blue-Green Deployments
+      if: needs.setup.outputs.strategy == 'blue-green'
+      run: |
+        # Remove the inactive blue-green environment
+        ACTIVE_ENV=$(kubectl get service financial-planning-api \
+          --namespace=production \
+          -o jsonpath='{.spec.selector.version}')
+        
+        INACTIVE_ENV=$(if [[ "$ACTIVE_ENV" == "blue" ]]; then echo "green"; else echo "blue"; fi)
+        
+        # Remove inactive deployment
+        kubectl delete deployment financial-planning-api-$INACTIVE_ENV \
+          --namespace=production --ignore-not-found=true
+        
+        kubectl delete service financial-planning-api-$INACTIVE_ENV \
+          --namespace=production --ignore-not-found=true
+        
+        echo "✅ Inactive blue-green environment ($INACTIVE_ENV) cleaned up"

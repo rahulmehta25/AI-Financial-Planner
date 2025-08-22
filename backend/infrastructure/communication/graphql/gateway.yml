@@ -1,0 +1,1372 @@
+# Apollo Federation Gateway Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-gateway-config
+  namespace: financial-planning
+data:
+  gateway.js: |
+    const { ApolloGateway, IntrospectAndCompose } = require('@apollo/gateway');
+    const { ApolloServer } = require('apollo-server-express');
+    const express = require('express');
+    const cors = require('cors');
+    const helmet = require('helmet');
+    const rateLimit = require('express-rate-limit');
+    const jwt = require('jsonwebtoken');
+
+    // Rate limiting configuration
+    const limiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 1000, // limit each IP to 1000 requests per windowMs
+      message: 'Too many requests from this IP, please try again later.',
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
+    // Authentication middleware
+    const authenticateToken = (req, res, next) => {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+      
+      if (!token) {
+        return res.sendStatus(401);
+      }
+      
+      jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+      });
+    };
+
+    // Create Apollo Gateway
+    const gateway = new ApolloGateway({
+      supergraphSdl: new IntrospectAndCompose({
+        subgraphs: [
+          {
+            name: 'user-service',
+            url: 'http://user-service:8002/graphql',
+          },
+          {
+            name: 'banking-service',
+            url: 'http://banking-service:8003/graphql',
+          },
+          {
+            name: 'simulation-service',
+            url: 'http://simulation-service:8001/graphql',
+          },
+          {
+            name: 'ml-service',
+            url: 'http://ml-service:8004/graphql',
+          },
+          {
+            name: 'notification-service',
+            url: 'http://notification-service:8005/graphql',
+          },
+          {
+            name: 'document-service',
+            url: 'http://document-service:8006/graphql',
+          },
+        ],
+        pollIntervalInMs: 30000,
+      }),
+      
+      buildService({ name, url }) {
+        return new RemoteGraphQLDataSource({
+          url,
+          willSendRequest({ request, context }) {
+            // Pass user context to subgraphs
+            request.http.headers.set('user-id', context.userId);
+            request.http.headers.set('user-roles', context.userRoles);
+          },
+        });
+      },
+    });
+
+    // Create Apollo Server
+    const server = new ApolloServer({
+      gateway,
+      context: ({ req }) => {
+        return {
+          userId: req.user?.userId,
+          userRoles: req.user?.roles,
+          requestId: req.headers['x-request-id'],
+        };
+      },
+      plugins: [
+        {
+          requestDidStart() {
+            return {
+              willSendResponse(requestContext) {
+                requestContext.response.http.headers.set(
+                  'x-request-id',
+                  requestContext.context.requestId
+                );
+              },
+            };
+          },
+        },
+      ],
+    });
+
+    // Create Express app
+    const app = express();
+
+    // Apply security middleware
+    app.use(helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
+        },
+      },
+    }));
+
+    app.use(cors({
+      origin: [
+        'https://financial-planning.app',
+        'http://localhost:3000',
+        'http://localhost:8080',
+      ],
+      credentials: true,
+    }));
+
+    app.use(limiter);
+
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+      });
+    });
+
+    // GraphQL endpoint with authentication
+    app.use('/graphql', authenticateToken);
+
+    async function startServer() {
+      await server.start();
+      server.applyMiddleware({ app, path: '/graphql' });
+      
+      const port = process.env.PORT || 4000;
+      app.listen(port, () => {
+        console.log(`🚀 Gateway ready at http://localhost:${port}${server.graphqlPath}`);
+      });
+    }
+
+    startServer().catch(error => {
+      console.error('Failed to start server:', error);
+      process.exit(1);
+    });
+
+  package.json: |
+    {
+      "name": "financial-planning-gateway",
+      "version": "1.0.0",
+      "description": "GraphQL Federation Gateway for Financial Planning Platform",
+      "main": "gateway.js",
+      "scripts": {
+        "start": "node gateway.js",
+        "dev": "nodemon gateway.js"
+      },
+      "dependencies": {
+        "@apollo/gateway": "^2.5.0",
+        "apollo-server-express": "^3.12.0",
+        "express": "^4.18.0",
+        "cors": "^2.8.5",
+        "helmet": "^7.0.0",
+        "express-rate-limit": "^6.8.0",
+        "jsonwebtoken": "^9.0.0",
+        "dotenv": "^16.3.0"
+      },
+      "devDependencies": {
+        "nodemon": "^3.0.0"
+      },
+      "engines": {
+        "node": ">=16.0.0"
+      }
+    }
+
+---
+# GraphQL Schema Definitions for each service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-schemas
+  namespace: financial-planning
+data:
+  user-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") {
+      id: ID!
+      email: String!
+      firstName: String!
+      lastName: String!
+      fullName: String!
+      dateOfBirth: String
+      status: UserStatus!
+      profile: UserProfile
+      preferences: UserPreferences
+      createdAt: String!
+      updatedAt: String!
+    }
+
+    type UserProfile {
+      annualIncome: Int
+      employmentStatus: String
+      maritalStatus: String
+      dependents: Int
+      riskTolerance: RiskTolerance
+      investmentExperience: [String!]
+      updatedAt: String!
+    }
+
+    type UserPreferences {
+      currency: String!
+      timezone: String!
+      language: String!
+      notifications: NotificationSettings!
+      privacy: PrivacySettings!
+      updatedAt: String!
+    }
+
+    type NotificationSettings {
+      emailEnabled: Boolean!
+      smsEnabled: Boolean!
+      pushEnabled: Boolean!
+      emailTypes: [String!]!
+      smsTypes: [String!]!
+      pushTypes: [String!]!
+      quietHours: QuietHours
+    }
+
+    type PrivacySettings {
+      dataSharingEnabled: Boolean!
+      analyticsTracking: Boolean!
+      marketingCommunications: Boolean!
+    }
+
+    type QuietHours {
+      startTime: String!
+      endTime: String!
+      timezone: String!
+      enabled: Boolean!
+    }
+
+    enum UserStatus {
+      ACTIVE
+      INACTIVE
+      SUSPENDED
+      DELETED
+    }
+
+    enum RiskTolerance {
+      CONSERVATIVE
+      MODERATE
+      AGGRESSIVE
+    }
+
+    type Query {
+      me: User
+      user(id: ID!): User
+    }
+
+    type Mutation {
+      updateProfile(input: UpdateProfileInput!): UserProfile!
+      updatePreferences(input: UpdatePreferencesInput!): UserPreferences!
+    }
+
+    input UpdateProfileInput {
+      annualIncome: Int
+      employmentStatus: String
+      maritalStatus: String
+      dependents: Int
+      riskTolerance: RiskTolerance
+      investmentExperience: [String!]
+    }
+
+    input UpdatePreferencesInput {
+      currency: String
+      timezone: String
+      language: String
+      notifications: NotificationSettingsInput
+      privacy: PrivacySettingsInput
+    }
+
+    input NotificationSettingsInput {
+      emailEnabled: Boolean
+      smsEnabled: Boolean
+      pushEnabled: Boolean
+      emailTypes: [String!]
+      smsTypes: [String!]
+      pushTypes: [String!]
+      quietHours: QuietHoursInput
+    }
+
+    input PrivacySettingsInput {
+      dataSharingEnabled: Boolean
+      analyticsTracking: Boolean
+      marketingCommunications: Boolean
+    }
+
+    input QuietHoursInput {
+      startTime: String
+      endTime: String
+      timezone: String
+      enabled: Boolean
+    }
+
+  banking-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") @extends {
+      id: ID! @external
+      accounts: [BankAccount!]!
+      transactions(
+        accountId: ID
+        startDate: String
+        endDate: String
+        categories: [String!]
+        limit: Int = 50
+        offset: Int = 0
+      ): TransactionConnection!
+      cashFlow(
+        startDate: String!
+        endDate: String!
+        period: CashFlowPeriod = MONTHLY
+      ): CashFlowAnalysis!
+      spendingPattern(
+        startDate: String!
+        endDate: String!
+        groupBy: SpendingGroupBy = CATEGORY
+      ): SpendingPatternAnalysis!
+    }
+
+    type BankAccount @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      externalId: String!
+      provider: String!
+      institutionId: String!
+      institutionName: String!
+      name: String!
+      officialName: String
+      type: AccountType!
+      subtype: AccountSubtype!
+      mask: String!
+      currency: String!
+      balance: AccountBalance!
+      status: AccountStatus!
+      lastSyncAt: String
+      createdAt: String!
+      updatedAt: String!
+      transactions(
+        startDate: String
+        endDate: String
+        limit: Int = 50
+        offset: Int = 0
+      ): TransactionConnection!
+    }
+
+    type AccountBalance {
+      current: Float!
+      available: Float
+      currency: String!
+      asOf: String!
+    }
+
+    type Transaction @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      accountId: ID!
+      account: BankAccount!
+      externalId: String!
+      provider: String!
+      amount: Float!
+      currency: String!
+      description: String!
+      merchantName: String
+      categories: [String!]!
+      category: String
+      subcategory: String
+      date: String!
+      authorizedDate: String
+      type: TransactionType!
+      paymentChannel: PaymentChannel!
+      pending: Boolean!
+      location: TransactionLocation
+      createdAt: String!
+      updatedAt: String!
+    }
+
+    type TransactionLocation {
+      address: String
+      city: String
+      region: String
+      postalCode: String
+      country: String
+      lat: Float
+      lon: Float
+    }
+
+    type TransactionConnection {
+      edges: [TransactionEdge!]!
+      pageInfo: PageInfo!
+      totalCount: Int!
+    }
+
+    type TransactionEdge {
+      node: Transaction!
+      cursor: String!
+    }
+
+    type PageInfo {
+      hasNextPage: Boolean!
+      hasPreviousPage: Boolean!
+      startCursor: String
+      endCursor: String
+    }
+
+    type CashFlowAnalysis {
+      periods: [CashFlowPeriod!]!
+      totalIncome: Float!
+      totalExpenses: Float!
+      netCashFlow: Float!
+      trends: [CashFlowTrend!]!
+    }
+
+    type CashFlowPeriod {
+      startDate: String!
+      endDate: String!
+      income: Float!
+      expenses: Float!
+      netFlow: Float!
+      categoryBreakdown: [CategorySpending!]!
+    }
+
+    type CashFlowTrend {
+      period: String!
+      netFlow: Float!
+      changePercentage: Float!
+      date: String!
+    }
+
+    type SpendingPatternAnalysis {
+      categories: [SpendingCategory!]!
+      trends: [SpendingTrend!]!
+      insights: SpendingInsights!
+    }
+
+    type SpendingCategory {
+      category: String!
+      subcategory: String
+      amount: Float!
+      percentage: Float!
+      transactionCount: Int!
+    }
+
+    type SpendingTrend {
+      period: String!
+      amount: Float!
+      changePercentage: Float!
+      date: String!
+    }
+
+    type SpendingInsights {
+      topMerchants: [String!]!
+      largestExpenses: [String!]!
+      highestSpendingDay: String!
+      averageDailySpending: Float!
+      categoryTrends: [CategoryTrend!]!
+    }
+
+    type CategoryTrend {
+      category: String!
+      currentPeriod: Float!
+      previousPeriod: Float!
+      changePercentage: Float!
+    }
+
+    type CategorySpending {
+      category: String!
+      amount: Float!
+      count: Int!
+    }
+
+    enum AccountType {
+      DEPOSITORY
+      CREDIT
+      LOAN
+      INVESTMENT
+      OTHER
+    }
+
+    enum AccountSubtype {
+      CHECKING
+      SAVINGS
+      CREDIT_CARD
+      MORTGAGE
+      AUTO_LOAN
+      STUDENT_LOAN
+      INVESTMENT
+    }
+
+    enum AccountStatus {
+      ACTIVE
+      INACTIVE
+      ERROR
+      DISCONNECTED
+    }
+
+    enum TransactionType {
+      DEBIT
+      CREDIT
+    }
+
+    enum PaymentChannel {
+      ONLINE
+      IN_STORE
+      ATM
+      OTHER
+    }
+
+    enum CashFlowPeriod {
+      DAILY
+      WEEKLY
+      MONTHLY
+      QUARTERLY
+      YEARLY
+    }
+
+    enum SpendingGroupBy {
+      CATEGORY
+      MERCHANT
+      MONTH
+      WEEK
+    }
+
+    type Query {
+      account(id: ID!): BankAccount
+      transaction(id: ID!): Transaction
+    }
+
+    type Mutation {
+      connectAccount(input: ConnectAccountInput!): ConnectAccountPayload!
+      disconnectAccount(accountId: ID!): Boolean!
+      syncAccount(accountId: ID!, forceSync: Boolean = false): SyncAccountPayload!
+      categorizeTransaction(
+        transactionId: ID!
+        category: String!
+        subcategory: String
+      ): Transaction!
+    }
+
+    input ConnectAccountInput {
+      provider: String!
+      publicToken: String!
+      institutionId: String!
+      metadata: JSON
+    }
+
+    type ConnectAccountPayload {
+      connectionId: ID!
+      accounts: [BankAccount!]!
+    }
+
+    type SyncAccountPayload {
+      syncId: ID!
+      status: SyncStatus!
+      transactionsAdded: Int!
+      transactionsUpdated: Int!
+      lastSyncAt: String!
+    }
+
+    enum SyncStatus {
+      PENDING
+      IN_PROGRESS
+      COMPLETED
+      FAILED
+    }
+
+    scalar JSON
+
+  # Continue with other service schemas...
+  simulation-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") @extends {
+      id: ID! @external
+      simulations(
+        status: SimulationStatus
+        limit: Int = 20
+        offset: Int = 0
+      ): SimulationConnection!
+    }
+
+    type Simulation @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      user: User!
+      parameters: SimulationParameters!
+      status: SimulationStatus!
+      numSimulations: Int!
+      timeHorizonYears: Int!
+      createdAt: String!
+      startedAt: String
+      completedAt: String
+      results: SimulationResults
+      errorMessage: String
+    }
+
+    type SimulationParameters {
+      initialAge: Int!
+      retirementAge: Int!
+      initialSavings: Float!
+      annualContribution: Float!
+      annualIncome: Float!
+      inflationRate: Float!
+      marketAssumptions: MarketAssumptions!
+      assetAllocation: [AssetAllocation!]!
+      rebalancing: RebalancingStrategy!
+    }
+
+    type MarketAssumptions {
+      stockReturnMean: Float!
+      stockReturnStd: Float!
+      bondReturnMean: Float!
+      bondReturnStd: Float!
+      realEstateReturnMean: Float!
+      realEstateReturnStd: Float!
+      commodityReturnMean: Float!
+      commodityReturnStd: Float!
+      correlations: CorrelationMatrix!
+    }
+
+    type CorrelationMatrix {
+      stockBond: Float!
+      stockRealEstate: Float!
+      stockCommodity: Float!
+      bondRealEstate: Float!
+      bondCommodity: Float!
+      realEstateCommodity: Float!
+    }
+
+    type AssetAllocation {
+      assetClass: AssetClass!
+      targetPercentage: Float!
+      minPercentage: Float
+      maxPercentage: Float
+    }
+
+    type RebalancingStrategy {
+      type: RebalancingType!
+      frequencyMonths: Int
+      thresholdPercentage: Float
+      taxAware: Boolean!
+    }
+
+    type SimulationResults {
+      summary: ResultsSummary!
+      paths: [PathResult!]!
+      goalProbabilities: [GoalProbability!]!
+      yearResults: [YearResult!]!
+      riskMetrics: RiskMetrics!
+    }
+
+    type ResultsSummary {
+      successProbability: Float!
+      medianFinalValue: Float!
+      percentile10: Float!
+      percentile25: Float!
+      percentile75: Float!
+      percentile90: Float!
+      shortfallProbability: Float!
+      averageShortfall: Float!
+    }
+
+    type PathResult {
+      pathNumber: Int!
+      annualValues: [Float!]!
+      finalValue: Float!
+      goalAchieved: Boolean!
+      shortfallAmount: Float!
+    }
+
+    type GoalProbability {
+      goalId: ID!
+      goalName: String!
+      successProbability: Float!
+      expectedShortfall: Float!
+      yearsToAchievement: Int!
+    }
+
+    type YearResult {
+      year: Int!
+      medianValue: Float!
+      percentile10: Float!
+      percentile25: Float!
+      percentile75: Float!
+      percentile90: Float!
+      survivalProbability: Float!
+    }
+
+    type RiskMetrics {
+      valueAtRisk95: Float!
+      conditionalValueAtRisk95: Float!
+      maximumDrawdown: Float!
+      volatility: Float!
+      sharpeRatio: Float!
+      sortinoRatio: Float!
+    }
+
+    type SimulationConnection {
+      edges: [SimulationEdge!]!
+      pageInfo: PageInfo!
+      totalCount: Int!
+    }
+
+    type SimulationEdge {
+      node: Simulation!
+      cursor: String!
+    }
+
+    enum SimulationStatus {
+      QUEUED
+      RUNNING
+      COMPLETED
+      FAILED
+      CANCELLED
+    }
+
+    enum AssetClass {
+      DOMESTIC_STOCKS
+      INTERNATIONAL_STOCKS
+      EMERGING_MARKET_STOCKS
+      GOVERNMENT_BONDS
+      CORPORATE_BONDS
+      HIGH_YIELD_BONDS
+      REAL_ESTATE
+      COMMODITIES
+      CASH
+      ALTERNATIVES
+    }
+
+    enum RebalancingType {
+      CALENDAR
+      THRESHOLD
+      HYBRID
+      NONE
+    }
+
+    type Query {
+      simulation(id: ID!): Simulation
+      simulationResults(simulationId: ID!): SimulationResults
+    }
+
+    type Mutation {
+      runSimulation(input: RunSimulationInput!): RunSimulationPayload!
+      cancelSimulation(simulationId: ID!): Boolean!
+    }
+
+    input RunSimulationInput {
+      parameters: SimulationParametersInput!
+      numSimulations: Int = 10000
+      timeHorizonYears: Int!
+      goals: [GoalInput!]
+      currentPortfolio: PortfolioInput
+      assumptions: JSON
+    }
+
+    input SimulationParametersInput {
+      initialAge: Int!
+      retirementAge: Int!
+      initialSavings: Float!
+      annualContribution: Float!
+      annualIncome: Float!
+      inflationRate: Float
+      marketAssumptions: MarketAssumptionsInput
+      assetAllocation: [AssetAllocationInput!]!
+      rebalancing: RebalancingStrategyInput
+    }
+
+    input MarketAssumptionsInput {
+      stockReturnMean: Float
+      stockReturnStd: Float
+      bondReturnMean: Float
+      bondReturnStd: Float
+      realEstateReturnMean: Float
+      realEstateReturnStd: Float
+      commodityReturnMean: Float
+      commodityReturnStd: Float
+      correlations: CorrelationMatrixInput
+    }
+
+    input CorrelationMatrixInput {
+      stockBond: Float
+      stockRealEstate: Float
+      stockCommodity: Float
+      bondRealEstate: Float
+      bondCommodity: Float
+      realEstateCommodity: Float
+    }
+
+    input AssetAllocationInput {
+      assetClass: AssetClass!
+      targetPercentage: Float!
+      minPercentage: Float
+      maxPercentage: Float
+    }
+
+    input RebalancingStrategyInput {
+      type: RebalancingType!
+      frequencyMonths: Int
+      thresholdPercentage: Float
+      taxAware: Boolean
+    }
+
+    input GoalInput {
+      id: ID
+      name: String!
+      targetAmount: Float!
+      targetDate: String!
+      priority: Int
+      adjustable: Boolean
+    }
+
+    input PortfolioInput {
+      holdings: [HoldingInput!]!
+      totalValue: Float!
+      asOfDate: String!
+    }
+
+    input HoldingInput {
+      assetId: String!
+      symbol: String!
+      name: String!
+      assetClass: AssetClass!
+      shares: Float!
+      price: Float!
+      value: Float!
+      weight: Float!
+    }
+
+    type RunSimulationPayload {
+      simulationId: ID!
+      status: SimulationStatus!
+      startedAt: String!
+      estimatedDurationSeconds: Int!
+    }
+
+  ml-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") @extends {
+      id: ID! @external
+      recommendations(
+        types: [RecommendationType!]
+        limit: Int = 10
+        activeOnly: Boolean = true
+      ): [Recommendation!]!
+      riskProfile: RiskProfile
+      behavioralAnalysis(
+        startDate: String!
+        endDate: String!
+      ): BehavioralAnalysis
+    }
+
+    type Recommendation @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      user: User!
+      type: RecommendationType!
+      title: String!
+      description: String!
+      actionItems: [String!]!
+      priorityScore: Float!
+      confidenceScore: Float!
+      impact: PotentialImpact!
+      tags: [String!]!
+      status: RecommendationStatus!
+      createdAt: String!
+      expiresAt: String
+      metadata: JSON
+    }
+
+    type PotentialImpact {
+      financialImpact: Float!
+      impactDescription: String!
+      timeToImpactMonths: Int!
+      impactLevel: ImpactLevel!
+    }
+
+    type RiskProfile {
+      userId: ID!
+      tolerance: RiskTolerance!
+      capacity: RiskCapacity!
+      computedRiskScore: Float!
+      components: [RiskComponent!]!
+      updatedAt: String!
+    }
+
+    type RiskComponent {
+      componentName: String!
+      weight: Float!
+      score: Float!
+    }
+
+    type BehavioralAnalysis {
+      personality: SpendingPersonality!
+      patterns: [BehaviorPattern!]!
+      anomalies: [BehaviorAnomaly!]!
+      riskBehavior: RiskBehavior!
+      savingsBehavior: SavingsBehavior!
+    }
+
+    type BehaviorPattern {
+      patternType: String!
+      description: String!
+      frequency: Float!
+      impactScore: Float!
+      examples: [String!]!
+    }
+
+    type BehaviorAnomaly {
+      anomalyType: String!
+      description: String!
+      severity: Float!
+      detectedAt: String!
+      recommendations: [String!]!
+    }
+
+    enum RecommendationType {
+      SAVINGS_OPTIMIZATION
+      INVESTMENT_ALLOCATION
+      DEBT_REDUCTION
+      GOAL_ADJUSTMENT
+      RISK_MANAGEMENT
+      TAX_OPTIMIZATION
+      SPENDING_REDUCTION
+    }
+
+    enum RecommendationStatus {
+      ACTIVE
+      ACCEPTED
+      DISMISSED
+      EXPIRED
+    }
+
+    enum RiskTolerance {
+      CONSERVATIVE
+      MODERATE_CONSERVATIVE
+      MODERATE
+      MODERATE_AGGRESSIVE
+      AGGRESSIVE
+    }
+
+    enum RiskCapacity {
+      LOW
+      MODERATE
+      HIGH
+    }
+
+    enum ImpactLevel {
+      LOW
+      MEDIUM
+      HIGH
+      CRITICAL
+    }
+
+    enum SpendingPersonality {
+      SAVER
+      SPENDER
+      BALANCED
+      IMPULSIVE
+    }
+
+    enum RiskBehavior {
+      RISK_AVERSE
+      RISK_NEUTRAL
+      RISK_SEEKING
+    }
+
+    enum SavingsBehavior {
+      CONSISTENT
+      IRREGULAR
+      MINIMAL
+      AGGRESSIVE
+    }
+
+    type Query {
+      recommendation(id: ID!): Recommendation
+      goalPrediction(goalId: ID!): GoalPrediction
+    }
+
+    type Mutation {
+      generateRecommendation(
+        type: RecommendationType!
+        context: JSON
+      ): Recommendation!
+      updateRecommendationFeedback(
+        recommendationId: ID!
+        feedback: RecommendationFeedbackInput!
+      ): Boolean!
+    }
+
+    input RecommendationFeedbackInput {
+      accepted: Boolean!
+      implemented: Boolean!
+      usefulnessRating: Int!
+      feedbackText: String
+    }
+
+    type GoalPrediction {
+      goalId: ID!
+      achievementProbability: Float!
+      predictedAchievementDate: String!
+      requiredMonthlySavings: Float!
+      improvementSuggestions: [String!]!
+      confidence: PredictionConfidence!
+    }
+
+    enum PredictionConfidence {
+      LOW
+      MEDIUM
+      HIGH
+      VERY_HIGH
+    }
+
+  notification-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") @extends {
+      id: ID! @external
+      notifications(
+        types: [NotificationType!]
+        statuses: [NotificationStatus!]
+        limit: Int = 20
+        offset: Int = 0
+      ): NotificationConnection!
+      notificationPreferences: NotificationPreferences
+    }
+
+    type Notification @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      user: User!
+      type: NotificationType!
+      subject: String!
+      content: String!
+      channels: [NotificationChannel!]!
+      priority: NotificationPriority!
+      status: NotificationStatus!
+      createdAt: String!
+      scheduledAt: String
+      sentAt: String
+      deliveredAt: String
+      channelDeliveries: [ChannelDelivery!]!
+      metadata: JSON
+    }
+
+    type ChannelDelivery {
+      channel: NotificationChannel!
+      status: NotificationStatus!
+      externalId: String
+      provider: String!
+      sentAt: String
+      deliveredAt: String
+      openedAt: String
+      clickedAt: String
+      errorMessage: String
+      retryCount: Int!
+    }
+
+    type NotificationConnection {
+      edges: [NotificationEdge!]!
+      pageInfo: PageInfo!
+      totalCount: Int!
+      unreadCount: Int!
+    }
+
+    type NotificationEdge {
+      node: Notification!
+      cursor: String!
+    }
+
+    type NotificationPreferences {
+      userId: ID!
+      channelPreferences: [ChannelPreference!]!
+      typePreferences: [TypePreference!]!
+      quietHours: QuietHours
+      timezone: String!
+      language: String!
+      updatedAt: String!
+    }
+
+    type ChannelPreference {
+      channel: NotificationChannel!
+      enabled: Boolean!
+      contactInfo: String!
+      enabledTypes: [NotificationType!]!
+    }
+
+    type TypePreference {
+      type: NotificationType!
+      enabled: Boolean!
+      preferredChannels: [NotificationChannel!]!
+      frequency: NotificationFrequency!
+    }
+
+    enum NotificationChannel {
+      EMAIL
+      SMS
+      PUSH
+      WEBSOCKET
+      IN_APP
+    }
+
+    enum NotificationType {
+      WELCOME
+      SECURITY_ALERT
+      GOAL_MILESTONE
+      MARKET_ALERT
+      SIMULATION_COMPLETE
+      ACCOUNT_SYNC_ERROR
+      MONTHLY_SUMMARY
+      RECOMMENDATION
+      PAYMENT_REMINDER
+      BUDGET_ALERT
+      TRANSACTION_ALERT
+      PASSWORD_RESET
+      ACCOUNT_LOCKED
+      LOGIN_DETECTED
+      DOCUMENT_READY
+    }
+
+    enum NotificationPriority {
+      LOW
+      NORMAL
+      HIGH
+      URGENT
+    }
+
+    enum NotificationStatus {
+      PENDING
+      QUEUED
+      SENDING
+      SENT
+      DELIVERED
+      OPENED
+      CLICKED
+      FAILED
+      CANCELLED
+      EXPIRED
+    }
+
+    enum NotificationFrequency {
+      IMMEDIATE
+      DAILY
+      WEEKLY
+      MONTHLY
+      NEVER
+    }
+
+    type Query {
+      notification(id: ID!): Notification
+    }
+
+    type Mutation {
+      sendNotification(input: SendNotificationInput!): SendNotificationPayload!
+      markNotificationAsRead(notificationId: ID!): Boolean!
+      updateNotificationPreferences(
+        input: UpdateNotificationPreferencesInput!
+      ): NotificationPreferences!
+    }
+
+    input SendNotificationInput {
+      type: NotificationType!
+      channels: [NotificationChannel!]!
+      templateId: String
+      templateData: JSON
+      priority: NotificationPriority = NORMAL
+      sendAt: String
+      metadata: JSON
+    }
+
+    type SendNotificationPayload {
+      notificationId: ID!
+      channelResults: [ChannelResult!]!
+    }
+
+    type ChannelResult {
+      channel: NotificationChannel!
+      success: Boolean!
+      externalId: String
+      message: String!
+      error: String
+    }
+
+    input UpdateNotificationPreferencesInput {
+      channelPreferences: [ChannelPreferenceInput!]
+      typePreferences: [TypePreferenceInput!]
+      quietHours: QuietHoursInput
+      timezone: String
+      language: String
+    }
+
+    input ChannelPreferenceInput {
+      channel: NotificationChannel!
+      enabled: Boolean!
+      contactInfo: String!
+      enabledTypes: [NotificationType!]!
+    }
+
+    input TypePreferenceInput {
+      type: NotificationType!
+      enabled: Boolean!
+      preferredChannels: [NotificationChannel!]!
+      frequency: NotificationFrequency!
+    }
+
+  document-service.graphql: |
+    extend schema
+      @link(url: "https://specs.apollo.dev/federation/v2.3",
+            import: ["@key", "@shareable", "@provides", "@requires", "@external", "@tag", "@override", "@inaccessible"])
+
+    type User @key(fields: "id") @extends {
+      id: ID! @external
+      documents(
+        types: [DocumentType!]
+        limit: Int = 20
+        offset: Int = 0
+      ): DocumentConnection!
+    }
+
+    type Document @key(fields: "id") {
+      id: ID!
+      userId: ID!
+      user: User!
+      type: DocumentType!
+      templateId: String
+      title: String!
+      filename: String!
+      contentType: String!
+      sizeBytes: Int!
+      pageCount: Int
+      storagePath: String!
+      downloadUrl: String!
+      status: DocumentStatus!
+      createdAt: String!
+      expiresAt: String
+      downloadCount: Int!
+      metadata: JSON
+    }
+
+    type DocumentConnection {
+      edges: [DocumentEdge!]!
+      pageInfo: PageInfo!
+      totalCount: Int!
+    }
+
+    type DocumentEdge {
+      node: Document!
+      cursor: String!
+    }
+
+    type GenerationJob {
+      id: ID!
+      status: GenerationStatus!
+      progressPercentage: Int!
+      currentStep: String!
+      errorMessage: String
+      documentId: ID
+      startedAt: String!
+      completedAt: String
+    }
+
+    enum DocumentType {
+      FINANCIAL_PLAN
+      MONTHLY_REPORT
+      GOAL_SUMMARY
+      SIMULATION_REPORT
+      TAX_SUMMARY
+      INVESTMENT_REPORT
+      CASH_FLOW_ANALYSIS
+      NET_WORTH_STATEMENT
+      BUDGET_REPORT
+      CUSTOM
+    }
+
+    enum DocumentStatus {
+      GENERATING
+      READY
+      EXPIRED
+      ERROR
+      DELETED
+    }
+
+    enum GenerationStatus {
+      QUEUED
+      PROCESSING
+      COMPLETED
+      FAILED
+      CANCELLED
+    }
+
+    type Query {
+      document(id: ID!): Document
+      generationJob(id: ID!): GenerationJob
+    }
+
+    type Mutation {
+      generateDocument(input: GenerateDocumentInput!): GenerateDocumentPayload!
+      generateDocumentAsync(
+        input: GenerateDocumentInput!
+      ): GenerateDocumentAsyncPayload!
+      deleteDocument(documentId: ID!): Boolean!
+    }
+
+    input GenerateDocumentInput {
+      documentType: DocumentType!
+      templateId: String
+      data: JSON!
+      options: DocumentOptionsInput
+      metadata: JSON
+    }
+
+    input DocumentOptionsInput {
+      pageSize: String
+      orientation: String
+      includeCharts: Boolean
+      includeWatermark: Boolean
+      watermarkText: String
+      compressPdf: Boolean
+      language: String
+      currency: String
+      includeAppendix: Boolean
+    }
+
+    type GenerateDocumentPayload {
+      documentId: ID!
+      downloadUrl: String!
+      document: Document!
+    }
+
+    type GenerateDocumentAsyncPayload {
+      generationJobId: ID!
+      status: GenerationStatus!
+      estimatedCompletion: String!
+    }

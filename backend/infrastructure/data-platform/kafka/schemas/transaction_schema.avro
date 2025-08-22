@@ -1,0 +1,172 @@
+{
+  "type": "record",
+  "name": "Transaction",
+  "namespace": "com.financialplanning.streaming",
+  "fields": [
+    {
+      "name": "transaction_id",
+      "type": "string",
+      "doc": "Unique transaction identifier"
+    },
+    {
+      "name": "user_id",
+      "type": "string",
+      "doc": "User identifier"
+    },
+    {
+      "name": "account_id",
+      "type": "string",
+      "doc": "Account identifier"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Transaction timestamp"
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 12,
+        "scale": 2
+      },
+      "doc": "Transaction amount"
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "default": "USD",
+      "doc": "Currency code"
+    },
+    {
+      "name": "transaction_type",
+      "type": {
+        "type": "enum",
+        "name": "TransactionType",
+        "symbols": ["DEBIT", "CREDIT", "TRANSFER", "PAYMENT", "DEPOSIT", "WITHDRAWAL", "FEE"]
+      },
+      "doc": "Type of transaction"
+    },
+    {
+      "name": "category",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Transaction category"
+    },
+    {
+      "name": "subcategory",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Transaction subcategory"
+    },
+    {
+      "name": "merchant_name",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Merchant or payee name"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "doc": "Transaction description"
+    },
+    {
+      "name": "location",
+      "type": ["null", {
+        "type": "record",
+        "name": "Location",
+        "fields": [
+          {"name": "city", "type": ["null", "string"], "default": null},
+          {"name": "state", "type": ["null", "string"], "default": null},
+          {"name": "country", "type": "string", "default": "US"},
+          {"name": "latitude", "type": ["null", "double"], "default": null},
+          {"name": "longitude", "type": ["null", "double"], "default": null}
+        ]
+      }],
+      "default": null,
+      "doc": "Transaction location"
+    },
+    {
+      "name": "payment_method",
+      "type": {
+        "type": "enum",
+        "name": "PaymentMethod",
+        "symbols": ["CARD", "ACH", "WIRE", "CHECK", "CASH", "MOBILE", "ONLINE"]
+      },
+      "doc": "Payment method used"
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "TransactionStatus",
+        "symbols": ["PENDING", "COMPLETED", "FAILED", "CANCELLED", "DISPUTED"]
+      },
+      "default": "PENDING",
+      "doc": "Transaction status"
+    },
+    {
+      "name": "is_recurring",
+      "type": "boolean",
+      "default": false,
+      "doc": "Whether this is a recurring transaction"
+    },
+    {
+      "name": "tags",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": [],
+      "doc": "User-defined tags"
+    },
+    {
+      "name": "fraud_score",
+      "type": ["null", {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 3,
+        "scale": 2
+      }],
+      "default": null,
+      "doc": "Fraud detection score (0.00 to 1.00)"
+    },
+    {
+      "name": "budget_impact",
+      "type": ["null", {
+        "type": "record",
+        "name": "BudgetImpact",
+        "fields": [
+          {"name": "budget_category", "type": "string"},
+          {"name": "remaining_budget", "type": {
+            "type": "bytes",
+            "logicalType": "decimal",
+            "precision": 12,
+            "scale": 2
+          }},
+          {"name": "percentage_used", "type": {
+            "type": "bytes",
+            "logicalType": "decimal",
+            "precision": 5,
+            "scale": 2
+          }}
+        ]
+      }],
+      "default": null,
+      "doc": "Impact on user's budget"
+    },
+    {
+      "name": "source",
+      "type": "string",
+      "doc": "Data source (e.g., plaid, yodlee, manual)"
+    },
+    {
+      "name": "processed_at",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "When the transaction was processed by our system"
+    }
+  ]
+}

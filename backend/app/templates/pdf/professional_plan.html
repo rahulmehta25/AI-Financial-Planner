@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Financial Plan - {{ user.name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.75in;
+            @bottom-right {
+                content: "Page " counter(page) " | Generated " "{{ generated_at }}";
+                font-size: 8px;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 3px solid #2E86AB;
+            padding-bottom: 15px;
+        }
+        
+        .title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2E86AB;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .client-info {
+            font-size: 10px;
+            color: #888;
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #2E86AB;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .metric-box {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 9px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2E86AB;
+        }
+        
+        .chart-container {
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .chart-container img {
+            max-width: 100%;
+            height: auto;
+            max-height: 200px;
+        }
+        
+        .goals-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .goal-item {
+            border-left: 3px solid #2E86AB;
+            padding: 8px 0 8px 12px;
+            margin-bottom: 8px;
+            background-color: #f8f9fa;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .goal-name {
+            font-weight: bold;
+            font-size: 10px;
+            margin-bottom: 3px;
+        }
+        
+        .goal-amount {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+        
+        .progress-bar {
+            background-color: #e9ecef;
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        
+        .progress-fill {
+            background-color: #2E86AB;
+            height: 100%;
+            border-radius: 8px;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            font-size: 8px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .recommendations {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #2E86AB;
+            margin: 15px 0;
+        }
+        
+        .recommendation-item {
+            margin-bottom: 8px;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        
+        .recommendation-title {
+            font-weight: bold;
+            color: #2E86AB;
+        }
+        
+        .ai-narrative {
+            background-color: #fff9e6;
+            border: 1px solid #ffeaa7;
+            padding: 12px;
+            border-radius: 4px;
+            font-style: italic;
+            margin: 10px 0;
+            font-size: 10px;
+        }
+        
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 10px;
+        }
+        
+        .summary-table th,
+        .summary-table td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: left;
+        }
+        
+        .summary-table th {
+            background-color: #2E86AB;
+            color: white;
+            font-weight: bold;
+            font-size: 9px;
+        }
+        
+        .summary-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .disclaimer {
+            font-size: 7px;
+            color: #666;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            line-height: 1.2;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-on-track { background-color: #d4edda; color: #155724; }
+        .status-behind { background-color: #f8d7da; color: #721c24; }
+        .status-completed { background-color: #cce7ff; color: #004085; }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header">
+        <h1 class="title">Comprehensive Financial Plan</h1>
+        <p class="subtitle">Professional Financial Analysis & Recommendations</p>
+        <p class="client-info">
+            Prepared for {{ user.name }} | Age {{ profile.age }} | {{ profile.risk_tolerance }} Risk Profile | Generated {{ generated_at }}
+        </p>
+    </div>
+
+    <!-- Executive Summary Grid -->
+    <div class="content-grid">
+        <!-- Financial Overview -->
+        <div class="section">
+            <h2 class="section-title">Financial Overview</h2>
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-label">Annual Income</div>
+                    <div class="metric-value">${{ "{:,.0f}".format(profile.annual_income) }}</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Net Worth</div>
+                    <div class="metric-value">${{ "{:,.0f}".format(profile.net_worth) }}</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Debt-to-Income</div>
+                    <div class="metric-value">{{ "{:.1%}".format(profile.debt_to_income_ratio) }}</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Risk Tolerance</div>
+                    <div class="metric-value">{{ profile.risk_tolerance }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Asset Allocation Chart -->
+        <div class="section">
+            <h2 class="section-title">Asset Allocation</h2>
+            {% if charts.asset_allocation %}
+            <div class="chart-container">
+                <img src="{{ charts.asset_allocation }}" alt="Asset Allocation Chart">
+            </div>
+            {% else %}
+            <p style="text-align: center; color: #666; font-style: italic;">Asset allocation data not available</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Goals Section -->
+    <div class="section">
+        <h2 class="section-title">Financial Goals Progress</h2>
+        {% if goals %}
+        <div class="goals-grid">
+            {% for goal in goals[:4] %}
+            <div class="goal-item">
+                <div class="goal-name">{{ goal.name }}</div>
+                <div class="goal-amount">${{ "{:,.0f}".format(goal.target_amount) }} by {{ goal.target_date }}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ goal.progress_percentage }}%"></div>
+                </div>
+                <div class="progress-text">
+                    {{ "{:.1f}".format(goal.progress_percentage) }}% complete
+                    <span class="status-badge status-{{ goal.status.replace('_', '-') }}">{{ goal.status.replace('_', ' ').title() }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="text-align: center; color: #666; font-style: italic;">No financial goals defined</p>
+        {% endif %}
+    </div>
+
+    <!-- Net Worth Projection -->
+    {% if charts.net_worth %}
+    <div class="section">
+        <h2 class="section-title">Net Worth Projection</h2>
+        <div class="chart-container">
+            <img src="{{ charts.net_worth }}" alt="Net Worth Projection">
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Key Recommendations -->
+    <div class="section">
+        <h2 class="section-title">Key Recommendations</h2>
+        
+        {% if ai_narrative %}
+        <div class="ai_narrative">
+            <strong>AI Analysis:</strong> {{ ai_narrative[:300] }}{% if ai_narrative|length > 300 %}...{% endif %}
+        </div>
+        {% endif %}
+        
+        {% if recommendations %}
+        <div class="recommendations">
+            {% for rec in recommendations[:3] %}
+            <div class="recommendation-item">
+                <span class="recommendation-title">{{ rec.title }}:</span>
+                {{ rec.description[:150] }}{% if rec.description|length > 150 %}...{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Monte Carlo Analysis -->
+    {% if charts.monte_carlo %}
+    <div class="section">
+        <h2 class="section-title">Portfolio Performance Scenarios</h2>
+        <div class="chart-container">
+            <img src="{{ charts.monte_carlo }}" alt="Monte Carlo Analysis">
+        </div>
+        <p style="font-size: 9px; color: #666; text-align: center; margin-top: 5px;">
+            Simulation shows potential portfolio outcomes with 80% confidence band
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Financial Summary Table -->
+    <div class="section full-width">
+        <h2 class="section-title">Financial Summary</h2>
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Current Value</th>
+                    <th>Target/Goal</th>
+                    <th>Status</th>
+                    <th>Recommendation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Emergency Fund</td>
+                    <td>${{ "{:,.0f}".format(profile.annual_income * 0.5) }}</td>
+                    <td>6 months expenses</td>
+                    <td>{% if profile.annual_income * 0.5 >= profile.annual_income * 0.25 %}✓ On Track{% else %}⚠ Below Target{% endif %}</td>
+                    <td>{% if profile.annual_income * 0.5 < profile.annual_income * 0.25 %}Increase savings{% else %}Maintain current level{% endif %}</td>
+                </tr>
+                <tr>
+                    <td>Retirement Savings</td>
+                    <td>${{ "{:,.0f}".format(profile.annual_income * 0.1) }}</td>
+                    <td>10-15% of income</td>
+                    <td>{% if profile.annual_income * 0.1 >= profile.annual_income * 0.1 %}✓ On Track{% else %}⚠ Below Target{% endif %}</td>
+                    <td>Consider increasing contribution</td>
+                </tr>
+                <tr>
+                    <td>Debt Management</td>
+                    <td>{{ "{:.1%}".format(profile.debt_to_income_ratio) }}</td>
+                    <td>&lt; 36%</td>
+                    <td>{% if profile.debt_to_income_ratio < 0.36 %}✓ Good{% else %}⚠ High{% endif %}</td>
+                    <td>{% if profile.debt_to_income_ratio >= 0.36 %}Focus on debt reduction{% else %}Maintain current level{% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Action Items -->
+    <div class="section full-width">
+        <h2 class="section-title">Next Steps & Action Items</h2>
+        <div class="recommendations">
+            <div class="recommendation-item">
+                <span class="recommendation-title">1. Review & Update:</span>
+                Review goals quarterly and adjust contributions as income changes
+            </div>
+            <div class="recommendation-item">
+                <span class="recommendation-title">2. Emergency Fund:</span>
+                {% if profile.annual_income * 0.5 < profile.annual_income * 0.25 %}
+                Build emergency fund to 6 months of expenses
+                {% else %}
+                Maintain emergency fund at current level
+                {% endif %}
+            </div>
+            <div class="recommendation-item">
+                <span class="recommendation-title">3. Investment Strategy:</span>
+                Consider {{ profile.risk_tolerance.lower() }} investment allocation based on risk profile
+            </div>
+            <div class="recommendation-item">
+                <span class="recommendation-title">4. Professional Review:</span>
+                Schedule annual review with financial advisor for complex strategies
+            </div>
+        </div>
+    </div>
+
+    <!-- Compliance Disclaimer -->
+    <div class="disclaimer">
+        {{ compliance_disclaimer }}
+    </div>
+</body>
+</html>

@@ -1,0 +1,49 @@
+server.name: "financial-planning-kibana"
+server.host: "0.0.0.0"
+server.port: 5601
+
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.requestTimeout: 90000
+elasticsearch.shardTimeout: 30000
+
+# Security settings
+elasticsearch.username: "kibana_system"
+elasticsearch.password: "${KIBANA_PASSWORD}"
+
+# Index patterns
+kibana.defaultAppId: "discover"
+kibana.index: ".kibana"
+
+# UI Settings
+map.includeElasticMapsService: false
+telemetry.enabled: false
+newsfeed.enabled: false
+
+# Logging
+logging.dest: stdout
+logging.quiet: false
+logging.verbose: false
+
+# Monitoring
+monitoring.enabled: true
+monitoring.cluster_uuid: "financial-planning-cluster"
+
+# Advanced settings
+server.maxPayloadBytes: 1048576
+
+# Dashboard configuration
+xpack.canvas.enabled: true
+xpack.infra.enabled: true
+xpack.apm.enabled: true
+xpack.uptime.enabled: true
+
+# Saved objects
+xpack.reporting.enabled: true
+xpack.reporting.kibanaServer.hostname: "kibana"
+
+# Machine Learning
+xpack.ml.enabled: true
+
+# Security
+xpack.security.enabled: true
+xpack.encryptedSavedObjects.encryptionKey: "${KIBANA_ENCRYPTION_KEY}"

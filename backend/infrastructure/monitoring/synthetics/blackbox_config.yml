@@ -1,0 +1,252 @@
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      valid_status_codes: [200]
+      method: GET
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      follow_redirects: true
+      preferred_ip_protocol: "ip4"
+
+  http_post_2xx:
+    prober: http
+    timeout: 15s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: '{}'
+      valid_status_codes: [200, 201, 202]
+
+  # Financial Planning API Health Check
+  financial_api_health:
+    prober: http
+    timeout: 10s
+    http:
+      valid_status_codes: [200]
+      method: GET
+      fail_if_body_not_matches_regexp:
+        - "status.*healthy"
+        - "database.*connected"
+        - "redis.*connected"
+
+  # API Authentication Check
+  api_auth_check:
+    prober: http
+    timeout: 15s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: |
+        {
+          "email": "synthetic-test@example.com",
+          "password": "synthetic-test-password"
+        }
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "access_token"
+        - "user_id"
+
+  # Market Data API Check
+  market_data_check:
+    prober: http
+    timeout: 20s
+    http:
+      method: GET
+      headers:
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "data_freshness_minutes.*[0-9]+"
+        - "provider_status.*active"
+
+  # Database Health Check
+  database_health:
+    prober: http
+    timeout: 15s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "connection_pool_active.*[0-9]+"
+        - "avg_query_time_ms.*[0-9]+"
+      fail_if_body_matches_regexp:
+        - "connection_pool_active.*([89][0-9]|[1-9][0-9][0-9])"  # Fail if > 80% pool usage
+
+  # Redis Cache Health Check
+  cache_health:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "redis_connected.*true"
+        - "cache_hit_rate.*0\.[8-9]"  # Cache hit rate > 80%
+      fail_if_body_matches_regexp:
+        - "memory_usage_percent.*9[0-9]"  # Fail if > 90% memory usage
+
+  # Monte Carlo Simulation Check
+  simulation_check:
+    prober: http
+    timeout: 120s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      body: |
+        {
+          "portfolio_id": "synthetic-test-portfolio",
+          "time_horizon_years": 5,
+          "initial_investment": 5000,
+          "monthly_contribution": 200,
+          "iterations": 500
+        }
+      valid_status_codes: [200, 202]
+      fail_if_body_not_matches_regexp:
+        - "simulation_id"
+        - "expected_value.*[0-9]+"
+
+  # AI Recommendations Check
+  ai_recommendations_check:
+    prober: http
+    timeout: 45s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      body: |
+        {
+          "user_id": "synthetic-test-user",
+          "recommendation_type": "portfolio_rebalance"
+        }
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "recommendations.*\[.*\]"
+        - "confidence_score.*0\.[5-9]"  # Confidence > 50%
+
+  # PDF Generation Check
+  pdf_generation_check:
+    prober: http
+    timeout: 90s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      body: |
+        {
+          "user_id": "synthetic-test-user",
+          "report_type": "financial_plan",
+          "format": "summary"
+        }
+      valid_status_codes: [200, 202]
+      fail_if_body_not_matches_regexp:
+        - "pdf_url"
+        - "file_size_bytes.*[0-9]+"
+
+  # Voice Interface Check
+  voice_interface_check:
+    prober: http
+    timeout: 20s
+    http:
+      method: GET
+      headers:
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "speech_to_text_available.*true"
+        - "text_to_speech_available.*true"
+
+  # Banking Integration Check
+  banking_integration_check:
+    prober: http
+    timeout: 25s
+    http:
+      method: GET
+      headers:
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - "plaid_status.*healthy"
+        - "yodlee_status.*healthy"
+        - "credential_vault_accessible.*true"
+
+  # SSL Certificate Check
+  ssl_cert_check:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false
+
+  # TCP Connection Check
+  tcp_connect:
+    prober: tcp
+    timeout: 10s
+
+  # DNS Check
+  dns_check:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: "your-domain.com"
+      query_type: "A"
+      valid_rcodes:
+        - NOERROR
+      validate_answer_rrs:
+        fail_if_matches_regexp:
+          - ".*127.0.0.1"
+        fail_if_not_matches_regexp:
+          - ".*"
+
+  # ICMP Ping Check  
+  icmp_check:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: "ip4"
+
+  # WebSocket Check (for real-time features)
+  websocket_check:
+    prober: http
+    timeout: 30s
+    http:
+      method: GET
+      headers:
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+        Sec-WebSocket-Version: "13"
+      valid_status_codes: [101]  # Switching Protocols
+
+  # Load Balancer Health Check
+  load_balancer_check:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_header_not_matches:
+        - header: X-Load-Balancer-Status
+          regexp: "healthy"
+
+  # API Rate Limiting Check
+  rate_limit_check:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      headers:
+        Authorization: "Bearer ${SYNTHETIC_API_TOKEN}"
+      valid_status_codes: [200, 429]  # Accept both success and rate limited
+      fail_if_header_not_matches:
+        - header: X-RateLimit-Remaining
+          regexp: "[0-9]+"

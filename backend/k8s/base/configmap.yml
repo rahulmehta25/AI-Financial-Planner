@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: financial-planning-config
+  namespace: financial-planning
+data:
+  # Application Configuration
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  
+  # Server Configuration  
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  WORKERS: "4"
+  
+  # Database Configuration
+  DB_POOL_SIZE: "20"
+  DB_MAX_OVERFLOW: "30"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "3600"
+  
+  # Redis Configuration
+  REDIS_MAX_CONNECTIONS: "100"
+  REDIS_SOCKET_TIMEOUT: "5"
+  REDIS_SOCKET_CONNECT_TIMEOUT: "5"
+  
+  # API Configuration
+  API_V1_STR: "/api/v1"
+  PROJECT_NAME: "Financial Planning API"
+  ALLOWED_HOSTS: "*.financialplanning.com,localhost,127.0.0.1"
+  
+  # Security Configuration
+  ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+  REFRESH_TOKEN_EXPIRE_MINUTES: "10080"
+  ALGORITHM: "HS256"
+  
+  # External Services
+  RATE_LIMIT_PER_MINUTE: "100"
+  RATE_LIMIT_BURST: "200"
+  
+  # Feature Flags
+  ENABLE_VOICE_FEATURES: "true"
+  ENABLE_AI_RECOMMENDATIONS: "true"
+  ENABLE_BLOCKCHAIN_AUDIT: "true"
+  ENABLE_PDF_EXPORT: "true"
+  
+  # Monitoring Configuration
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  ENABLE_TRACING: "true"
+  JAEGER_ENDPOINT: "http://jaeger-collector:14268"
+  
+  # Performance Configuration
+  MAX_REQUEST_SIZE: "10485760"  # 10MB
+  TIMEOUT_SECONDS: "120"
+  KEEPALIVE_TIMEOUT: "5"

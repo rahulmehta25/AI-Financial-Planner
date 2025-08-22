@@ -1,0 +1,102 @@
+# PagerDuty AlertManager Configuration
+global:
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'default'
+  routes:
+  - match:
+      severity: critical
+    receiver: 'pagerduty-critical'
+    group_wait: 0s
+    repeat_interval: 5m
+  - match:
+      severity: warning
+    receiver: 'pagerduty-warning'
+    repeat_interval: 30m
+  - match:
+      component: 'monte_carlo'
+    receiver: 'pagerduty-simulation-team'
+  - match:
+      component: 'market_data'
+    receiver: 'pagerduty-data-team'
+  - match:
+      component: 'ai_recommendations'
+    receiver: 'pagerduty-ml-team'
+
+receivers:
+- name: 'default'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_DEFAULT_SERVICE_KEY}'
+    description: 'Financial Planning Alert: {{ .GroupLabels.alertname }}'
+    severity: '{{ .CommonLabels.severity }}'
+
+- name: 'pagerduty-critical'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_CRITICAL_SERVICE_KEY}'
+    description: 'CRITICAL: {{ .GroupLabels.alertname }} - Financial Planning System'
+    severity: 'critical'
+    details:
+      summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+      description: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+      runbook_url: '{{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}'
+      affected_service: 'Financial Planning API'
+      environment: '{{ .CommonLabels.environment | default "production" }}'
+      instance: '{{ .CommonLabels.instance }}'
+    client: 'Financial Planning Monitoring'
+    client_url: 'https://grafana.your-domain.com'
+
+- name: 'pagerduty-warning'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_WARNING_SERVICE_KEY}'
+    description: 'WARNING: {{ .GroupLabels.alertname }} - Financial Planning System'
+    severity: 'warning'
+    details:
+      summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+      description: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+      runbook_url: '{{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}'
+      affected_service: 'Financial Planning API'
+
+- name: 'pagerduty-simulation-team'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_SIMULATION_SERVICE_KEY}'
+    description: 'Monte Carlo Simulation Issue: {{ .GroupLabels.alertname }}'
+    severity: '{{ .CommonLabels.severity }}'
+    details:
+      team: 'Simulation Engineering'
+      component: 'Monte Carlo Engine'
+      summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+- name: 'pagerduty-data-team'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_DATA_SERVICE_KEY}'
+    description: 'Market Data Issue: {{ .GroupLabels.alertname }}'
+    severity: '{{ .CommonLabels.severity }}'
+    details:
+      team: 'Data Engineering'
+      component: 'Market Data Pipeline'
+      summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+- name: 'pagerduty-ml-team'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_ML_SERVICE_KEY}'
+    description: 'AI Recommendation Issue: {{ .GroupLabels.alertname }}'
+    severity: '{{ .CommonLabels.severity }}'
+    details:
+      team: 'Machine Learning'
+      component: 'AI Recommendation Engine'
+      summary: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+inhibit_rules:
+- source_match:
+    severity: 'critical'
+  target_match:
+    severity: 'warning'
+  equal: ['alertname', 'instance']
+
+templates:
+- '/etc/alertmanager/templates/*.tmpl'

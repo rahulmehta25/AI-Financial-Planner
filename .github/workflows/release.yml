@@ -1,0 +1,516 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+          - standard
+          - hotfix
+          - prerelease
+      create_tag:
+        description: 'Create new tag'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: financial-planning-backend
+  IMAGE_NAME_FRONTEND: financial-planning-frontend
+
+jobs:
+  # Version management and tag creation
+  version-management:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      release_notes: ${{ steps.notes.outputs.release_notes }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install semantic-release tools
+        run: |
+          npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github
+
+      - name: Get current version
+        id: current_version
+        run: |
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "current_version=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Current version: $LATEST_TAG"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current_version }}"
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          
+          # Remove 'v' prefix if present
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          
+          # Split version into components
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+          
+          # Calculate new version based on type
+          case $VERSION_TYPE in
+            "major")
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            "minor")
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            "patch")
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          
+          # Add prerelease suffix if needed
+          if [[ "$RELEASE_TYPE" == "prerelease" ]]; then
+            NEW_VERSION="$NEW_VERSION-rc.1"
+          elif [[ "$RELEASE_TYPE" == "hotfix" ]]; then
+            NEW_VERSION="$NEW_VERSION-hotfix"
+          fi
+          
+          echo "new_version=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: v$NEW_VERSION"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          PREVIOUS_TAG="${{ steps.current_version.outputs.current_version }}"
+          
+          echo "Generating release notes from $PREVIOUS_TAG to $NEW_VERSION"
+          
+          # Generate commit-based release notes
+          RELEASE_NOTES=$(git log ${PREVIOUS_TAG}..HEAD \
+            --pretty=format:"- %s (%h)" \
+            --grep="feat:" --grep="fix:" --grep="perf:" --grep="docs:" \
+            --grep="refactor:" --grep="test:" --grep="chore:" \
+            --regexp-ignore-case)
+          
+          # Categorize commits
+          FEATURES=$(echo "$RELEASE_NOTES" | grep -i "feat:" || true)
+          FIXES=$(echo "$RELEASE_NOTES" | grep -i "fix:" || true)
+          PERFORMANCE=$(echo "$RELEASE_NOTES" | grep -i "perf:" || true)
+          DOCS=$(echo "$RELEASE_NOTES" | grep -i "docs:" || true)
+          REFACTOR=$(echo "$RELEASE_NOTES" | grep -i "refactor:" || true)
+          TESTS=$(echo "$RELEASE_NOTES" | grep -i "test:" || true)
+          CHORES=$(echo "$RELEASE_NOTES" | grep -i "chore:" || true)
+          
+          # Build formatted release notes
+          FORMATTED_NOTES="## What's New in $NEW_VERSION"$'\n\n'
+          
+          if [[ -n "$FEATURES" ]]; then
+            FORMATTED_NOTES+="### ✨ New Features"$'\n'
+            FORMATTED_NOTES+="$FEATURES"$'\n\n'
+          fi
+          
+          if [[ -n "$FIXES" ]]; then
+            FORMATTED_NOTES+="### 🐛 Bug Fixes"$'\n'
+            FORMATTED_NOTES+="$FIXES"$'\n\n'
+          fi
+          
+          if [[ -n "$PERFORMANCE" ]]; then
+            FORMATTED_NOTES+="### ⚡ Performance Improvements"$'\n'
+            FORMATTED_NOTES+="$PERFORMANCE"$'\n\n'
+          fi
+          
+          if [[ -n "$REFACTOR" ]]; then
+            FORMATTED_NOTES+="### 🔧 Code Refactoring"$'\n'
+            FORMATTED_NOTES+="$REFACTOR"$'\n\n'
+          fi
+          
+          if [[ -n "$DOCS" ]]; then
+            FORMATTED_NOTES+="### 📚 Documentation"$'\n'
+            FORMATTED_NOTES+="$DOCS"$'\n\n'
+          fi
+          
+          if [[ -n "$TESTS" ]]; then
+            FORMATTED_NOTES+="### 🧪 Tests"$'\n'
+            FORMATTED_NOTES+="$TESTS"$'\n\n'
+          fi
+          
+          if [[ -n "$CHORES" ]]; then
+            FORMATTED_NOTES+="### 🏠 Maintenance"$'\n'
+            FORMATTED_NOTES+="$CHORES"$'\n\n'
+          fi
+          
+          # Add migration notes if any
+          MIGRATION_FILES=$(git diff --name-only ${PREVIOUS_TAG}..HEAD | grep "migrations\|alembic" || true)
+          if [[ -n "$MIGRATION_FILES" ]]; then
+            FORMATTED_NOTES+="### 🔄 Database Migrations"$'\n'
+            FORMATTED_NOTES+="This release includes database schema changes. Please run migrations before deployment."$'\n\n'
+          fi
+          
+          # Save to file for later use
+          echo "$FORMATTED_NOTES" > release_notes.md
+          
+          # Set output (truncated for GitHub)
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$FORMATTED_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create tag
+        if: github.event.inputs.create_tag == 'true'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a $NEW_VERSION -m "Release $NEW_VERSION"
+          git push origin $NEW_VERSION
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-notes
+          path: release_notes.md
+
+  # Build release artifacts
+  build-release:
+    runs-on: ubuntu-latest
+    needs: version-management
+    if: always() && (github.event_name == 'push' || needs.version-management.result == 'success')
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="${{ needs.version-management.outputs.new_version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend release image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.optimized
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          labels: |
+            org.opencontainers.image.title=Financial Planning Backend
+            org.opencontainers.image.description=AI-driven financial planning backend service
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push frontend release image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+          labels: |
+            org.opencontainers.image.title=Financial Planning Frontend
+            org.opencontainers.image.description=AI-driven financial planning frontend application
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Sign container images
+        run: |
+          # Install cosign for image signing
+          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+          sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+          sudo chmod +x /usr/local/bin/cosign
+          
+          # Sign images
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.version.outputs.version }}
+          
+          cosign sign --yes \
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.version.outputs.version }}
+
+      - name: Generate SBOM
+        run: |
+          # Install syft for SBOM generation
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          
+          # Generate SBOMs
+          syft ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.version.outputs.version }} \
+            -o spdx-json=backend-sbom.spdx.json
+          
+          syft ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.version.outputs.version }} \
+            -o spdx-json=frontend-sbom.spdx.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v3
+        with:
+          name: sboms-${{ steps.version.outputs.version }}
+          path: |
+            backend-sbom.spdx.json
+            frontend-sbom.spdx.json
+
+  # Create GitHub release
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [version-management, build-release]
+    if: always() && (github.event_name == 'push' || needs.version-management.result == 'success')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version and notes
+        id: release_info
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            # Generate release notes for tag push
+            PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [[ -n "$PREVIOUS_TAG" ]]; then
+              RELEASE_NOTES=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)")
+            else
+              RELEASE_NOTES="Initial release"
+            fi
+          else
+            VERSION="${{ needs.version-management.outputs.new_version }}"
+            RELEASE_NOTES="${{ needs.version-management.outputs.release_notes }}"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download release artifacts
+        if: needs.build-release.result == 'success'
+        uses: actions/download-artifact@v3
+        with:
+          name: sboms-${{ steps.release_info.outputs.version }}
+
+      - name: Create release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.release_info.outputs.version }}
+          release_name: Release ${{ steps.release_info.outputs.version }}
+          body: ${{ steps.release_info.outputs.release_notes }}
+          draft: false
+          prerelease: ${{ contains(steps.release_info.outputs.version, 'rc') || contains(steps.release_info.outputs.version, 'beta') || contains(steps.release_info.outputs.version, 'alpha') }}
+
+      - name: Upload SBOM assets
+        if: needs.build-release.result == 'success'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./backend-sbom.spdx.json
+          asset_name: backend-sbom.spdx.json
+          asset_content_type: application/json
+
+      - name: Upload frontend SBOM
+        if: needs.build-release.result == 'success'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./frontend-sbom.spdx.json
+          asset_name: frontend-sbom.spdx.json
+          asset_content_type: application/json
+
+  # Deploy to staging for validation
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: |
+      always() && 
+      needs.create-release.result == 'success' &&
+      !contains(github.ref, 'hotfix')
+    environment: staging
+
+    steps:
+      - name: Trigger staging deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const version = context.ref.replace('refs/tags/', '');
+            
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cd.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'staging',
+                skip_tests: 'false'
+              }
+            });
+
+  # Production deployment approval
+  production-deployment:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: |
+      always() && 
+      needs.deploy-staging.result == 'success' &&
+      !contains(github.ref, 'rc') &&
+      !contains(github.ref, 'beta') &&
+      !contains(github.ref, 'alpha')
+    environment: production
+
+    steps:
+      - name: Manual approval checkpoint
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ secrets.PRODUCTION_APPROVERS }}
+          minimum-approvals: 2
+          issue-title: "Production Deployment Approval: ${{ github.ref }}"
+          issue-body: |
+            **Release Version:** ${{ github.ref }}
+            **Staging Deployment:** ✅ Successful
+            **Author:** ${{ github.actor }}
+            
+            Please review the staging deployment and approve for production deployment.
+            
+            **Staging URL:** https://staging.financial-planning.com
+            **Release Notes:** [View Release](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})
+
+      - name: Trigger production deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cd.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'production',
+                skip_tests: 'false'
+              }
+            });
+
+  # Post-release cleanup and notifications
+  post-release:
+    runs-on: ubuntu-latest
+    needs: [create-release, deploy-staging, production-deployment]
+    if: always()
+
+    steps:
+      - name: Update project documentation
+        run: |
+          echo "Release ${{ github.ref }} completed"
+          # Here you could update changelogs, documentation, etc.
+
+      - name: Notify stakeholders
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: custom
+          custom_payload: |
+            {
+              attachments: [{
+                color: '${{ needs.create-release.result == "success" && "good" || "danger" }}',
+                blocks: [{
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*Financial Planning System Release*\n*Version:* ${{ github.ref_name }}\n*Status:* ${{ needs.create-release.result == "success" && "✅ Released" || "❌ Failed" }}\n*Staging:* ${{ needs.deploy-staging.result == "success" && "✅ Deployed" || "⏳ Pending" }}\n*Production:* ${{ needs.production-deployment.result == "success" && "✅ Deployed" || "⏳ Pending" }}\n*Release Notes:* <${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}|View Release>`
+                  }
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Create deployment summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Status:** ${{ needs.create-release.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Staging Deployment:** ${{ needs.deploy-staging.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Production Deployment:** ${{ needs.production-deployment.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Container Images:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: \`${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: \`${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY

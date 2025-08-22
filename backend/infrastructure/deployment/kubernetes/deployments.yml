@@ -1,0 +1,792 @@
+# Kubernetes Deployments Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: financial-planning
+  labels:
+    app: user-service
+    version: v1
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: user-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: user-service
+        version: v1
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9091"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-high
+      containers:
+      - name: user-service
+        image: financial-planning/user-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8002
+          name: http
+        - containerPort: 50052
+          name: grpc
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "user-service"
+        - name: SERVICE_PORT
+          value: "8002"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: host
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "financial_planning"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: user-service-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: user-service-password
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret-key
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: encryption-key
+              key: key
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8002
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: user-service
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banking-service
+  namespace: financial-planning
+  labels:
+    app: banking-service
+    version: v1
+    tier: backend
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: banking-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: banking-service
+        version: v1
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9092"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-critical
+      containers:
+      - name: banking-service
+        image: financial-planning/banking-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8003
+          name: http
+        - containerPort: 50053
+          name: grpc
+        - containerPort: 9092
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "banking-service"
+        - name: SERVICE_PORT
+          value: "8003"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: host
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: banking-service-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: banking-service-password
+        - name: PLAID_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: plaid-credentials
+              key: client-id
+        - name: PLAID_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: plaid-credentials
+              key: secret
+        - name: PLAID_ENV
+          value: "production"
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: encryption-key
+              key: key
+        resources:
+          requests:
+            cpu: 400m
+            memory: 512Mi
+          limits:
+            cpu: 800m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: banking-service
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulation-service
+  namespace: financial-planning
+  labels:
+    app: simulation-service
+    version: v1
+    tier: compute
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: simulation-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: simulation-service
+        version: v1
+        tier: compute
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-high
+      containers:
+      - name: simulation-service
+        image: financial-planning/simulation-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8001
+          name: http
+        - containerPort: 50051
+          name: grpc
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "simulation-service"
+        - name: SERVICE_PORT
+          value: "8001"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: cuda
+          mountPath: /usr/local/cuda
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: cuda
+        hostPath:
+          path: /usr/local/cuda
+      nodeSelector:
+        accelerator: nvidia-tesla-v100
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-service
+  namespace: financial-planning
+  labels:
+    app: ml-service
+    version: v1
+    tier: ml
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ml-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: ml-service
+        version: v1
+        tier: ml
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9093"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-high
+      containers:
+      - name: ml-service
+        image: financial-planning/ml-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8004
+          name: http
+        - containerPort: 50054
+          name: grpc
+        - containerPort: 9093
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "ml-service"
+        - name: SERVICE_PORT
+          value: "8004"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow:5000"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: models
+          mountPath: /app/models
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: models
+        persistentVolumeClaim:
+          claimName: ml-models-pvc
+      nodeSelector:
+        ml-workload: "true"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: financial-planning
+  labels:
+    app: notification-service
+    version: v1
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: notification-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: notification-service
+        version: v1
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9094"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-normal
+      containers:
+      - name: notification-service
+        image: financial-planning/notification-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8005
+          name: http
+        - containerPort: 8085
+          name: websocket
+        - containerPort: 50055
+          name: grpc
+        - containerPort: 9094
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "notification-service"
+        - name: SERVICE_PORT
+          value: "8005"
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: sendgrid-api-key
+        - name: TWILIO_ACCOUNT_SID
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: twilio-account-sid
+        - name: TWILIO_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: twilio-auth-token
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-service
+  namespace: financial-planning
+  labels:
+    app: document-service
+    version: v1
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: document-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: document-service
+        version: v1
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9095"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-normal
+      containers:
+      - name: document-service
+        image: financial-planning/document-service:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8006
+          name: http
+        - containerPort: 50056
+          name: grpc
+        - containerPort: 9095
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "document-service"
+        - name: SERVICE_PORT
+          value: "8006"
+        - name: S3_BUCKET
+          value: "financial-planning-documents"
+        - name: AWS_REGION
+          value: "us-east-1"
+        resources:
+          requests:
+            cpu: 400m
+            memory: 512Mi
+          limits:
+            cpu: 800m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8006
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8006
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: fonts
+          mountPath: /app/fonts
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 5Gi
+      - name: logs
+        emptyDir: {}
+      - name: fonts
+        configMap:
+          name: document-fonts
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+  namespace: financial-planning
+  labels:
+    app: graphql-gateway
+    version: v1
+    tier: gateway
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: graphql-gateway
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: graphql-gateway
+        version: v1
+        tier: gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9096"
+    spec:
+      serviceAccountName: financial-planning-sa
+      priorityClassName: financial-planning-critical
+      containers:
+      - name: graphql-gateway
+        image: financial-planning/graphql-gateway:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 4000
+          name: http
+        - containerPort: 9096
+          name: metrics
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "4000"
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret-key
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: graphql-gateway
+              topologyKey: kubernetes.io/hostname

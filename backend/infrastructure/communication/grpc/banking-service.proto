@@ -1,0 +1,340 @@
+// Banking Service gRPC Definition
+syntax = "proto3";
+
+package financial_planning.banking.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/financial-planning/proto/banking/v1";
+
+// Banking Service for account connections and transaction management
+service BankingService {
+  // Account connection management
+  rpc ConnectAccount(ConnectAccountRequest) returns (ConnectAccountResponse);
+  rpc DisconnectAccount(DisconnectAccountRequest) returns (google.protobuf.Empty);
+  rpc GetAccounts(GetAccountsRequest) returns (GetAccountsResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  rpc SyncAccount(SyncAccountRequest) returns (SyncAccountResponse);
+  
+  // Transaction operations
+  rpc GetTransactions(GetTransactionsRequest) returns (GetTransactionsResponse);
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
+  rpc CategorizeTransaction(CategorizeTransactionRequest) returns (CategorizeTransactionResponse);
+  
+  // Balance and cash flow
+  rpc GetBalances(GetBalancesRequest) returns (GetBalancesResponse);
+  rpc GetCashFlow(GetCashFlowRequest) returns (GetCashFlowResponse);
+  rpc GetSpendingPattern(GetSpendingPatternRequest) returns (GetSpendingPatternResponse);
+  
+  // Webhooks
+  rpc ProcessWebhook(ProcessWebhookRequest) returns (ProcessWebhookResponse);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Account connection messages
+message ConnectAccountRequest {
+  string user_id = 1;
+  string provider = 2; // plaid, yodlee
+  string public_token = 3;
+  string institution_id = 4;
+  map<string, string> metadata = 5;
+}
+
+message ConnectAccountResponse {
+  string connection_id = 1;
+  repeated BankAccount accounts = 2;
+}
+
+message DisconnectAccountRequest {
+  string user_id = 1;
+  string account_id = 2;
+}
+
+message GetAccountsRequest {
+  string user_id = 1;
+  AccountStatus status = 2;
+}
+
+message GetAccountsResponse {
+  repeated BankAccount accounts = 1;
+}
+
+message GetAccountRequest {
+  string user_id = 1;
+  string account_id = 2;
+}
+
+message GetAccountResponse {
+  BankAccount account = 1;
+}
+
+message SyncAccountRequest {
+  string user_id = 1;
+  string account_id = 2;
+  bool force_sync = 3;
+}
+
+message SyncAccountResponse {
+  string sync_id = 1;
+  SyncStatus status = 2;
+  int32 transactions_added = 3;
+  int32 transactions_updated = 4;
+  google.protobuf.Timestamp last_sync_at = 5;
+}
+
+// Transaction messages
+message GetTransactionsRequest {
+  string user_id = 1;
+  string account_id = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  repeated string categories = 5;
+  int32 limit = 6;
+  int32 offset = 7;
+}
+
+message GetTransactionsResponse {
+  repeated Transaction transactions = 1;
+  int32 total_count = 2;
+}
+
+message GetTransactionRequest {
+  string user_id = 1;
+  string transaction_id = 2;
+}
+
+message GetTransactionResponse {
+  Transaction transaction = 1;
+}
+
+message CategorizeTransactionRequest {
+  string user_id = 1;
+  string transaction_id = 2;
+  string category = 3;
+  string subcategory = 4;
+}
+
+message CategorizeTransactionResponse {
+  Transaction transaction = 1;
+}
+
+// Balance and cash flow messages
+message GetBalancesRequest {
+  string user_id = 1;
+  repeated string account_ids = 2;
+}
+
+message GetBalancesResponse {
+  repeated AccountBalance balances = 1;
+  double total_assets = 2;
+  double total_liabilities = 3;
+  double net_worth = 4;
+}
+
+message GetCashFlowRequest {
+  string user_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+  string period = 4; // monthly, weekly, daily
+}
+
+message GetCashFlowResponse {
+  repeated CashFlowPeriod periods = 1;
+  double total_income = 2;
+  double total_expenses = 3;
+  double net_cash_flow = 4;
+}
+
+message GetSpendingPatternRequest {
+  string user_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+  string group_by = 4; // category, merchant, month
+}
+
+message GetSpendingPatternResponse {
+  repeated SpendingCategory categories = 1;
+  repeated SpendingTrend trends = 2;
+  SpendingInsights insights = 3;
+}
+
+// Webhook messages
+message ProcessWebhookRequest {
+  string provider = 1;
+  string webhook_type = 2;
+  bytes payload = 3;
+  map<string, string> headers = 4;
+}
+
+message ProcessWebhookResponse {
+  bool processed = 1;
+  string message = 2;
+}
+
+// Health check
+message HealthResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  map<string, string> dependencies = 3;
+}
+
+// Data models
+message BankAccount {
+  string id = 1;
+  string user_id = 2;
+  string external_id = 3;
+  string provider = 4;
+  string institution_id = 5;
+  string institution_name = 6;
+  string name = 7;
+  string official_name = 8;
+  AccountType type = 9;
+  AccountSubtype subtype = 10;
+  string mask = 11;
+  string currency = 12;
+  AccountBalance balance = 13;
+  AccountStatus status = 14;
+  google.protobuf.Timestamp last_sync_at = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message AccountBalance {
+  string account_id = 1;
+  double current = 2;
+  double available = 3;
+  string currency = 4;
+  google.protobuf.Timestamp as_of = 5;
+}
+
+message Transaction {
+  string id = 1;
+  string user_id = 2;
+  string account_id = 3;
+  string external_id = 4;
+  string provider = 5;
+  double amount = 6;
+  string currency = 7;
+  string description = 8;
+  string merchant_name = 9;
+  repeated string categories = 10;
+  string category = 11;
+  string subcategory = 12;
+  google.protobuf.Timestamp date = 13;
+  google.protobuf.Timestamp authorized_date = 14;
+  TransactionType type = 15;
+  PaymentChannel payment_channel = 16;
+  bool pending = 17;
+  Location location = 18;
+  google.protobuf.Timestamp created_at = 19;
+  google.protobuf.Timestamp updated_at = 20;
+}
+
+message CashFlowPeriod {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  double income = 3;
+  double expenses = 4;
+  double net_flow = 5;
+  repeated CategorySpending category_breakdown = 6;
+}
+
+message SpendingCategory {
+  string category = 1;
+  string subcategory = 2;
+  double amount = 3;
+  double percentage = 4;
+  int32 transaction_count = 5;
+}
+
+message SpendingTrend {
+  string period = 1;
+  double amount = 2;
+  double change_percentage = 3;
+  google.protobuf.Timestamp date = 4;
+}
+
+message SpendingInsights {
+  repeated string top_merchants = 1;
+  repeated string largest_expenses = 2;
+  string highest_spending_day = 3;
+  double average_daily_spending = 4;
+  repeated CategoryTrend category_trends = 5;
+}
+
+message CategorySpending {
+  string category = 1;
+  double amount = 2;
+  int32 count = 3;
+}
+
+message CategoryTrend {
+  string category = 1;
+  double current_period = 2;
+  double previous_period = 3;
+  double change_percentage = 4;
+}
+
+message Location {
+  string address = 1;
+  string city = 2;
+  string region = 3;
+  string postal_code = 4;
+  string country = 5;
+  double lat = 6;
+  double lon = 7;
+}
+
+// Enums
+enum AccountType {
+  ACCOUNT_TYPE_UNSPECIFIED = 0;
+  ACCOUNT_TYPE_DEPOSITORY = 1;
+  ACCOUNT_TYPE_CREDIT = 2;
+  ACCOUNT_TYPE_LOAN = 3;
+  ACCOUNT_TYPE_INVESTMENT = 4;
+  ACCOUNT_TYPE_OTHER = 5;
+}
+
+enum AccountSubtype {
+  ACCOUNT_SUBTYPE_UNSPECIFIED = 0;
+  ACCOUNT_SUBTYPE_CHECKING = 1;
+  ACCOUNT_SUBTYPE_SAVINGS = 2;
+  ACCOUNT_SUBTYPE_CREDIT_CARD = 3;
+  ACCOUNT_SUBTYPE_MORTGAGE = 4;
+  ACCOUNT_SUBTYPE_AUTO_LOAN = 5;
+  ACCOUNT_SUBTYPE_STUDENT_LOAN = 6;
+  ACCOUNT_SUBTYPE_INVESTMENT = 7;
+}
+
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_ACTIVE = 1;
+  ACCOUNT_STATUS_INACTIVE = 2;
+  ACCOUNT_STATUS_ERROR = 3;
+  ACCOUNT_STATUS_DISCONNECTED = 4;
+}
+
+enum SyncStatus {
+  SYNC_STATUS_UNSPECIFIED = 0;
+  SYNC_STATUS_PENDING = 1;
+  SYNC_STATUS_IN_PROGRESS = 2;
+  SYNC_STATUS_COMPLETED = 3;
+  SYNC_STATUS_FAILED = 4;
+}
+
+enum TransactionType {
+  TRANSACTION_TYPE_UNSPECIFIED = 0;
+  TRANSACTION_TYPE_DEBIT = 1;
+  TRANSACTION_TYPE_CREDIT = 2;
+}
+
+enum PaymentChannel {
+  PAYMENT_CHANNEL_UNSPECIFIED = 0;
+  PAYMENT_CHANNEL_ONLINE = 1;
+  PAYMENT_CHANNEL_IN_STORE = 2;
+  PAYMENT_CHANNEL_ATM = 3;
+  PAYMENT_CHANNEL_OTHER = 4;
+}

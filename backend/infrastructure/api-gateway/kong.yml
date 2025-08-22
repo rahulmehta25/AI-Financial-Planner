@@ -1,0 +1,450 @@
+# Kong Gateway Configuration for Financial Planning Platform
+_format_version: "3.0"
+_transform: true
+
+# Services - Backend microservices
+services:
+  - name: simulation-service
+    url: http://simulation-service:8001
+    protocol: http
+    host: simulation-service
+    port: 8001
+    path: /
+    connect_timeout: 60000
+    write_timeout: 300000
+    read_timeout: 300000
+    retries: 3
+    
+  - name: user-service
+    url: http://user-service:8002
+    protocol: http
+    host: user-service
+    port: 8002
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    
+  - name: banking-service
+    url: http://banking-service:8003
+    protocol: http
+    host: banking-service
+    port: 8003
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    
+  - name: ml-service
+    url: http://ml-service:8004
+    protocol: http
+    host: ml-service
+    port: 8004
+    path: /
+    connect_timeout: 60000
+    write_timeout: 120000
+    read_timeout: 120000
+    retries: 3
+    
+  - name: notification-service
+    url: http://notification-service:8005
+    protocol: http
+    host: notification-service
+    port: 8005
+    path: /
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+    
+  - name: document-service
+    url: http://document-service:8006
+    protocol: http
+    host: document-service
+    port: 8006
+    path: /
+    connect_timeout: 60000
+    write_timeout: 180000
+    read_timeout: 180000
+    retries: 3
+
+# Routes - API endpoints
+routes:
+  # Simulation Service Routes
+  - name: monte-carlo-simulations
+    service: simulation-service
+    paths:
+      - /api/v1/simulations
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    preserve_host: false
+    
+  - name: simulation-results
+    service: simulation-service
+    paths:
+      - /api/v1/simulations/results
+    methods:
+      - GET
+    strip_path: false
+    
+  # User Service Routes
+  - name: user-auth
+    service: user-service
+    paths:
+      - /api/v1/auth
+    methods:
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    
+  - name: user-profiles
+    service: user-service
+    paths:
+      - /api/v1/users
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    strip_path: false
+    
+  # Banking Service Routes
+  - name: bank-connections
+    service: banking-service
+    paths:
+      - /api/v1/banking/connections
+    methods:
+      - GET
+      - POST
+      - DELETE
+    strip_path: false
+    
+  - name: bank-accounts
+    service: banking-service
+    paths:
+      - /api/v1/banking/accounts
+    methods:
+      - GET
+    strip_path: false
+    
+  - name: transactions
+    service: banking-service
+    paths:
+      - /api/v1/banking/transactions
+    methods:
+      - GET
+    strip_path: false
+    
+  # ML Service Routes
+  - name: recommendations
+    service: ml-service
+    paths:
+      - /api/v1/ml/recommendations
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    
+  - name: risk-analysis
+    service: ml-service
+    paths:
+      - /api/v1/ml/risk-analysis
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    
+  # Notification Service Routes
+  - name: notifications
+    service: notification-service
+    paths:
+      - /api/v1/notifications
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    
+  # Document Service Routes
+  - name: pdf-generation
+    service: document-service
+    paths:
+      - /api/v1/documents/pdf
+    methods:
+      - POST
+      - GET
+    strip_path: false
+
+# Plugins - Security, rate limiting, logging
+plugins:
+  # Global CORS Plugin
+  - name: cors
+    config:
+      origins:
+        - "https://financial-planning.app"
+        - "http://localhost:3000"
+        - "http://localhost:8080"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Authorization
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - X-Auth-Token
+        - X-Request-ID
+        - X-User-ID
+      exposed_headers:
+        - X-Auth-Token
+        - X-Request-ID
+      credentials: true
+      max_age: 3600
+      
+  # Global Request ID Plugin
+  - name: request-id
+    config:
+      header_name: X-Request-ID
+      echo_downstream: true
+      
+  # Global Prometheus Metrics
+  - name: prometheus
+    config:
+      per_consumer: true
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+
+# Route-specific plugins
+route_plugins:
+  # Authentication for protected routes
+  - route: user-profiles
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+          
+  - route: bank-connections
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 60
+          hour: 1000
+          day: 10000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+          hide_client_headers: false
+          
+  - route: bank-accounts
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 120
+          hour: 2000
+          day: 20000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+          
+  - route: transactions
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 180
+          hour: 3000
+          day: 30000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+          
+  # ML Service rate limiting (higher limits for ML operations)
+  - route: recommendations
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 30
+          hour: 500
+          day: 5000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+          
+  - route: risk-analysis
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 20
+          hour: 300
+          day: 3000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+          
+  # Simulation service with circuit breaker
+  - route: monte-carlo-simulations
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 10
+          hour: 100
+          day: 1000
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+      - name: proxy-cache
+        config:
+          request_method:
+            - GET
+          response_code:
+            - 200
+          content_type:
+            - application/json
+          cache_ttl: 300
+          strategy: memory
+          
+  # Document service with file size limits
+  - route: pdf-generation
+    plugins:
+      - name: jwt
+        config:
+          secret_is_base64: false
+          key_claim_name: iss
+          algorithm: HS256
+      - name: rate-limiting
+        config:
+          minute: 5
+          hour: 50
+          day: 500
+          policy: redis
+          redis_host: redis
+          redis_port: 6379
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 10
+          size_unit: megabytes
+
+# Consumer groups for API key management
+consumers:
+  - username: financial-planning-web
+    custom_id: web-client-001
+    
+  - username: financial-planning-mobile
+    custom_id: mobile-client-001
+    
+  - username: financial-planning-admin
+    custom_id: admin-client-001
+
+# API Keys for different client types
+consumer_plugins:
+  - consumer: financial-planning-web
+    plugins:
+      - name: key-auth
+        config:
+          key_names:
+            - X-API-Key
+          key_in_body: false
+          key_in_header: true
+          key_in_query: false
+          hide_credentials: true
+          
+  - consumer: financial-planning-mobile
+    plugins:
+      - name: key-auth
+        config:
+          key_names:
+            - X-API-Key
+          key_in_body: false
+          key_in_header: true
+          key_in_query: false
+          hide_credentials: true
+          
+  - consumer: financial-planning-admin
+    plugins:
+      - name: key-auth
+        config:
+          key_names:
+            - X-API-Key
+          key_in_body: false
+          key_in_header: true
+          key_in_query: false
+          hide_credentials: true
+
+# Upstream health checks
+upstreams:
+  - name: simulation-service-upstream
+    algorithm: round-robin
+    hash_on: none
+    healthchecks:
+      active:
+        type: http
+        http_path: /health
+        healthy:
+          interval: 30
+          successes: 2
+        unhealthy:
+          interval: 30
+          tcp_failures: 3
+          http_failures: 3
+    targets:
+      - target: simulation-service:8001
+        weight: 100
+        
+  - name: user-service-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        type: http
+        http_path: /health
+        healthy:
+          interval: 30
+          successes: 2
+        unhealthy:
+          interval: 30
+          tcp_failures: 3
+          http_failures: 3
+    targets:
+      - target: user-service:8002
+        weight: 100

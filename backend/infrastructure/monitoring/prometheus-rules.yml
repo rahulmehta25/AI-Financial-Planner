@@ -1,0 +1,484 @@
+# Prometheus Alerting Rules for Financial Planning System
+# These rules define when alerts should be triggered based on metrics
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: financial-planning-alerts
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  
+  # Application Performance Alerts
+  - name: financial-planning.performance
+    interval: 30s
+    rules:
+    
+    # High Error Rate
+    - alert: HighErrorRate
+      expr: |
+        (
+          rate(http_requests_total{service="financial-planning",code=~"5.."}[5m]) /
+          rate(http_requests_total{service="financial-planning"}[5m])
+        ) * 100 > 5
+      for: 2m
+      labels:
+        severity: critical
+        component: application
+        runbook_url: "https://docs.financial-planning.com/runbooks/high-error-rate"
+      annotations:
+        summary: "High error rate detected in Financial Planning API"
+        description: "Error rate is {{ $value }}% which is above the 5% threshold for more than 2 minutes"
+        impact: "Users may experience failures when using the application"
+        action: "Check application logs and recent deployments"
+    
+    # High Response Time
+    - alert: HighResponseTime
+      expr: |
+        histogram_quantile(0.95,
+          rate(http_request_duration_seconds_bucket{service="financial-planning"}[5m])
+        ) > 2
+      for: 5m
+      labels:
+        severity: warning
+        component: application
+        runbook_url: "https://docs.financial-planning.com/runbooks/high-response-time"
+      annotations:
+        summary: "High response time in Financial Planning API"
+        description: "95th percentile response time is {{ $value }}s which is above 2s threshold"
+        impact: "Users may experience slow application performance"
+        action: "Check resource utilization and database performance"
+    
+    # Very High Response Time (Critical)
+    - alert: VeryHighResponseTime
+      expr: |
+        histogram_quantile(0.95,
+          rate(http_request_duration_seconds_bucket{service="financial-planning"}[5m])
+        ) > 5
+      for: 2m
+      labels:
+        severity: critical
+        component: application
+        runbook_url: "https://docs.financial-planning.com/runbooks/very-high-response-time"
+      annotations:
+        summary: "Very high response time in Financial Planning API"
+        description: "95th percentile response time is {{ $value }}s which is critically high"
+        impact: "Application is nearly unusable for users"
+        action: "Immediate investigation required - check for resource exhaustion or external service issues"
+    
+    # Low Throughput
+    - alert: LowThroughput
+      expr: |
+        rate(http_requests_total{service="financial-planning"}[5m]) < 1
+      for: 10m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "Low request throughput"
+        description: "Request rate is {{ $value }} req/s, which is unusually low"
+        impact: "May indicate service discovery issues or user access problems"
+    
+    # Database Connection Pool Exhaustion
+    - alert: DatabaseConnectionPoolHigh
+      expr: |
+        (
+          sqlalchemy_pool_checked_out_connections /
+          sqlalchemy_pool_size
+        ) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database connection pool usage is high"
+        description: "Connection pool usage is {{ $value }}% of total pool size"
+        impact: "New requests may be delayed waiting for database connections"
+        action: "Check for long-running queries or increase pool size"
+
+  # Infrastructure Alerts
+  - name: financial-planning.infrastructure
+    interval: 30s
+    rules:
+    
+    # Pod Not Ready
+    - alert: PodNotReady
+      expr: |
+        kube_pod_status_ready{condition="false",namespace="financial-planning-production"} == 1
+      for: 5m
+      labels:
+        severity: critical
+        component: kubernetes
+      annotations:
+        summary: "Pod {{ $labels.pod }} is not ready"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for more than 5 minutes"
+        impact: "Reduced application capacity"
+        action: "Check pod logs and events"
+    
+    # High CPU Usage
+    - alert: HighCPUUsage
+      expr: |
+        (
+          rate(container_cpu_usage_seconds_total{namespace="financial-planning-production",container="financial-planning"}[5m]) /
+          container_spec_cpu_quota{namespace="financial-planning-production",container="financial-planning"} *
+          container_spec_cpu_period{namespace="financial-planning-production",container="financial-planning"}
+        ) * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "High CPU usage in pod {{ $labels.pod }}"
+        description: "CPU usage is {{ $value }}% for pod {{ $labels.pod }}"
+        impact: "Application performance may be degraded"
+        action: "Consider scaling up or optimizing application code"
+    
+    # High Memory Usage
+    - alert: HighMemoryUsage
+      expr: |
+        (
+          container_memory_usage_bytes{namespace="financial-planning-production",container="financial-planning"} /
+          container_spec_memory_limit_bytes{namespace="financial-planning-production",container="financial-planning"}
+        ) * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "High memory usage in pod {{ $labels.pod }}"
+        description: "Memory usage is {{ $value }}% for pod {{ $labels.pod }}"
+        impact: "Pod may be killed due to OOM"
+        action: "Check for memory leaks or increase memory limits"
+    
+    # Pod Restart High
+    - alert: PodRestartHigh
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="financial-planning-production"}[1h]) > 3
+      for: 0m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Pod {{ $labels.pod }} is restarting frequently"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+        impact: "Application instability"
+        action: "Check pod logs for crash reasons"
+    
+    # Persistent Volume Usage High
+    - alert: PVUsageHigh
+      expr: |
+        (
+          kubelet_volume_stats_used_bytes /
+          kubelet_volume_stats_capacity_bytes
+        ) * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+        component: storage
+      annotations:
+        summary: "Persistent volume usage is high"
+        description: "PV {{ $labels.persistentvolumeclaim }} usage is {{ $value }}%"
+        impact: "Storage may become full"
+        action: "Clean up old data or expand volume"
+
+  # Database Alerts
+  - name: financial-planning.database
+    interval: 30s
+    rules:
+    
+    # Database Down
+    - alert: DatabaseDown
+      expr: |
+        up{job="postgresql-exporter"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: database
+        runbook_url: "https://docs.financial-planning.com/runbooks/database-down"
+      annotations:
+        summary: "PostgreSQL database is down"
+        description: "PostgreSQL database has been down for more than 1 minute"
+        impact: "Application will not function"
+        action: "Check database pod and underlying infrastructure"
+    
+    # High Database Connections
+    - alert: HighDatabaseConnections
+      expr: |
+        (
+          pg_stat_database_numbackends /
+          pg_settings_max_connections
+        ) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "High number of database connections"
+        description: "Database connection usage is {{ $value }}% of max connections"
+        impact: "New connections may be rejected"
+        action: "Check for connection leaks or increase max_connections"
+    
+    # Slow Database Queries
+    - alert: SlowDatabaseQueries
+      expr: |
+        pg_stat_activity_max_tx_duration > 300
+      for: 2m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Long running database transaction detected"
+        description: "A database transaction has been running for {{ $value }} seconds"
+        impact: "May cause locks and performance issues"
+        action: "Identify and optimize slow queries"
+    
+    # Database Lock Waits
+    - alert: DatabaseLockWaits
+      expr: |
+        pg_locks_count{mode="accessexclusivelock"} > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "Database lock waits detected"
+        description: "{{ $value }} processes are waiting for exclusive locks"
+        impact: "Application operations may be blocked"
+        action: "Check for long-running transactions"
+
+  # Redis Alerts
+  - name: financial-planning.redis
+    interval: 30s
+    rules:
+    
+    # Redis Down
+    - alert: RedisDown
+      expr: |
+        up{job="redis-exporter"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: redis
+      annotations:
+        summary: "Redis is down"
+        description: "Redis has been down for more than 1 minute"
+        impact: "Caching layer unavailable, performance degraded"
+        action: "Check Redis pod and configuration"
+    
+    # High Redis Memory Usage
+    - alert: RedisHighMemoryUsage
+      expr: |
+        (
+          redis_memory_used_bytes /
+          redis_memory_max_bytes
+        ) * 100 > 90
+      for: 5m
+      labels:
+        severity: warning
+        component: redis
+      annotations:
+        summary: "Redis memory usage is high"
+        description: "Redis memory usage is {{ $value }}%"
+        impact: "Redis may start evicting keys or become unavailable"
+        action: "Check Redis key expiration policies and consider scaling"
+    
+    # Redis Connection Rejected
+    - alert: RedisConnectionRejected
+      expr: |
+        rate(redis_rejected_connections_total[5m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+        component: redis
+      annotations:
+        summary: "Redis is rejecting connections"
+        description: "Redis rejected {{ $value }} connections/sec"
+        impact: "Application may fail to cache data"
+        action: "Check max clients configuration and connection pooling"
+
+  # Business Logic Alerts
+  - name: financial-planning.business
+    interval: 60s
+    rules:
+    
+    # Monte Carlo Simulation Failures
+    - alert: MonteCarloSimulationFailures
+      expr: |
+        rate(monte_carlo_simulations_failed_total[10m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: simulation
+      annotations:
+        summary: "Monte Carlo simulation failures detected"
+        description: "{{ $value }} simulations per second are failing"
+        impact: "Users cannot generate financial projections"
+        action: "Check simulation service logs and external market data feeds"
+    
+    # AI Service Failures
+    - alert: AIServiceFailures
+      expr: |
+        rate(ai_requests_failed_total[5m]) > 0.05
+      for: 3m
+      labels:
+        severity: warning
+        component: ai
+      annotations:
+        summary: "AI service failures detected"
+        description: "{{ $value }} AI requests per second are failing"
+        impact: "AI-powered features unavailable"
+        action: "Check AI service credentials and rate limits"
+    
+    # PDF Generation Failures
+    - alert: PDFGenerationFailures
+      expr: |
+        rate(pdf_generation_failed_total[10m]) > 0.02
+      for: 5m
+      labels:
+        severity: warning
+        component: pdf
+      annotations:
+        summary: "PDF generation failures detected"
+        description: "{{ $value }} PDF generations per second are failing"
+        impact: "Users cannot export financial reports"
+        action: "Check PDF service resources and dependencies"
+    
+    # Banking Integration Failures
+    - alert: BankingIntegrationFailures
+      expr: |
+        rate(banking_api_errors_total[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: banking
+      annotations:
+        summary: "Banking integration failures detected"
+        description: "{{ $value }} banking API calls per second are failing"
+        impact: "Users cannot sync banking data"
+        action: "Check Plaid/Yodlee service status and credentials"
+
+  # Security Alerts
+  - name: financial-planning.security
+    interval: 30s
+    rules:
+    
+    # Unauthorized Access Attempts
+    - alert: UnauthorizedAccessAttempts
+      expr: |
+        rate(http_requests_total{service="financial-planning",code="401"}[5m]) > 1
+      for: 3m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High rate of unauthorized access attempts"
+        description: "{{ $value }} unauthorized requests per second"
+        impact: "Potential security threat"
+        action: "Review access logs and consider IP blocking"
+    
+    # Suspicious Activity
+    - alert: SuspiciousActivity
+      expr: |
+        rate(http_requests_total{service="financial-planning",code="403"}[5m]) > 0.5
+      for: 2m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High rate of forbidden access attempts"
+        description: "{{ $value }} forbidden requests per second"
+        impact: "Potential security breach attempt"
+        action: "Investigate access patterns and update security rules"
+    
+    # Certificate Expiry
+    - alert: CertificateExpiringSoon
+      expr: |
+        (cert_exporter_cert_expires_in_hours < 168) and (cert_exporter_cert_expires_in_hours > 0)
+      for: 1h
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "SSL certificate expiring soon"
+        description: "Certificate {{ $labels.common_name }} expires in {{ $value }} hours"
+        impact: "Service may become inaccessible"
+        action: "Renew SSL certificate"
+
+  # External Dependencies
+  - name: financial-planning.external
+    interval: 60s
+    rules:
+    
+    # External API High Response Time
+    - alert: ExternalAPIHighResponseTime
+      expr: |
+        histogram_quantile(0.95,
+          rate(external_api_request_duration_seconds_bucket[5m])
+        ) > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: external
+      annotations:
+        summary: "External API {{ $labels.api_name }} has high response time"
+        description: "95th percentile response time is {{ $value }}s"
+        impact: "Application features dependent on this API may be slow"
+        action: "Check external service status page"
+    
+    # Market Data Feed Issues
+    - alert: MarketDataFeedStale
+      expr: |
+        time() - market_data_last_update_timestamp > 1800
+      for: 5m
+      labels:
+        severity: warning
+        component: market-data
+      annotations:
+        summary: "Market data feed is stale"
+        description: "Last market data update was {{ $value }} seconds ago"
+        impact: "Financial calculations may use outdated data"
+        action: "Check market data provider APIs and credentials"
+
+  # Backup and Recovery
+  - name: financial-planning.backup
+    interval: 300s
+    rules:
+    
+    # Backup Failure
+    - alert: BackupFailure
+      expr: |
+        time() - backup_last_success_timestamp > 86400
+      for: 1h
+      labels:
+        severity: critical
+        component: backup
+      annotations:
+        summary: "Database backup has failed"
+        description: "Last successful backup was {{ $value }} seconds ago"
+        impact: "Data loss risk in case of disaster"
+        action: "Check backup job logs and storage availability"
+    
+    # Backup Size Anomaly
+    - alert: BackupSizeAnomaly
+      expr: |
+        (
+          backup_size_bytes /
+          avg_over_time(backup_size_bytes[7d])
+        ) < 0.5 or
+        (
+          backup_size_bytes /
+          avg_over_time(backup_size_bytes[7d])
+        ) > 2
+      for: 30m
+      labels:
+        severity: warning
+        component: backup
+      annotations:
+        summary: "Backup size is anomalous"
+        description: "Current backup size is {{ $value }} of the 7-day average"
+        impact: "May indicate backup corruption or data issues"
+        action: "Verify backup integrity and investigate data changes"

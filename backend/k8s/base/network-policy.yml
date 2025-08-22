@@ -1,0 +1,102 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: financial-planning-api-network-policy
+  namespace: financial-planning
+  labels:
+    app: financial-planning-api
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow ingress from monitoring (Prometheus)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  # Allow ingress from same namespace (service mesh)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow egress to database
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+      podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow egress to Redis cache
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: cache
+      podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow egress to external APIs (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow egress to DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow egress to Kubernetes API
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-default
+  namespace: financial-planning
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

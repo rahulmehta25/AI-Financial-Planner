@@ -1,0 +1,487 @@
+name: A/B Testing Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'A/B Testing Action'
+        required: true
+        type: choice
+        options:
+          - create-experiment
+          - start-experiment
+          - stop-experiment
+          - analyze-results
+          - rollout-winner
+      experiment_name:
+        description: 'Experiment name'
+        required: false
+        type: string
+      hypothesis:
+        description: 'Experiment hypothesis'
+        required: false
+        type: string
+      feature_flag:
+        description: 'Associated feature flag'
+        required: false
+        type: string
+      traffic_allocation:
+        description: 'Traffic allocation percentage'
+        required: false
+        type: number
+        default: 50
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      duration_days:
+        description: 'Experiment duration in days'
+        required: false
+        type: number
+        default: 7
+      significance_threshold:
+        description: 'Statistical significance threshold'
+        required: false
+        type: number
+        default: 0.05
+
+env:
+  AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
+  AMPLITUDE_SECRET_KEY: ${{ secrets.AMPLITUDE_SECRET_KEY }}
+  LAUNCHDARKLY_API_KEY: ${{ secrets.LAUNCHDARKLY_API_KEY }}
+  MIXPANEL_PROJECT_TOKEN: ${{ secrets.MIXPANEL_PROJECT_TOKEN }}
+
+jobs:
+  ab-testing-management:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests pandas numpy scipy matplotlib seaborn jupyter
+
+      - name: Create A/B Test Experiment
+        if: github.event.inputs.action == 'create-experiment'
+        run: |
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          HYPOTHESIS="${{ github.event.inputs.hypothesis }}"
+          FEATURE_FLAG="${{ github.event.inputs.feature_flag }}"
+          DURATION="${{ github.event.inputs.duration_days }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Create experiment configuration
+          mkdir -p experiments/$ENVIRONMENT
+          
+          cat > experiments/$ENVIRONMENT/$EXPERIMENT_NAME.json << EOF
+          {
+            "name": "$EXPERIMENT_NAME",
+            "hypothesis": "$HYPOTHESIS", 
+            "feature_flag": "$FEATURE_FLAG",
+            "environment": "$ENVIRONMENT",
+            "status": "created",
+            "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "created_by": "${{ github.actor }}",
+            "duration_days": $DURATION,
+            "traffic_allocation": ${{ github.event.inputs.traffic_allocation }},
+            "significance_threshold": ${{ github.event.inputs.significance_threshold }},
+            "variants": {
+              "control": {
+                "name": "Control",
+                "description": "Original experience",
+                "allocation": 50
+              },
+              "treatment": {
+                "name": "Treatment", 
+                "description": "New experience",
+                "allocation": 50
+              }
+            },
+            "metrics": {
+              "primary": {
+                "name": "conversion_rate",
+                "description": "Primary conversion metric"
+              },
+              "secondary": [
+                {
+                  "name": "user_engagement",
+                  "description": "User engagement metric"
+                },
+                {
+                  "name": "revenue_per_user",
+                  "description": "Revenue impact metric"
+                }
+              ]
+            }
+          }
+          EOF
+          
+          echo "Experiment '$EXPERIMENT_NAME' configuration created"
+
+      - name: Start A/B Test Experiment
+        if: github.event.inputs.action == 'start-experiment'
+        run: |
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          TRAFFIC_ALLOCATION="${{ github.event.inputs.traffic_allocation }}"
+          
+          # Update experiment status
+          python << 'EOF'
+          import json
+          import os
+          from datetime import datetime, timedelta
+          
+          experiment_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}.json"
+          
+          if os.path.exists(experiment_file):
+              with open(experiment_file, 'r') as f:
+                  experiment = json.load(f)
+              
+              # Update experiment to started status
+              experiment['status'] = 'running'
+              experiment['started_at'] = datetime.utcnow().isoformat() + 'Z'
+              experiment['estimated_end_date'] = (datetime.utcnow() + timedelta(days=experiment['duration_days'])).isoformat() + 'Z'
+              
+              with open(experiment_file, 'w') as f:
+                  json.dump(experiment, f, indent=2)
+              
+              print(f"Experiment {os.environ['EXPERIMENT_NAME']} started")
+          else:
+              print(f"Experiment configuration not found: {experiment_file}")
+              exit(1)
+          EOF
+          
+          # Create LaunchDarkly experiment if feature flag is specified
+          if [[ -n "${{ github.event.inputs.feature_flag }}" ]]; then
+            # Configure LaunchDarkly experiment
+            curl -X POST \
+              "https://app.launchdarkly.com/api/v2/projects/financial-planning/environments/$ENVIRONMENT/experiments" \
+              -H "Authorization: $LAUNCHDARKLY_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "name": "'$EXPERIMENT_NAME'",
+                "description": "A/B test experiment",
+                "flagKey": "'${{ github.event.inputs.feature_flag }}'",
+                "metricKey": "conversion-rate",
+                "randomizationUnit": "user"
+              }'
+          fi
+
+      - name: Stop A/B Test Experiment  
+        if: github.event.inputs.action == 'stop-experiment'
+        run: |
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Update experiment status to stopped
+          python << 'EOF'
+          import json
+          import os
+          from datetime import datetime
+          
+          experiment_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}.json"
+          
+          if os.path.exists(experiment_file):
+              with open(experiment_file, 'r') as f:
+                  experiment = json.load(f)
+              
+              experiment['status'] = 'stopped'
+              experiment['stopped_at'] = datetime.utcnow().isoformat() + 'Z'
+              
+              with open(experiment_file, 'w') as f:
+                  json.dump(experiment, f, indent=2)
+              
+              print(f"Experiment {os.environ['EXPERIMENT_NAME']} stopped")
+          EOF
+
+      - name: Analyze A/B Test Results
+        if: github.event.inputs.action == 'analyze-results'
+        run: |
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Create analysis script
+          python << 'EOF'
+          import json
+          import os
+          import requests
+          import pandas as pd
+          import numpy as np
+          from scipy import stats
+          import matplotlib.pyplot as plt
+          import seaborn as sns
+          from datetime import datetime, timedelta
+          
+          # Load experiment configuration
+          experiment_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}.json"
+          
+          if not os.path.exists(experiment_file):
+              print(f"Experiment configuration not found: {experiment_file}")
+              exit(1)
+          
+          with open(experiment_file, 'r') as f:
+              experiment = json.load(f)
+          
+          print(f"Analyzing experiment: {experiment['name']}")
+          
+          # Simulate data collection (replace with actual analytics API calls)
+          # In production, this would pull from Amplitude, Mixpanel, or your analytics platform
+          np.random.seed(42)
+          
+          # Simulate control group results
+          control_users = 1000
+          control_conversions = np.random.binomial(control_users, 0.15)  # 15% baseline conversion
+          
+          # Simulate treatment group results  
+          treatment_users = 1000
+          treatment_conversions = np.random.binomial(treatment_users, 0.18)  # 18% treatment conversion
+          
+          # Calculate conversion rates
+          control_rate = control_conversions / control_users
+          treatment_rate = treatment_conversions / treatment_users
+          
+          # Perform statistical test (Chi-square test)
+          contingency_table = [[control_conversions, control_users - control_conversions],
+                              [treatment_conversions, treatment_users - treatment_conversions]]
+          
+          chi2, p_value, dof, expected = stats.chi2_contingency(contingency_table)
+          
+          # Calculate confidence intervals
+          control_ci = stats.proportion_confint(control_conversions, control_users, alpha=0.05)
+          treatment_ci = stats.proportion_confint(treatment_conversions, treatment_users, alpha=0.05)
+          
+          # Calculate effect size (relative lift)
+          relative_lift = (treatment_rate - control_rate) / control_rate * 100
+          
+          # Generate results
+          results = {
+              "experiment_name": experiment['name'],
+              "analysis_date": datetime.utcnow().isoformat() + 'Z',
+              "control": {
+                  "users": control_users,
+                  "conversions": int(control_conversions),
+                  "conversion_rate": float(control_rate),
+                  "confidence_interval": [float(control_ci[0]), float(control_ci[1])]
+              },
+              "treatment": {
+                  "users": treatment_users,
+                  "conversions": int(treatment_conversions),
+                  "conversion_rate": float(treatment_rate),
+                  "confidence_interval": [float(treatment_ci[0]), float(treatment_ci[1])]
+              },
+              "statistical_test": {
+                  "test_type": "chi_square",
+                  "p_value": float(p_value),
+                  "significance_threshold": experiment['significance_threshold'],
+                  "is_significant": p_value < experiment['significance_threshold']
+              },
+              "effect_size": {
+                  "relative_lift_percent": float(relative_lift),
+                  "absolute_difference": float(treatment_rate - control_rate)
+              },
+              "recommendation": "treatment" if p_value < experiment['significance_threshold'] and relative_lift > 0 else "control"
+          }
+          
+          # Save results
+          results_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}_results.json"
+          with open(results_file, 'w') as f:
+              json.dump(results, f, indent=2)
+          
+          # Generate visualization
+          plt.figure(figsize=(12, 8))
+          
+          # Conversion rate comparison
+          plt.subplot(2, 2, 1)
+          rates = [control_rate, treatment_rate]
+          labels = ['Control', 'Treatment']
+          colors = ['#3498db', '#e74c3c']
+          bars = plt.bar(labels, rates, color=colors, alpha=0.7)
+          plt.title('Conversion Rates Comparison')
+          plt.ylabel('Conversion Rate')
+          plt.ylim(0, max(rates) * 1.2)
+          
+          # Add value labels on bars
+          for bar, rate in zip(bars, rates):
+              plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.001, 
+                      f'{rate:.3f}', ha='center', va='bottom')
+          
+          # Confidence intervals
+          plt.subplot(2, 2, 2)
+          x_pos = [0, 1]
+          means = [control_rate, treatment_rate]
+          errors = [[control_rate - control_ci[0], treatment_rate - treatment_ci[0]], 
+                   [control_ci[1] - control_rate, treatment_ci[1] - treatment_rate]]
+          
+          plt.errorbar(x_pos, means, yerr=errors, fmt='o', capsize=5, capthick=2)
+          plt.xticks(x_pos, labels)
+          plt.title('95% Confidence Intervals')
+          plt.ylabel('Conversion Rate')
+          plt.grid(True, alpha=0.3)
+          
+          # Sample sizes
+          plt.subplot(2, 2, 3)
+          users = [control_users, treatment_users]
+          plt.bar(labels, users, color=colors, alpha=0.7)
+          plt.title('Sample Sizes')
+          plt.ylabel('Number of Users')
+          
+          # Statistical significance
+          plt.subplot(2, 2, 4)
+          significance_text = f"P-value: {p_value:.4f}\n"
+          significance_text += f"Threshold: {experiment['significance_threshold']}\n"
+          significance_text += f"Significant: {'Yes' if p_value < experiment['significance_threshold'] else 'No'}\n"
+          significance_text += f"Relative Lift: {relative_lift:.2f}%"
+          
+          plt.text(0.1, 0.5, significance_text, fontsize=12, verticalalignment='center',
+                  bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.7))
+          plt.axis('off')
+          plt.title('Statistical Analysis')
+          
+          plt.tight_layout()
+          plt.savefig(f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}_analysis.png", 
+                     dpi=300, bbox_inches='tight')
+          
+          print("Analysis completed")
+          print(f"Recommendation: {results['recommendation']}")
+          print(f"P-value: {p_value:.4f}")
+          print(f"Relative lift: {relative_lift:.2f}%")
+          EOF
+
+      - name: Rollout Winning Variant
+        if: github.event.inputs.action == 'rollout-winner'
+        run: |
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Load experiment results
+          python << 'EOF'
+          import json
+          import os
+          
+          results_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}_results.json"
+          
+          if not os.path.exists(results_file):
+              print("No analysis results found. Please run analysis first.")
+              exit(1)
+          
+          with open(results_file, 'r') as f:
+              results = json.load(f)
+          
+          recommendation = results['recommendation']
+          print(f"Recommended variant: {recommendation}")
+          
+          if recommendation == 'treatment':
+              print("Rolling out treatment variant to 100% of users")
+              # Here you would update the feature flag to enable the treatment for all users
+              # This would integrate with LaunchDarkly or your feature flag service
+          else:
+              print("Control variant performs better. No rollout needed.")
+          
+          # Update experiment status
+          experiment_file = f"experiments/{os.environ['ENVIRONMENT']}/{os.environ['EXPERIMENT_NAME']}.json"
+          
+          if os.path.exists(experiment_file):
+              with open(experiment_file, 'r') as f:
+                  experiment = json.load(f)
+              
+              experiment['status'] = 'completed'
+              experiment['winner'] = recommendation
+              experiment['completed_at'] = datetime.utcnow().isoformat() + 'Z'
+              
+              with open(experiment_file, 'w') as f:
+                  json.dump(experiment, f, indent=2)
+          EOF
+
+      - name: Generate A/B Test Report
+        if: always()
+        run: |
+          # Generate comprehensive report
+          cat > ab-test-report.md << 'EOF'
+          # A/B Testing Report
+          
+          **Generated:** $(date)
+          **Action:** ${{ github.event.inputs.action }}
+          **Experiment:** ${{ github.event.inputs.experiment_name }}
+          **Environment:** ${{ github.event.inputs.environment }}
+          
+          ## Experiment Details
+          
+          EOF
+          
+          # Add experiment details if configuration exists
+          EXPERIMENT_NAME="${{ github.event.inputs.experiment_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          if [[ -f "experiments/$ENVIRONMENT/$EXPERIMENT_NAME.json" ]]; then
+            echo "### Configuration" >> ab-test-report.md
+            echo '```json' >> ab-test-report.md
+            cat "experiments/$ENVIRONMENT/$EXPERIMENT_NAME.json" >> ab-test-report.md
+            echo '```' >> ab-test-report.md
+          fi
+          
+          # Add results if available
+          if [[ -f "experiments/$ENVIRONMENT/${EXPERIMENT_NAME}_results.json" ]]; then
+            echo "### Results" >> ab-test-report.md
+            echo '```json' >> ab-test-report.md
+            cat "experiments/$ENVIRONMENT/${EXPERIMENT_NAME}_results.json" >> ab-test-report.md
+            echo '```' >> ab-test-report.md
+          fi
+
+      - name: Commit experiment files
+        if: github.event.inputs.action == 'create-experiment' || github.event.inputs.action == 'start-experiment' || github.event.inputs.action == 'rollout-winner'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if [[ -n $(git status --porcelain) ]]; then
+            git add experiments/
+            git commit -m "chore: update A/B test experiment ${{ github.event.inputs.experiment_name }}"
+            git push
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ab-test-artifacts
+          path: |
+            ab-test-report.md
+            experiments/
+
+  notify-results:
+    runs-on: ubuntu-latest
+    needs: ab-testing-management
+    if: always()
+    
+    steps:
+      - name: Notify Teams
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              attachments: [{
+                color: '${{ needs.ab-testing-management.result == "success" && "good" || "danger" }}',
+                blocks: [{
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*A/B Testing Update*\n*Action:* ${{ github.event.inputs.action }}\n*Experiment:* ${{ github.event.inputs.experiment_name || 'N/A' }}\n*Environment:* ${{ github.event.inputs.environment }}\n*Status:* ${{ needs.ab-testing-management.result == "success" && "✅ Success" || "❌ Failed" }}\n*Triggered by:* ${{ github.actor }}`
+                  }
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

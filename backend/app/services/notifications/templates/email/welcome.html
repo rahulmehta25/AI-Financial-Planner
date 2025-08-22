@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Financial Planning App</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #1E40AF, #3B82F6);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+        .content {
+            background: #ffffff;
+            padding: 30px;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #1E40AF;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+        .steps {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .step {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .step:last-child {
+            border-bottom: none;
+        }
+        .footer {
+            background: #f8fafc;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            border-radius: 0 0 8px 8px;
+        }
+        .account-details {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{{logo_url}}" alt="Financial Planning App" style="height: 40px; margin-bottom: 10px;">
+        <h1>Welcome to Financial Planning App!</h1>
+    </div>
+    
+    <div class="content">
+        <h2>Hi {{user_name}},</h2>
+        
+        <p>Welcome to Financial Planning App! We're excited to help you on your journey to financial freedom.</p>
+        
+        <div class="steps">
+            <h3>Here's what you can do to get started:</h3>
+            <div class="step">
+                <strong>1.</strong> Complete your financial profile
+            </div>
+            <div class="step">
+                <strong>2.</strong> Set your first financial goal
+            </div>
+            <div class="step">
+                <strong>3.</strong> Connect your bank accounts for automatic tracking
+            </div>
+            <div class="step">
+                <strong>4.</strong> Explore our investment recommendations
+            </div>
+        </div>
+        
+        <div style="text-align: center;">
+            <a href="{{app_url}}/dashboard" class="cta-button">Get Started Now</a>
+        </div>
+        
+        <div class="account-details">
+            <h4>Your account details:</h4>
+            <p>
+                <strong>Email:</strong> {{user_email}}<br>
+                <strong>Account created:</strong> {{created_date}}
+            </p>
+        </div>
+        
+        <p>If you have any questions, our support team is here to help at <a href="mailto:support@financialplanning.com">support@financialplanning.com</a>.</p>
+        
+        <p>Best regards,<br>
+        The Financial Planning Team</p>
+    </div>
+    
+    <div class="footer">
+        <p>You're receiving this email because you created an account with Financial Planning App.</p>
+        <p>If you didn't create this account, please <a href="mailto:support@financialplanning.com">contact our support team</a> immediately.</p>
+        <p>
+            <a href="{{privacy_url}}">Privacy Policy</a> | 
+            <a href="{{terms_url}}">Terms of Service</a> | 
+            <a href="{{unsubscribe_url}}">Unsubscribe</a>
+        </p>
+    </div>
+</body>
+</html>

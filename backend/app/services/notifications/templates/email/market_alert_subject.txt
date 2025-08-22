@@ -1,0 +1,1 @@
+Market Alert: {{alert_type}} for {{security_name}}

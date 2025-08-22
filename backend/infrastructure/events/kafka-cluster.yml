@@ -1,0 +1,347 @@
+# Kafka Event Streaming Infrastructure
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: financial-planning
+data:
+  server.properties: |
+    # Broker Configuration
+    broker.id=1
+    listeners=PLAINTEXT://:9092,EXTERNAL://:9093
+    advertised.listeners=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
+    listener.security.protocol.map=PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+    inter.broker.listener.name=PLAINTEXT
+    
+    # Zookeeper Configuration
+    zookeeper.connect=zookeeper:2181
+    zookeeper.connection.timeout.ms=60000
+    
+    # Log Configuration
+    log.dirs=/kafka/logs
+    num.network.threads=8
+    num.io.threads=16
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+    
+    # Log Retention Configuration
+    log.retention.hours=168
+    log.retention.bytes=1073741824
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+    
+    # Replication Configuration
+    default.replication.factor=3
+    min.insync.replicas=2
+    unclean.leader.election.enable=false
+    
+    # Topic Configuration
+    num.partitions=6
+    auto.create.topics.enable=false
+    delete.topic.enable=true
+    
+    # Performance Configuration
+    compression.type=snappy
+    batch.size=16384
+    linger.ms=5
+    buffer.memory=33554432
+    
+    # Security Configuration (if SASL enabled)
+    security.inter.broker.protocol=PLAINTEXT
+    sasl.mechanism.inter.broker.protocol=PLAIN
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-topics-config
+  namespace: financial-planning
+data:
+  topics.json: |
+    {
+      "topics": [
+        {
+          "name": "user-events",
+          "partitions": 6,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 604800000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "banking-events",
+          "partitions": 12,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 2592000000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "simulation-events",
+          "partitions": 6,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 604800000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "ml-events",
+          "partitions": 4,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 1209600000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "notification-events",
+          "partitions": 8,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 259200000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "document-events",
+          "partitions": 4,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 604800000,
+            "compression.type": "snappy"
+          }
+        },
+        {
+          "name": "audit-events",
+          "partitions": 8,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 31536000000,
+            "compression.type": "gzip"
+          }
+        },
+        {
+          "name": "system-events",
+          "partitions": 4,
+          "replication_factor": 3,
+          "config": {
+            "cleanup.policy": "delete",
+            "retention.ms": 604800000,
+            "compression.type": "snappy"
+          }
+        }
+      ]
+    }
+
+---
+# Event Schema Registry Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: schema-registry-config
+  namespace: financial-planning
+data:
+  schemas.json: |
+    {
+      "schemas": [
+        {
+          "subject": "user-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "UserEvent",
+            "namespace": "com.financialplanning.events.user",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": "string"},
+              {"name": "event_type", "type": {"type": "enum", "name": "UserEventType", "symbols": ["CREATED", "UPDATED", "DELETED", "LOGIN", "LOGOUT"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "data", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "banking-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "BankingEvent",
+            "namespace": "com.financialplanning.events.banking",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": "string"},
+              {"name": "account_id", "type": ["null", "string"], "default": null},
+              {"name": "event_type", "type": {"type": "enum", "name": "BankingEventType", "symbols": ["ACCOUNT_CONNECTED", "ACCOUNT_DISCONNECTED", "TRANSACTION_CREATED", "BALANCE_UPDATED", "SYNC_COMPLETED", "SYNC_FAILED"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "data", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "simulation-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "SimulationEvent",
+            "namespace": "com.financialplanning.events.simulation",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": "string"},
+              {"name": "simulation_id", "type": "string"},
+              {"name": "event_type", "type": {"type": "enum", "name": "SimulationEventType", "symbols": ["STARTED", "COMPLETED", "FAILED", "CANCELLED"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "parameters", "type": ["null", "string"], "default": null},
+              {"name": "results", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "ml-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "MLEvent",
+            "namespace": "com.financialplanning.events.ml",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": ["null", "string"], "default": null},
+              {"name": "model_name", "type": "string"},
+              {"name": "event_type", "type": {"type": "enum", "name": "MLEventType", "symbols": ["PREDICTION_GENERATED", "MODEL_TRAINED", "MODEL_DEPLOYED", "RECOMMENDATION_CREATED"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "data", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "notification-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "NotificationEvent",
+            "namespace": "com.financialplanning.events.notification",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": "string"},
+              {"name": "notification_type", "type": "string"},
+              {"name": "channel", "type": {"type": "enum", "name": "NotificationChannel", "symbols": ["EMAIL", "SMS", "PUSH", "WEBSOCKET"]}},
+              {"name": "event_type", "type": {"type": "enum", "name": "NotificationEventType", "symbols": ["SENT", "DELIVERED", "FAILED", "OPENED", "CLICKED"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "content", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "document-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "DocumentEvent",
+            "namespace": "com.financialplanning.events.document",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": "string"},
+              {"name": "document_id", "type": "string"},
+              {"name": "document_type", "type": "string"},
+              {"name": "event_type", "type": {"type": "enum", "name": "DocumentEventType", "symbols": ["GENERATION_STARTED", "GENERATION_COMPLETED", "GENERATION_FAILED", "DOWNLOADED"]}},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "metadata", "type": ["null", "string"], "default": null}
+            ]
+          }
+        },
+        {
+          "subject": "audit-events-value",
+          "version": 1,
+          "schema": {
+            "type": "record",
+            "name": "AuditEvent",
+            "namespace": "com.financialplanning.events.audit",
+            "fields": [
+              {"name": "event_id", "type": "string"},
+              {"name": "user_id", "type": ["null", "string"], "default": null},
+              {"name": "service_name", "type": "string"},
+              {"name": "action", "type": "string"},
+              {"name": "resource", "type": "string"},
+              {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+              {"name": "ip_address", "type": ["null", "string"], "default": null},
+              {"name": "user_agent", "type": ["null", "string"], "default": null},
+              {"name": "result", "type": {"type": "enum", "name": "AuditResult", "symbols": ["SUCCESS", "FAILURE", "ERROR"]}},
+              {"name": "details", "type": ["null", "string"], "default": null}
+            ]
+          }
+        }
+      ]
+    }
+
+---
+# Kafka Connect Configuration for CDC and External Integrations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-connect-config
+  namespace: financial-planning
+data:
+  connect-distributed.properties: |
+    bootstrap.servers=kafka:9092
+    group.id=financial-planning-connect-cluster
+    
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=false
+    value.converter.schemas.enable=false
+    
+    offset.storage.topic=connect-offsets
+    offset.storage.replication.factor=3
+    offset.storage.partitions=25
+    
+    config.storage.topic=connect-configs
+    config.storage.replication.factor=3
+    
+    status.storage.topic=connect-status
+    status.storage.replication.factor=3
+    status.storage.partitions=5
+    
+    plugin.path=/usr/share/java,/usr/share/confluent-hub-components
+    
+  connectors.json: |
+    {
+      "connectors": [
+        {
+          "name": "postgres-source-connector",
+          "config": {
+            "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+            "database.hostname": "postgresql",
+            "database.port": "5432",
+            "database.user": "kafka_connect_user",
+            "database.password": "${DB_PASSWORD}",
+            "database.dbname": "financial_planning",
+            "database.server.name": "financial-planning-db",
+            "table.include.list": "public.users,public.financial_profiles,public.goals,public.simulations,public.banking_accounts,public.transactions",
+            "plugin.name": "pgoutput",
+            "slot.name": "debezium_slot",
+            "publication.name": "debezium_publication"
+          }
+        },
+        {
+          "name": "elasticsearch-sink-connector",
+          "config": {
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch:9200",
+            "type.name": "_doc",
+            "topics": "user-events,banking-events,simulation-events,ml-events",
+            "key.ignore": "true",
+            "schema.ignore": "true"
+          }
+        }
+      ]
+    }

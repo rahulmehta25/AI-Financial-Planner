@@ -1,0 +1,160 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Financial Planning - Infrastructure Monitoring",
+    "tags": ["financial-planning", "infrastructure"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "percentage", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "percentage", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Disk Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "(node_filesystem_size_bytes{fstype!=\"tmpfs\"} - node_filesystem_free_bytes{fstype!=\"tmpfs\"}) / node_filesystem_size_bytes{fstype!=\"tmpfs\"} * 100",
+            "refId": "A",
+            "legendFormat": "{{instance}} {{mountpoint}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "percentage", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Network I/O",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_network_receive_bytes_total[5m])",
+            "refId": "A",
+            "legendFormat": "{{instance}} {{device}} receive"
+          },
+          {
+            "expr": "rate(node_network_transmit_bytes_total[5m])",
+            "refId": "B",
+            "legendFormat": "{{instance}} {{device}} transmit"
+          }
+        ],
+        "yAxes": [
+          {"label": "bytes/sec"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "PostgreSQL Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(pg_stat_database_tup_returned[5m])",
+            "refId": "A",
+            "legendFormat": "Rows returned/sec"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_fetched[5m])",
+            "refId": "B",
+            "legendFormat": "Rows fetched/sec"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_inserted[5m])",
+            "refId": "C",
+            "legendFormat": "Rows inserted/sec"
+          },
+          {
+            "expr": "rate(pg_stat_database_tup_updated[5m])",
+            "refId": "D",
+            "legendFormat": "Rows updated/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Redis Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(redis_commands_processed_total[5m])",
+            "refId": "A",
+            "legendFormat": "Commands/sec"
+          },
+          {
+            "expr": "redis_connected_clients",
+            "refId": "B",
+            "legendFormat": "Connected clients"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Container Resource Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total[5m]) * 100",
+            "refId": "A",
+            "legendFormat": "{{name}} CPU %"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Container Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes",
+            "refId": "A",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "bytes"}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

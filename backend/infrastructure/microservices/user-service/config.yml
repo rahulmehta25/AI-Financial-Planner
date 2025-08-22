@@ -1,0 +1,118 @@
+# User Service Configuration
+service:
+  name: user-service
+  version: "1.0.0"
+  port: 8002
+  host: "0.0.0.0"
+  debug: false
+  workers: 4
+  
+authentication:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  jwt_access_token_expire_minutes: 30
+  jwt_refresh_token_expire_days: 30
+  password_min_length: 8
+  password_require_special_chars: true
+  password_require_numbers: true
+  password_require_uppercase: true
+  max_login_attempts: 5
+  lockout_duration_minutes: 15
+  
+oauth:
+  google:
+    client_id: "${GOOGLE_CLIENT_ID}"
+    client_secret: "${GOOGLE_CLIENT_SECRET}"
+    redirect_uri: "https://financial-planning.app/auth/google/callback"
+  apple:
+    client_id: "${APPLE_CLIENT_ID}"
+    client_secret: "${APPLE_CLIENT_SECRET}"
+    redirect_uri: "https://financial-planning.app/auth/apple/callback"
+  
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-user_service_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 20
+  max_overflow: 40
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 2
+  password: "${REDIS_PASSWORD}"
+  max_connections: 20
+  session_timeout: 3600
+  
+email:
+  smtp_server: "${SMTP_SERVER}"
+  smtp_port: "${SMTP_PORT:-587}"
+  smtp_username: "${SMTP_USERNAME}"
+  smtp_password: "${SMTP_PASSWORD}"
+  from_email: "noreply@financial-planning.app"
+  use_tls: true
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/user-service.log"
+  max_file_size: 50MB
+  backup_count: 5
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9091
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  
+api:
+  title: "Financial Planning User Service"
+  description: "User authentication and profile management service"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+security:
+  encryption_key: "${ENCRYPTION_KEY}"
+  hash_rounds: 12
+  session_secret: "${SESSION_SECRET}"
+  csrf_protection: true
+  rate_limit_enabled: true
+  
+rate_limiting:
+  login_attempts_per_minute: 5
+  registration_attempts_per_minute: 3
+  password_reset_attempts_per_hour: 3
+  general_requests_per_minute: 100
+  
+profile_settings:
+  max_profile_image_size_mb: 5
+  allowed_image_formats: ["jpg", "jpeg", "png", "gif"]
+  default_timezone: "UTC"
+  default_currency: "USD"
+  
+privacy:
+  data_retention_days: 2555  # 7 years
+  anonymization_after_deletion: true
+  gdpr_compliance: true
+  ccpa_compliance: true
+  
+external_services:
+  notification_service:
+    url: "http://notification-service:8005"
+    timeout: 30
+    
+validation:
+  email_verification_required: true
+  phone_verification_required: false
+  minimum_age: 18

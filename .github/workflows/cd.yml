@@ -1,0 +1,630 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip smoke tests'
+        required: false
+        default: false
+        type: boolean
+      rollback_version:
+        description: 'Version to rollback to (leave empty for normal deployment)'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: financial-planning-backend
+  IMAGE_NAME_FRONTEND: financial-planning-frontend
+  AWS_REGION: us-west-2
+  EKS_CLUSTER_NAME: financial-planning-cluster
+
+concurrency:
+  group: cd-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
+jobs:
+  # Determine deployment environment
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      rollback_mode: ${{ steps.check.outputs.rollback_mode }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=development" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check deployment conditions
+        id: check
+        run: |
+          rollback_mode=false
+          should_deploy=true
+          
+          if [[ -n "${{ github.event.inputs.rollback_version }}" ]]; then
+            rollback_mode=true
+          fi
+          
+          echo "should_deploy=$should_deploy" >> $GITHUB_OUTPUT
+          echo "rollback_mode=$rollback_mode" >> $GITHUB_OUTPUT
+
+  # Pre-deployment validation
+  pre-deployment:
+    runs-on: ubuntu-latest
+    needs: setup
+    if: needs.setup.outputs.should_deploy == 'true' && needs.setup.outputs.rollback_mode == 'false'
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify CI passed
+        run: |
+          # Get the latest CI run for this commit
+          CI_STATUS=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/status | jq -r '.state')
+          if [[ "$CI_STATUS" != "success" ]]; then
+            echo "CI pipeline has not passed for this commit. Status: $CI_STATUS"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for blocking issues
+        run: |
+          # Check for open P0/P1 issues that should block deployment
+          BLOCKING_ISSUES=$(gh api repos/${{ github.repository }}/issues \
+            --jq '.[] | select(.labels[]?.name | test("P0|P1|blocking")) | .number' | wc -l)
+          
+          if [[ $BLOCKING_ISSUES -gt 0 ]] && [[ "${{ needs.setup.outputs.environment }}" == "production" ]]; then
+            echo "Found $BLOCKING_ISSUES blocking issues. Deployment to production blocked."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Database migrations
+  database-migration:
+    runs-on: ubuntu-latest
+    needs: [setup, pre-deployment]
+    if: |
+      always() && 
+      needs.setup.outputs.should_deploy == 'true' && 
+      (needs.pre-deployment.result == 'success' || needs.setup.outputs.rollback_mode == 'true')
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install alembic psycopg2-binary python-decouple
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get database connection details
+        id: db-config
+        run: |
+          # Get RDS connection details from AWS Secrets Manager
+          DB_SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id "financial-planning/${{ needs.setup.outputs.environment }}/database" \
+            --query SecretString --output text)
+          
+          echo "DATABASE_URL=$(echo $DB_SECRET | jq -r '.database_url')" >> $GITHUB_ENV
+
+      - name: Create database backup
+        if: needs.setup.outputs.environment == 'production'
+        run: |
+          # Create automated backup before migration
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          
+          # Trigger AWS RDS snapshot
+          aws rds create-db-snapshot \
+            --db-instance-identifier financial-planning-${{ needs.setup.outputs.environment }} \
+            --db-snapshot-identifier pre-migration-backup-$TIMESTAMP
+
+      - name: Run database migrations
+        if: needs.setup.outputs.rollback_mode == 'false'
+        working-directory: ./backend
+        run: |
+          echo "Running forward migrations..."
+          alembic upgrade head
+
+      - name: Rollback database migration
+        if: needs.setup.outputs.rollback_mode == 'true'
+        working-directory: ./backend
+        run: |
+          echo "Rolling back to version: ${{ github.event.inputs.rollback_version }}"
+          alembic downgrade ${{ github.event.inputs.rollback_version }}
+
+      - name: Verify migration status
+        working-directory: ./backend
+        run: |
+          alembic current
+          alembic check
+
+  # Blue-Green Deployment
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [setup, database-migration]
+    if: always() && needs.database-migration.result == 'success'
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}-${{ needs.setup.outputs.environment }}
+
+      - name: Install deployment tools
+        run: |
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          
+          # Install Argo Rollouts kubectl plugin
+          curl -LO https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+          chmod +x ./kubectl-argo-rollouts-linux-amd64
+          sudo mv ./kubectl-argo-rollouts-linux-amd64 /usr/local/bin/kubectl-argo-rollouts
+
+      - name: Prepare deployment values
+        id: deploy-config
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+          
+          # Set deployment-specific values
+          case $ENV in
+            "development")
+              REPLICAS=1
+              RESOURCES_CPU="100m"
+              RESOURCES_MEMORY="256Mi"
+              ;;
+            "staging")
+              REPLICAS=2
+              RESOURCES_CPU="200m"
+              RESOURCES_MEMORY="512Mi"
+              ;;
+            "production")
+              REPLICAS=3
+              RESOURCES_CPU="500m"
+              RESOURCES_MEMORY="1Gi"
+              ;;
+          esac
+          
+          IMAGE_TAG="${{ github.event.inputs.rollback_version || github.sha }}"
+          
+          echo "replicas=$REPLICAS" >> $GITHUB_OUTPUT
+          echo "resources_cpu=$RESOURCES_CPU" >> $GITHUB_OUTPUT
+          echo "resources_memory=$RESOURCES_MEMORY" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Deploy with Helm (Blue-Green)
+        working-directory: ./backend
+        run: |
+          NAMESPACE="financial-planning-${{ needs.setup.outputs.environment }}"
+          RELEASE_NAME="financial-planning"
+          
+          # Create namespace if it doesn't exist
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Get current deployment color
+          CURRENT_COLOR=$(kubectl get service $RELEASE_NAME-active -n $NAMESPACE \
+            -o jsonpath='{.spec.selector.color}' 2>/dev/null || echo "blue")
+          
+          # Determine new color
+          if [[ "$CURRENT_COLOR" == "blue" ]]; then
+            NEW_COLOR="green"
+          else
+            NEW_COLOR="blue"
+          fi
+          
+          echo "Deploying to $NEW_COLOR environment..."
+          
+          # Deploy to new color
+          helm upgrade --install $RELEASE_NAME-$NEW_COLOR ./helm/financial-planning \
+            --namespace $NAMESPACE \
+            --set image.tag=${{ steps.deploy-config.outputs.image_tag }} \
+            --set replicaCount=${{ steps.deploy-config.outputs.replicas }} \
+            --set resources.requests.cpu=${{ steps.deploy-config.outputs.resources_cpu }} \
+            --set resources.requests.memory=${{ steps.deploy-config.outputs.resources_memory }} \
+            --set deployment.color=$NEW_COLOR \
+            --set environment=${{ needs.setup.outputs.environment }} \
+            --wait --timeout=10m
+          
+          echo "NEW_COLOR=$NEW_COLOR" >> $GITHUB_ENV
+          echo "CURRENT_COLOR=$CURRENT_COLOR" >> $GITHUB_ENV
+          echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+
+      - name: Health check new deployment
+        run: |
+          echo "Performing health checks on new deployment..."
+          
+          # Wait for pods to be ready
+          kubectl wait --for=condition=ready pod \
+            -l app=financial-planning,color=$NEW_COLOR \
+            -n $NAMESPACE \
+            --timeout=300s
+          
+          # Check application health endpoint
+          kubectl port-forward service/$RELEASE_NAME-$NEW_COLOR \
+            -n $NAMESPACE 8080:80 &
+          
+          sleep 10
+          
+          # Test health endpoint
+          for i in {1..5}; do
+            if curl -f http://localhost:8080/health; then
+              echo "Health check passed"
+              break
+            fi
+            if [[ $i -eq 5 ]]; then
+              echo "Health check failed after 5 attempts"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Run smoke tests
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "Running smoke tests..."
+          
+          # Port forward for testing
+          kubectl port-forward service/$RELEASE_NAME-$NEW_COLOR \
+            -n $NAMESPACE 8080:80 &
+          
+          sleep 10
+          
+          # Run basic API tests
+          python -m pytest backend/tests/smoke/ \
+            --base-url=http://localhost:8080 \
+            --junitxml=smoke-test-results.xml
+
+      - name: Switch traffic (Blue-Green cutover)
+        run: |
+          echo "Switching traffic to $NEW_COLOR deployment..."
+          
+          # Update active service to point to new color
+          kubectl patch service $RELEASE_NAME-active \
+            -n $NAMESPACE \
+            -p '{"spec":{"selector":{"color":"'$NEW_COLOR'"}}}'
+          
+          # Verify traffic switch
+          sleep 30
+          
+          # Test that traffic is going to new deployment
+          kubectl port-forward service/$RELEASE_NAME-active \
+            -n $NAMESPACE 8080:80 &
+          
+          sleep 10
+          
+          if curl -f http://localhost:8080/health; then
+            echo "Traffic successfully switched to $NEW_COLOR"
+          else
+            echo "Traffic switch failed"
+            exit 1
+          fi
+
+      - name: Cleanup old deployment
+        if: success()
+        run: |
+          echo "Cleaning up $CURRENT_COLOR deployment..."
+          
+          # Wait a bit before cleanup
+          sleep 60
+          
+          # Scale down old deployment
+          helm upgrade $RELEASE_NAME-$CURRENT_COLOR ./backend/helm/financial-planning \
+            --namespace $NAMESPACE \
+            --reuse-values \
+            --set replicaCount=0
+
+      - name: Update deployment status
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          
+          kubectl create configmap deployment-status-${{ github.sha }} \
+            --from-literal=status=$STATUS \
+            --from-literal=environment=${{ needs.setup.outputs.environment }} \
+            --from-literal=timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            --from-literal=commit=${{ github.sha }} \
+            --from-literal=color=$NEW_COLOR \
+            -n $NAMESPACE
+
+  # Canary deployment (alternative strategy)
+  canary-deploy:
+    runs-on: ubuntu-latest
+    needs: [setup, database-migration]
+    if: |
+      always() && 
+      needs.setup.outputs.environment == 'production' && 
+      needs.database-migration.result == 'success' &&
+      contains(github.event.head_commit.message, '[canary]')
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}-production
+
+      - name: Deploy canary with Argo Rollouts
+        working-directory: ./backend
+        run: |
+          # Install Argo Rollouts if not exists
+          kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+          
+          # Apply canary rollout
+          envsubst < k8s/overlays/production/rollout-canary.yml | kubectl apply -f -
+          
+          # Start canary deployment
+          kubectl argo rollouts set image financial-planning \
+            backend=${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }} \
+            -n financial-planning-production
+
+      - name: Monitor canary deployment
+        run: |
+          # Monitor rollout progress
+          kubectl argo rollouts get rollout financial-planning \
+            -n financial-planning-production --watch
+
+      - name: Promote canary if healthy
+        run: |
+          # Wait for analysis to complete
+          sleep 300
+          
+          # Check if analysis passed
+          ANALYSIS_STATUS=$(kubectl argo rollouts get rollout financial-planning \
+            -n financial-planning-production -o json | jq -r '.status.phase')
+          
+          if [[ "$ANALYSIS_STATUS" == "Healthy" ]]; then
+            echo "Promoting canary to full deployment"
+            kubectl argo rollouts promote financial-planning -n financial-planning-production
+          else
+            echo "Analysis failed, rolling back canary"
+            kubectl argo rollouts abort financial-planning -n financial-planning-production
+            exit 1
+          fi
+
+  # Post-deployment verification
+  post-deployment:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy]
+    if: always() && needs.deploy.result == 'success'
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}-${{ needs.setup.outputs.environment }}
+
+      - name: Run comprehensive health checks
+        run: |
+          NAMESPACE="financial-planning-${{ needs.setup.outputs.environment }}"
+          
+          echo "Running comprehensive health checks..."
+          
+          # Check all pods are running
+          kubectl get pods -n $NAMESPACE
+          
+          # Check service endpoints
+          kubectl get endpoints -n $NAMESPACE
+          
+          # Check ingress status
+          kubectl get ingress -n $NAMESPACE
+
+      - name: Run end-to-end tests
+        if: needs.setup.outputs.environment != 'production'
+        run: |
+          # Get application URL
+          APP_URL=$(kubectl get ingress financial-planning-ingress \
+            -n financial-planning-${{ needs.setup.outputs.environment }} \
+            -o jsonpath='{.spec.rules[0].host}')
+          
+          # Run E2E tests
+          python -m pytest backend/tests/e2e/ \
+            --base-url=https://$APP_URL \
+            --junitxml=e2e-test-results.xml
+
+      - name: Performance baseline check
+        run: |
+          # Run basic performance test to ensure no regression
+          python backend/tests/performance/load_test.py \
+            --environment=${{ needs.setup.outputs.environment }} \
+            --duration=60 \
+            --users=10
+
+      - name: Update deployment tracking
+        run: |
+          # Update deployment metadata
+          kubectl annotate deployment financial-planning \
+            deployment.kubernetes.io/revision-history="$(date): ${{ github.sha }}" \
+            -n financial-planning-${{ needs.setup.outputs.environment }}
+
+  # Rollback on failure
+  rollback:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy, post-deployment]
+    if: |
+      always() && 
+      (needs.deploy.result == 'failure' || needs.post-deployment.result == 'failure')
+    environment: ${{ needs.setup.outputs.environment }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}-${{ needs.setup.outputs.environment }}
+
+      - name: Rollback deployment
+        run: |
+          NAMESPACE="financial-planning-${{ needs.setup.outputs.environment }}"
+          
+          echo "Rolling back deployment due to failure..."
+          
+          # Rollback to previous revision
+          kubectl rollout undo deployment/financial-planning -n $NAMESPACE
+          
+          # Wait for rollback to complete
+          kubectl rollout status deployment/financial-planning -n $NAMESPACE --timeout=300s
+
+      - name: Verify rollback
+        run: |
+          NAMESPACE="financial-planning-${{ needs.setup.outputs.environment }}"
+          
+          # Check that rollback was successful
+          kubectl get pods -n $NAMESPACE
+          
+          # Test health endpoint after rollback
+          kubectl port-forward service/financial-planning \
+            -n $NAMESPACE 8080:80 &
+          
+          sleep 10
+          
+          if curl -f http://localhost:8080/health; then
+            echo "Rollback successful"
+          else
+            echo "Rollback failed"
+            exit 1
+          fi
+
+  # Notification and reporting
+  notify:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy, post-deployment, rollback]
+    if: always()
+
+    steps:
+      - name: Determine deployment result
+        id: result
+        run: |
+          if [[ "${{ needs.deploy.result }}" == "success" ]] && 
+             [[ "${{ needs.post-deployment.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Deployment completed successfully" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.rollback.result }}" == "success" ]]; then
+            echo "status=rolled_back" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed and was rolled back successfully" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post to Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: custom
+          custom_payload: |
+            {
+              attachments: [{
+                color: '${{ steps.result.outputs.status == "success" && "good" || steps.result.outputs.status == "rolled_back" && "warning" || "danger" }}',
+                blocks: [{
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*Financial Planning System Deployment*\n*Environment:* ${{ needs.setup.outputs.environment }}\n*Status:* ${{ steps.result.outputs.message }}\n*Commit:* <https://github.com/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Author:* ${{ github.actor }}`
+                  }
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Create deployment record
+        run: |
+          # Create a deployment record for tracking
+          echo "{
+            \"deployment_id\": \"${{ github.run_id }}\",
+            \"environment\": \"${{ needs.setup.outputs.environment }}\",
+            \"commit_sha\": \"${{ github.sha }}\",
+            \"status\": \"${{ steps.result.outputs.status }}\",
+            \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+            \"author\": \"${{ github.actor }}\",
+            \"rollback_mode\": \"${{ needs.setup.outputs.rollback_mode }}\"
+          }" > deployment-record.json
+
+      - name: Upload deployment record
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-record-${{ github.run_id }}
+          path: deployment-record.json

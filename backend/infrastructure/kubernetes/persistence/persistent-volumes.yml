@@ -1,0 +1,278 @@
+# Persistent Volume Claims for Financial Planning Application
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data-pvc
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+    backup.velero.io/backup-volumes: "postgresql-data"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-backup-pvc
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-models-pvc
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: models
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+    backup.velero.io/backup-volumes: "ml-models"
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: efs-storage-class
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-datasets-pvc
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: datasets
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: efs-storage-class
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: document-storage-pvc
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: document-service
+    app.kubernetes.io/component: documents
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+    backup.velero.io/backup-volumes: "document-storage"
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: efs-storage-class
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data-pvc
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: monitoring-stack
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+    backup.velero.io/backup-volumes: "prometheus-data"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data-pvc
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: monitoring-stack
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+    backup.velero.io/backup-volumes: "grafana-data"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-data-pvc
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/component: logging
+    app.kubernetes.io/part-of: monitoring-stack
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jaeger-data-pvc
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: tracing
+    app.kubernetes.io/part-of: monitoring-stack
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "gp3-encrypted"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gp3-encrypted
+  volumeMode: Filesystem
+
+---
+# Storage Classes
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  iops: "3000"
+  throughput: "125"
+  fsType: ext4
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-storage-class
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-your-efs-id  # Replace with actual EFS ID
+  directoryPerms: "0755"
+  gidRangeStart: "1000"
+  gidRangeEnd: "2000"
+allowVolumeExpansion: true
+volumeBindingMode: Immediate
+reclaimPolicy: Retain
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+provisioner: ebs.csi.aws.com
+parameters:
+  type: io2
+  encrypted: "true"
+  iops: "10000"
+  fsType: ext4
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
+# Backup and Snapshot Configuration
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: ebs-snapshot-class
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "true"
+driver: ebs.csi.aws.com
+deletionPolicy: Retain
+parameters:
+  tagSpecification_1: "Name=financial-planning-snapshot"
+  tagSpecification_2: "Environment=production"

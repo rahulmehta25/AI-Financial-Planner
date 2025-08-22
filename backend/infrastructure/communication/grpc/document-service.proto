@@ -1,0 +1,472 @@
+// Document Service gRPC Definition
+syntax = "proto3";
+
+package financial_planning.document.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/financial-planning/proto/document/v1";
+
+// Document Service for PDF generation and document management
+service DocumentService {
+  // Document generation
+  rpc GenerateDocument(GenerateDocumentRequest) returns (GenerateDocumentResponse);
+  rpc GenerateDocumentAsync(GenerateDocumentRequest) returns (GenerateDocumentAsyncResponse);
+  rpc GetGenerationStatus(GetGenerationStatusRequest) returns (GetGenerationStatusResponse);
+  
+  // Document management
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse);
+  rpc GetDocuments(GetDocumentsRequest) returns (GetDocumentsResponse);
+  rpc DeleteDocument(DeleteDocumentRequest) returns (google.protobuf.Empty);
+  rpc DownloadDocument(DownloadDocumentRequest) returns (stream DocumentChunk);
+  
+  // Template management
+  rpc GetTemplate(GetTemplateRequest) returns (GetTemplateResponse);
+  rpc CreateTemplate(CreateTemplateRequest) returns (CreateTemplateResponse);
+  rpc UpdateTemplate(UpdateTemplateRequest) returns (UpdateTemplateResponse);
+  rpc DeleteTemplate(DeleteTemplateRequest) returns (google.protobuf.Empty);
+  
+  // Chart generation
+  rpc GenerateChart(GenerateChartRequest) returns (GenerateChartResponse);
+  
+  // Batch operations
+  rpc BatchGenerateDocuments(BatchGenerateDocumentsRequest) returns (BatchGenerateDocumentsResponse);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Document generation messages
+message GenerateDocumentRequest {
+  string user_id = 1;
+  DocumentType document_type = 2;
+  string template_id = 3;
+  DocumentData data = 4;
+  DocumentOptions options = 5;
+  map<string, string> metadata = 6;
+}
+
+message GenerateDocumentResponse {
+  string document_id = 1;
+  bytes content = 2;
+  string download_url = 3;
+  DocumentInfo info = 4;
+}
+
+message GenerateDocumentAsyncResponse {
+  string generation_job_id = 1;
+  GenerationStatus status = 2;
+  google.protobuf.Timestamp estimated_completion = 3;
+}
+
+message GetGenerationStatusRequest {
+  string generation_job_id = 1;
+}
+
+message GetGenerationStatusResponse {
+  string generation_job_id = 1;
+  GenerationStatus status = 2;
+  int32 progress_percentage = 3;
+  string current_step = 4;
+  string error_message = 5;
+  string document_id = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+// Document management messages
+message GetDocumentRequest {
+  string user_id = 1;
+  string document_id = 2;
+}
+
+message GetDocumentResponse {
+  Document document = 1;
+}
+
+message GetDocumentsRequest {
+  string user_id = 1;
+  repeated DocumentType types = 2;
+  google.protobuf.Timestamp start_date = 3;
+  google.protobuf.Timestamp end_date = 4;
+  int32 limit = 5;
+  int32 offset = 6;
+}
+
+message GetDocumentsResponse {
+  repeated Document documents = 1;
+  int32 total_count = 2;
+}
+
+message DeleteDocumentRequest {
+  string user_id = 1;
+  string document_id = 2;
+}
+
+message DownloadDocumentRequest {
+  string user_id = 1;
+  string document_id = 2;
+}
+
+message DocumentChunk {
+  bytes data = 1;
+  int64 offset = 2;
+  int64 total_size = 3;
+}
+
+// Template management messages
+message GetTemplateRequest {
+  string template_id = 1;
+}
+
+message GetTemplateResponse {
+  DocumentTemplate template = 1;
+}
+
+message CreateTemplateRequest {
+  DocumentTemplate template = 1;
+}
+
+message CreateTemplateResponse {
+  string template_id = 1;
+}
+
+message UpdateTemplateRequest {
+  string template_id = 1;
+  DocumentTemplate template = 2;
+}
+
+message UpdateTemplateResponse {
+  DocumentTemplate template = 1;
+}
+
+message DeleteTemplateRequest {
+  string template_id = 1;
+}
+
+// Chart generation messages
+message GenerateChartRequest {
+  ChartType chart_type = 1;
+  ChartData data = 2;
+  ChartOptions options = 3;
+  string format = 4; // png, svg, pdf
+}
+
+message GenerateChartResponse {
+  bytes chart_data = 1;
+  string content_type = 2;
+  int64 size_bytes = 3;
+}
+
+// Batch operations messages
+message BatchGenerateDocumentsRequest {
+  repeated GenerateDocumentRequest requests = 1;
+  string batch_id = 2;
+}
+
+message BatchGenerateDocumentsResponse {
+  string batch_id = 1;
+  int32 total_requests = 2;
+  int32 successful_generations = 3;
+  int32 failed_generations = 4;
+  repeated BatchResult results = 5;
+}
+
+// Health check
+message HealthResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  int32 active_generations = 3;
+  int32 queue_length = 4;
+  StorageHealth storage_health = 5;
+}
+
+// Data models
+message DocumentData {
+  UserInfo user_info = 1;
+  FinancialSummary financial_summary = 2;
+  repeated Goal goals = 3;
+  repeated Account accounts = 4;
+  repeated Investment investments = 5;
+  repeated Transaction transactions = 6;
+  SimulationResults simulation_results = 7;
+  repeated Recommendation recommendations = 8;
+  repeated Chart charts = 9;
+  map<string, string> custom_data = 10;
+}
+
+message DocumentOptions {
+  string page_size = 1; // A4, Letter, Legal
+  string orientation = 2; // portrait, landscape
+  PageMargins margins = 3;
+  bool include_charts = 4;
+  bool include_watermark = 5;
+  string watermark_text = 6;
+  bool compress_pdf = 7;
+  string language = 8;
+  string currency = 9;
+  bool include_appendix = 10;
+}
+
+message DocumentInfo {
+  string document_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  int32 page_count = 5;
+  google.protobuf.Timestamp generated_at = 6;
+  string checksum = 7;
+}
+
+message Document {
+  string id = 1;
+  string user_id = 2;
+  DocumentType type = 3;
+  string template_id = 4;
+  string title = 5;
+  string filename = 6;
+  string content_type = 7;
+  int64 size_bytes = 8;
+  int32 page_count = 9;
+  string storage_path = 10;
+  string download_url = 11;
+  DocumentStatus status = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp expires_at = 14;
+  int32 download_count = 15;
+  map<string, string> metadata = 16;
+}
+
+message DocumentTemplate {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  DocumentType document_type = 4;
+  string template_content = 5;
+  string css_styles = 6;
+  repeated string required_data_fields = 7;
+  TemplateSettings settings = 8;
+  bool active = 9;
+  string version = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message TemplateSettings {
+  string page_size = 1;
+  string orientation = 2;
+  PageMargins margins = 3;
+  HeaderFooter header = 4;
+  HeaderFooter footer = 5;
+  repeated string fonts = 6;
+}
+
+message PageMargins {
+  string top = 1;
+  string right = 2;
+  string bottom = 3;
+  string left = 4;
+}
+
+message HeaderFooter {
+  string content = 1;
+  string height = 2;
+  bool show_page_numbers = 3;
+}
+
+message UserInfo {
+  string name = 1;
+  string email = 2;
+  string address = 3;
+  string phone = 4;
+  google.protobuf.Timestamp date_of_birth = 5;
+}
+
+message FinancialSummary {
+  double total_assets = 1;
+  double total_liabilities = 2;
+  double net_worth = 3;
+  double monthly_income = 4;
+  double monthly_expenses = 5;
+  double cash_flow = 6;
+  google.protobuf.Timestamp as_of_date = 7;
+}
+
+message Goal {
+  string id = 1;
+  string name = 2;
+  double target_amount = 3;
+  double current_amount = 4;
+  google.protobuf.Timestamp target_date = 5;
+  double monthly_contribution = 6;
+  double progress_percentage = 7;
+  GoalStatus status = 8;
+}
+
+message Account {
+  string id = 1;
+  string name = 2;
+  string account_type = 3;
+  string institution = 4;
+  double balance = 5;
+  google.protobuf.Timestamp last_updated = 6;
+}
+
+message Investment {
+  string id = 1;
+  string symbol = 2;
+  string name = 3;
+  double shares = 4;
+  double current_price = 5;
+  double total_value = 6;
+  double gain_loss = 7;
+  double gain_loss_percentage = 8;
+}
+
+message Transaction {
+  string id = 1;
+  string description = 2;
+  double amount = 3;
+  string category = 4;
+  google.protobuf.Timestamp date = 5;
+  string account = 6;
+}
+
+message SimulationResults {
+  string simulation_id = 1;
+  double success_probability = 2;
+  double median_outcome = 3;
+  double percentile_10 = 4;
+  double percentile_90 = 5;
+  repeated YearProjection projections = 6;
+  google.protobuf.Timestamp run_date = 7;
+}
+
+message YearProjection {
+  int32 year = 1;
+  double median_value = 2;
+  double percentile_10 = 3;
+  double percentile_90 = 4;
+}
+
+message Recommendation {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string category = 4;
+  double priority_score = 5;
+  repeated string action_items = 6;
+}
+
+message Chart {
+  string id = 1;
+  string title = 2;
+  ChartType type = 3;
+  bytes image_data = 4;
+  string format = 5; // png, svg
+  int32 width = 6;
+  int32 height = 7;
+}
+
+message ChartData {
+  string title = 1;
+  string x_axis_label = 2;
+  string y_axis_label = 3;
+  repeated ChartSeries series = 4;
+  repeated string labels = 5;
+}
+
+message ChartSeries {
+  string name = 1;
+  repeated double values = 2;
+  string color = 3;
+  ChartSeriesType type = 4;
+}
+
+message ChartOptions {
+  int32 width = 1;
+  int32 height = 2;
+  string background_color = 3;
+  bool show_legend = 4;
+  bool show_grid = 5;
+  string title_font_size = 6;
+  string axis_font_size = 7;
+  int32 dpi = 8;
+}
+
+message BatchResult {
+  string request_id = 1;
+  bool success = 2;
+  string document_id = 3;
+  string error_message = 4;
+}
+
+message StorageHealth {
+  bool available = 1;
+  double used_space_gb = 2;
+  double available_space_gb = 3;
+  double usage_percentage = 4;
+}
+
+// Enums
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  DOCUMENT_TYPE_FINANCIAL_PLAN = 1;
+  DOCUMENT_TYPE_MONTHLY_REPORT = 2;
+  DOCUMENT_TYPE_GOAL_SUMMARY = 3;
+  DOCUMENT_TYPE_SIMULATION_REPORT = 4;
+  DOCUMENT_TYPE_TAX_SUMMARY = 5;
+  DOCUMENT_TYPE_INVESTMENT_REPORT = 6;
+  DOCUMENT_TYPE_CASH_FLOW_ANALYSIS = 7;
+  DOCUMENT_TYPE_NET_WORTH_STATEMENT = 8;
+  DOCUMENT_TYPE_BUDGET_REPORT = 9;
+  DOCUMENT_TYPE_CUSTOM = 10;
+}
+
+enum DocumentStatus {
+  DOCUMENT_STATUS_UNSPECIFIED = 0;
+  DOCUMENT_STATUS_GENERATING = 1;
+  DOCUMENT_STATUS_READY = 2;
+  DOCUMENT_STATUS_EXPIRED = 3;
+  DOCUMENT_STATUS_ERROR = 4;
+  DOCUMENT_STATUS_DELETED = 5;
+}
+
+enum GenerationStatus {
+  GENERATION_STATUS_UNSPECIFIED = 0;
+  GENERATION_STATUS_QUEUED = 1;
+  GENERATION_STATUS_PROCESSING = 2;
+  GENERATION_STATUS_COMPLETED = 3;
+  GENERATION_STATUS_FAILED = 4;
+  GENERATION_STATUS_CANCELLED = 5;
+}
+
+enum ChartType {
+  CHART_TYPE_UNSPECIFIED = 0;
+  CHART_TYPE_LINE = 1;
+  CHART_TYPE_BAR = 2;
+  CHART_TYPE_PIE = 3;
+  CHART_TYPE_AREA = 4;
+  CHART_TYPE_SCATTER = 5;
+  CHART_TYPE_HISTOGRAM = 6;
+  CHART_TYPE_DONUT = 7;
+  CHART_TYPE_WATERFALL = 8;
+}
+
+enum ChartSeriesType {
+  CHART_SERIES_TYPE_UNSPECIFIED = 0;
+  CHART_SERIES_TYPE_LINE = 1;
+  CHART_SERIES_TYPE_BAR = 2;
+  CHART_SERIES_TYPE_AREA = 3;
+  CHART_SERIES_TYPE_SCATTER = 4;
+}
+
+enum GoalStatus {
+  GOAL_STATUS_UNSPECIFIED = 0;
+  GOAL_STATUS_ON_TRACK = 1;
+  GOAL_STATUS_BEHIND = 2;
+  GOAL_STATUS_AHEAD = 3;
+  GOAL_STATUS_ACHIEVED = 4;
+  GOAL_STATUS_AT_RISK = 5;
+}

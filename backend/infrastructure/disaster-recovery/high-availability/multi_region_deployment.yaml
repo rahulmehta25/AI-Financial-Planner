@@ -1,0 +1,436 @@
+# Multi-Region High Availability Deployment Configuration
+# Financial Planning System - Production Grade HA Setup
+
+# Global Configuration
+global:
+  app_name: "financial-planning"
+  environment: "production"
+  version: "1.0.0"
+  
+  # Primary and secondary regions
+  primary_region: "us-west-2"
+  secondary_region: "us-east-1"
+  dr_region: "eu-west-1"
+  
+  # Domain configuration
+  primary_domain: "financial-planning.company.com"
+  secondary_domain: "dr.financial-planning.company.com"
+  
+  # SSL/TLS configuration
+  ssl_certificate: "financial-planning-cert"
+  enable_ssl_redirect: true
+
+# Load Balancer Configuration
+load_balancer:
+  global:
+    provider: "aws-alb"  # or "azure-app-gateway", "gcp-load-balancer"
+    type: "application"
+    scheme: "internet-facing"
+    
+    # Health check configuration
+    health_check:
+      enabled: true
+      path: "/api/v1/health"
+      interval_seconds: 30
+      timeout_seconds: 5
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+      
+    # Sticky sessions
+    sticky_sessions:
+      enabled: true
+      duration_seconds: 3600
+      
+    # Security groups
+    security_groups:
+      - "sg-web-tier"
+      - "sg-app-tier"
+    
+  # Regional load balancers
+  regions:
+    us-west-2:
+      enabled: true
+      priority: 1
+      weight: 70
+      subnets:
+        - "subnet-12345678"
+        - "subnet-87654321"
+      availability_zones:
+        - "us-west-2a"
+        - "us-west-2b"
+        - "us-west-2c"
+        
+    us-east-1:
+      enabled: true
+      priority: 2
+      weight: 30
+      subnets:
+        - "subnet-abcdef12"
+        - "subnet-fedcba21"
+      availability_zones:
+        - "us-east-1a"
+        - "us-east-1b"
+        - "us-east-1c"
+
+# Auto Scaling Configuration
+auto_scaling:
+  enabled: true
+  
+  # Scaling policies
+  policies:
+    cpu_utilization:
+      enabled: true
+      target_value: 70
+      scale_up_cooldown: 300
+      scale_down_cooldown: 600
+      
+    memory_utilization:
+      enabled: true
+      target_value: 80
+      scale_up_cooldown: 300
+      scale_down_cooldown: 600
+      
+    request_count:
+      enabled: true
+      target_value: 1000
+      scale_up_cooldown: 180
+      scale_down_cooldown: 300
+  
+  # Instance configuration per region
+  regions:
+    us-west-2:
+      min_instances: 3
+      max_instances: 20
+      desired_instances: 6
+      instance_type: "t3.xlarge"
+      
+    us-east-1:
+      min_instances: 2
+      max_instances: 15
+      desired_instances: 4
+      instance_type: "t3.large"
+
+# Database High Availability
+database:
+  # Primary database cluster
+  primary:
+    region: "us-west-2"
+    engine: "postgresql"
+    version: "14.9"
+    instance_class: "db.r6g.2xlarge"
+    
+    # Multi-AZ deployment
+    multi_az: true
+    availability_zones:
+      - "us-west-2a"
+      - "us-west-2b"
+      - "us-west-2c"
+    
+    # Storage configuration
+    storage:
+      type: "gp3"
+      size_gb: 1000
+      iops: 3000
+      throughput_mbps: 125
+      encrypted: true
+      
+    # Backup configuration
+    backup:
+      enabled: true
+      retention_days: 35
+      backup_window: "03:00-04:00"
+      maintenance_window: "sun:04:00-sun:05:00"
+      
+    # Performance Insights
+    performance_insights:
+      enabled: true
+      retention_days: 7
+      
+    # Monitoring
+    monitoring:
+      enabled: true
+      interval: 60
+      
+  # Read replicas
+  read_replicas:
+    - name: "read-replica-1"
+      region: "us-west-2"
+      availability_zone: "us-west-2b"
+      instance_class: "db.r6g.large"
+      
+    - name: "read-replica-2"
+      region: "us-west-2"
+      availability_zone: "us-west-2c"
+      instance_class: "db.r6g.large"
+      
+    - name: "cross-region-replica"
+      region: "us-east-1"
+      availability_zone: "us-east-1a"
+      instance_class: "db.r6g.xlarge"
+      
+  # Database replication
+  replication:
+    enabled: true
+    type: "streaming"  # or "logical"
+    
+    # Cross-region replication
+    cross_region:
+      enabled: true
+      target_region: "us-east-1"
+      replication_lag_threshold_seconds: 30
+      
+    # Point-in-time recovery
+    pitr:
+      enabled: true
+      retention_days: 35
+
+# Application Tier Configuration
+application:
+  # Container configuration
+  containers:
+    web:
+      image: "financial-planning/web:latest"
+      cpu: 1000m
+      memory: 2Gi
+      ports:
+        - 8000
+      
+      # Health checks
+      liveness_probe:
+        http_get:
+          path: "/health"
+          port: 8000
+        initial_delay_seconds: 30
+        period_seconds: 10
+        
+      readiness_probe:
+        http_get:
+          path: "/ready"
+          port: 8000
+        initial_delay_seconds: 5
+        period_seconds: 5
+        
+    worker:
+      image: "financial-planning/worker:latest"
+      cpu: 500m
+      memory: 1Gi
+      
+  # Service mesh configuration
+  service_mesh:
+    enabled: true
+    provider: "istio"
+    
+    # Traffic management
+    traffic_policy:
+      load_balancer: "ROUND_ROBIN"
+      circuit_breaker:
+        consecutive_errors: 5
+        interval: 30s
+        base_ejection_time: 30s
+        
+    # Security policies
+    security:
+      mtls:
+        mode: "STRICT"
+      authorization:
+        enabled: true
+
+# Cache Layer High Availability
+cache:
+  redis:
+    enabled: true
+    
+    # Cluster configuration
+    cluster:
+      enabled: true
+      num_cache_nodes: 6
+      node_type: "cache.r6g.large"
+      
+    # Replication groups
+    replication_groups:
+      - name: "session-cache"
+        num_replicas: 2
+        multi_az: true
+        
+      - name: "application-cache"
+        num_replicas: 2
+        multi_az: true
+        
+    # Cross-region replication
+    global_replication:
+      enabled: true
+      regions:
+        - "us-west-2"
+        - "us-east-1"
+
+# Content Delivery Network
+cdn:
+  enabled: true
+  provider: "cloudflare"  # or "aws-cloudfront", "azure-cdn"
+  
+  # Cache configuration
+  cache_policy:
+    default_ttl: 3600
+    max_ttl: 86400
+    min_ttl: 0
+    
+  # Geographic distribution
+  edge_locations:
+    - "us-west"
+    - "us-east"
+    - "eu-west"
+    - "ap-southeast"
+    
+  # Security features
+  security:
+    waf_enabled: true
+    ddos_protection: true
+    rate_limiting: true
+
+# Monitoring and Alerting
+monitoring:
+  # Application Performance Monitoring
+  apm:
+    enabled: true
+    provider: "datadog"  # or "new-relic", "dynatrace"
+    
+  # Infrastructure monitoring
+  infrastructure:
+    enabled: true
+    metrics:
+      - "cpu_utilization"
+      - "memory_utilization"
+      - "disk_utilization"
+      - "network_throughput"
+      
+  # Database monitoring
+  database:
+    enabled: true
+    metrics:
+      - "connection_count"
+      - "query_performance"
+      - "replication_lag"
+      - "deadlocks"
+      
+  # Alerting thresholds
+  alerts:
+    critical:
+      response_time_ms: 5000
+      error_rate_percent: 5
+      cpu_utilization_percent: 90
+      memory_utilization_percent: 95
+      
+    warning:
+      response_time_ms: 2000
+      error_rate_percent: 2
+      cpu_utilization_percent: 80
+      memory_utilization_percent: 85
+
+# Disaster Recovery Configuration
+disaster_recovery:
+  # RTO/RPO objectives
+  objectives:
+    rto_hours: 4
+    rpo_minutes: 60
+    
+  # Failover configuration
+  failover:
+    automatic: true
+    manual_override: true
+    
+    # Failover triggers
+    triggers:
+      - "primary_region_unavailable"
+      - "database_failure"
+      - "application_failure_threshold"
+      
+    # Failover process
+    process:
+      - "stop_primary_traffic"
+      - "activate_secondary_region"
+      - "redirect_dns"
+      - "verify_secondary_health"
+      - "notify_operations_team"
+      
+  # Data synchronization
+  data_sync:
+    enabled: true
+    method: "continuous_replication"
+    lag_threshold_minutes: 5
+    
+# Security Configuration
+security:
+  # Network security
+  network:
+    vpc_peering: true
+    private_subnets: true
+    nat_gateways: true
+    
+  # Data encryption
+  encryption:
+    in_transit: true
+    at_rest: true
+    key_management: "aws-kms"  # or "azure-key-vault", "gcp-kms"
+    
+  # Access control
+  access_control:
+    iam_roles: true
+    rbac: true
+    mfa_required: true
+    
+  # Compliance
+  compliance:
+    - "SOC2"
+    - "PCI-DSS"
+    - "GDPR"
+    - "HIPAA"
+
+# Cost Optimization
+cost_optimization:
+  # Reserved instances
+  reserved_instances:
+    enabled: true
+    term: "1_year"
+    payment_option: "partial_upfront"
+    
+  # Spot instances for non-critical workloads
+  spot_instances:
+    enabled: true
+    max_price: "0.10"
+    
+  # Scheduled scaling
+  scheduled_scaling:
+    enabled: true
+    schedules:
+      - name: "business_hours_scale_up"
+        cron: "0 8 * * 1-5"
+        min_instances: 6
+        max_instances: 20
+        
+      - name: "after_hours_scale_down"
+        cron: "0 18 * * 1-5"
+        min_instances: 3
+        max_instances: 10
+
+# Deployment Strategy
+deployment:
+  strategy: "blue_green"  # or "rolling", "canary"
+  
+  # Blue-green deployment
+  blue_green:
+    enabled: true
+    switch_traffic_percentage: 100
+    rollback_timeout_minutes: 10
+    
+  # Canary deployment
+  canary:
+    enabled: false
+    initial_percentage: 10
+    increment_percentage: 10
+    interval_minutes: 5
+    
+  # Health checks during deployment
+  health_checks:
+    enabled: true
+    timeout_minutes: 10
+    success_threshold: 95

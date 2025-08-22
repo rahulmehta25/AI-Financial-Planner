@@ -1,0 +1,187 @@
+# Notification Service Configuration
+service:
+  name: notification-service
+  version: "1.0.0"
+  port: 8005
+  host: "0.0.0.0"
+  debug: false
+  workers: 2
+  
+email:
+  provider: "sendgrid"  # sendgrid, smtp, ses
+  sendgrid:
+    api_key: "${SENDGRID_API_KEY}"
+    from_email: "noreply@financial-planning.app"
+    from_name: "Financial Planning App"
+  smtp:
+    server: "${SMTP_SERVER}"
+    port: "${SMTP_PORT:-587}"
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    use_tls: true
+  ses:
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "${AWS_REGION:-us-east-1}"
+    
+sms:
+  provider: "twilio"  # twilio, sns
+  twilio:
+    account_sid: "${TWILIO_ACCOUNT_SID}"
+    auth_token: "${TWILIO_AUTH_TOKEN}"
+    from_phone: "${TWILIO_PHONE_NUMBER}"
+  sns:
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "${AWS_REGION:-us-east-1}"
+    
+push_notifications:
+  firebase:
+    service_account_key_path: "/app/config/firebase-service-account.json"
+    project_id: "${FIREBASE_PROJECT_ID}"
+  apns:
+    key_id: "${APNS_KEY_ID}"
+    team_id: "${APNS_TEAM_ID}"
+    bundle_id: "${APNS_BUNDLE_ID}"
+    key_path: "/app/config/apns-key.p8"
+    
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-notification_service_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 5
+  password: "${REDIS_PASSWORD}"
+  max_connections: 20
+  
+celery:
+  broker_url: "redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}/6"
+  result_backend: "redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}/7"
+  task_serializer: "json"
+  result_serializer: "json"
+  accept_content: ["json"]
+  timezone: "UTC"
+  enable_utc: true
+  
+websocket:
+  enabled: true
+  port: 8005
+  path: "/ws"
+  heartbeat_interval: 30
+  max_connections: 1000
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/notification-service.log"
+  max_file_size: 50MB
+  backup_count: 5
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9094
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  
+api:
+  title: "Financial Planning Notification Service"
+  description: "Multi-channel notification service for email, SMS, push, and WebSocket"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+templates:
+  path: "/app/templates"
+  cache_enabled: true
+  cache_ttl: 3600
+  
+notification_types:
+  welcome:
+    channels: ["email", "push"]
+    priority: "low"
+    template: "welcome"
+  security_alert:
+    channels: ["email", "sms", "push"]
+    priority: "high"
+    template: "security_alert"
+  goal_milestone:
+    channels: ["email", "push", "websocket"]
+    priority: "medium"
+    template: "goal_milestone"
+  market_alert:
+    channels: ["email", "push", "websocket"]
+    priority: "medium"
+    template: "market_alert"
+  simulation_complete:
+    channels: ["websocket", "push"]
+    priority: "low"
+    template: "simulation_complete"
+  account_sync_error:
+    channels: ["email", "push"]
+    priority: "high"
+    template: "account_sync_error"
+  monthly_summary:
+    channels: ["email"]
+    priority: "low"
+    template: "monthly_summary"
+    
+delivery_settings:
+  max_retries: 3
+  retry_delay_seconds: 60
+  priority_queue_enabled: true
+  batch_processing: true
+  batch_size: 100
+  
+user_preferences:
+  default_channels: ["email", "push"]
+  opt_out_supported: true
+  frequency_control: true
+  quiet_hours:
+    enabled: true
+    start: "22:00"
+    end: "08:00"
+    timezone_aware: true
+    
+rate_limiting:
+  email_per_user_per_hour: 10
+  sms_per_user_per_hour: 5
+  push_per_user_per_hour: 20
+  websocket_messages_per_minute: 100
+  
+security:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  webhook_signature_verification: true
+  content_sanitization: true
+  
+external_services:
+  user_service:
+    url: "http://user-service:8002"
+    timeout: 30
+    
+monitoring:
+  delivery_rate_tracking: true
+  bounce_rate_tracking: true
+  open_rate_tracking: true
+  click_tracking: true
+  
+compliance:
+  gdpr_compliant: true
+  can_spam_compliant: true
+  unsubscribe_handling: true
+  data_retention_days: 365

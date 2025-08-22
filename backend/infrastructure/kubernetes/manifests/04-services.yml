@@ -1,0 +1,399 @@
+# Kubernetes Services for Financial Planning Application
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-api
+  namespace: financial-planning
+  labels:
+    app: financial-planning-api
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    tier: backend
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-unhealthy-threshold: "3"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: financial-planning-api
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: financial-planning
+  labels:
+    app: user-service
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: user-management
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9091"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8002
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 50052
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9091
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: user-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: banking-service
+  namespace: financial-planning
+  labels:
+    app: banking-service
+    app.kubernetes.io/name: banking-service
+    app.kubernetes.io/component: banking
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9092"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8003
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 50053
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9092
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: banking-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-service
+  namespace: financial-planning
+  labels:
+    app: ml-service
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: machine-learning
+    tier: ml
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9093"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8004
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 50054
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9093
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: ml-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: financial-planning
+  labels:
+    app: notification-service
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/component: notifications
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9094"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8005
+    targetPort: http
+    protocol: TCP
+  - name: websocket
+    port: 8085
+    targetPort: websocket
+    protocol: TCP
+  - name: grpc
+    port: 50055
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9094
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: notification-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-service
+  namespace: financial-planning
+  labels:
+    app: document-service
+    app.kubernetes.io/name: document-service
+    app.kubernetes.io/component: documents
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9095"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8006
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 50056
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9095
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: document-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulation-service
+  namespace: financial-planning
+  labels:
+    app: simulation-service
+    app.kubernetes.io/name: simulation-service
+    app.kubernetes.io/component: simulations
+    tier: compute
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 8001
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 50051
+    targetPort: grpc
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: simulation-service
+    version: v1
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-gateway
+  namespace: financial-planning
+  labels:
+    app: graphql-gateway
+    app.kubernetes.io/name: graphql-gateway
+    app.kubernetes.io/component: gateway
+    tier: gateway
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9096"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: 4000
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9096
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: graphql-gateway
+    version: v1
+
+---
+# Headless service for StatefulSet discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-headless
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: tcp-postgresql
+    port: 5432
+    targetPort: postgresql
+  selector:
+    app.kubernetes.io/name: postgresql
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9187"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+    protocol: TCP
+  - name: metrics
+    port: 9187
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgresql
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9121"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+    protocol: TCP
+  - name: metrics
+    port: 9121
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: redis
+
+---
+# External service for accessing the cluster from outside
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-external
+  namespace: financial-planning
+  labels:
+    app: financial-planning-api
+    app.kubernetes.io/name: financial-planning-external
+    app.kubernetes.io/component: load-balancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "8000"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-east-1:123456789012:certificate/your-certificate-arn"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout: "60"
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0  # Restrict this in production
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: financial-planning-api

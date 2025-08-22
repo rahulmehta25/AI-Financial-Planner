@@ -1,0 +1,231 @@
+# Multi-stage Dockerfile for AI Financial Planning System
+# Optimized for security, performance, and minimal attack surface
+
+# Build stage
+FROM python:3.11-slim as builder
+
+# Security: Run as non-root during build
+RUN groupadd -r builder && useradd -r -g builder builder
+
+# Set environment variables for build
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore
+
+# Install build dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        gcc \
+        g++ \
+        libffi-dev \
+        libssl-dev \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip wheel setuptools \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip install --no-cache-dir gunicorn[gevent] \
+    && find /opt/venv -type d -name __pycache__ -exec rm -rf {} + \
+    && find /opt/venv -type f -name "*.pyc" -delete
+
+# Development dependencies for testing (conditional)
+ARG BUILD_ENV=production
+COPY requirements.txt /tmp/requirements.txt
+RUN if [ "$BUILD_ENV" = "development" ]; then \
+        pip install --no-cache-dir pytest pytest-cov pytest-asyncio black isort mypy; \
+    fi
+
+# Production runtime stage
+FROM python:3.11-slim as runtime
+
+# Install only runtime system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpq5 \
+        curl \
+        ca-certificates \
+        dumb-init \
+        gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Security: Create non-root user and group
+RUN groupadd -r appuser \
+    && useradd -r -g appuser -d /app -s /bin/bash appuser \
+    && mkdir -p /app /app/logs /app/tmp \
+    && chown -R appuser:appuser /app
+
+# Set work directory
+WORKDIR /app
+
+# Copy application code with proper ownership
+COPY --chown=appuser:appuser . .
+
+# Security: Remove sensitive files and set proper permissions
+RUN rm -rf .git .github tests/ docs/ *.md \
+    && find /app -type f -name "*.py" -exec chmod 644 {} + \
+    && find /app -type d -exec chmod 755 {} + \
+    && chmod +x scripts/*.py 2>/dev/null || true
+
+# Security: Create read-only filesystem structure
+RUN mkdir -p /tmp/app-tmp \
+    && chown appuser:appuser /tmp/app-tmp \
+    && chmod 1777 /tmp/app-tmp
+
+# Security: Set up proper file permissions
+RUN find /app -type f -exec chmod go-w {} + \
+    && find /app -type d -exec chmod go-w {} +
+
+# Create entrypoint script for flexible container startup
+RUN cat > /app/entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Database connection check
+if [ -n "$DATABASE_URL" ]; then
+    echo "Checking database connection..."
+    python -c "
+import os
+from sqlalchemy import create_engine
+try:
+    engine = create_engine(os.environ['DATABASE_URL'])
+    with engine.connect():
+        print('Database connection successful')
+except Exception as e:
+    print(f'Database connection failed: {e}')
+    exit(1)
+" || exit 1
+fi
+
+# Run database migrations if requested
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "Running database migrations..."
+    alembic upgrade head
+fi
+
+# Execute the main command
+exec "$@"
+EOF
+
+RUN chmod +x /app/entrypoint.sh \
+    && chown appuser:appuser /app/entrypoint.sh
+
+# Security: Switch to non-root user
+USER appuser
+
+# Environment variables for runtime
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    HOME=/app \
+    TMPDIR=/tmp/app-tmp
+
+# Expose port
+EXPOSE 8000
+
+# Health check with timeout and proper error handling
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health \
+        || curl -f http://localhost:8000/api/v1/health \
+        || exit 1
+
+# Security: Use dumb-init as PID 1 to handle signals properly
+ENTRYPOINT ["/usr/bin/dumb-init", "--", "/app/entrypoint.sh"]
+
+# Default command - can be overridden
+CMD ["gunicorn", "app.main:app", \
+     "--bind", "0.0.0.0:8000", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
+     "--worker-connections", "1000", \
+     "--max-requests", "10000", \
+     "--max-requests-jitter", "1000", \
+     "--preload", \
+     "--timeout", "120", \
+     "--keepalive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info"]
+
+# Development stage (for local development)
+FROM runtime as development
+
+USER root
+
+# Install development dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        vim \
+        htop \
+        net-tools \
+        procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development Python packages
+RUN /opt/venv/bin/pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-asyncio \
+    black \
+    isort \
+    mypy \
+    debugpy \
+    ipython
+
+# Copy development configuration
+COPY --chown=appuser:appuser .pre-commit-config.yaml pyproject.toml ./
+
+USER appuser
+
+# Override command for development
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--reload", \
+     "--log-level", "debug"]
+
+# Testing stage (for CI/CD)
+FROM development as testing
+
+USER root
+
+# Install additional testing tools
+RUN /opt/venv/bin/pip install --no-cache-dir \
+    pytest-xdist \
+    pytest-benchmark \
+    pytest-html \
+    pytest-cov \
+    coverage[toml] \
+    locust
+
+USER appuser
+
+# Override command for testing
+CMD ["pytest", "-v", "--cov=app", "--cov-report=xml", "--cov-report=html"]
+
+# Labels for metadata (keep at end)
+LABEL maintainer="Financial Planning Team <team@financialplanning.com>"
+LABEL description="AI-powered Financial Planning API"
+LABEL version="1.0.0"
+LABEL org.opencontainers.image.title="Financial Planning API"
+LABEL org.opencontainers.image.description="AI-powered financial planning and simulation API"
+LABEL org.opencontainers.image.vendor="Financial Planning Inc"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/financialplanning/backend"

@@ -1,0 +1,427 @@
+// Notification Service gRPC Definition
+syntax = "proto3";
+
+package financial_planning.notification.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/financial-planning/proto/notification/v1";
+
+// Notification Service for multi-channel notifications
+service NotificationService {
+  // Notification sending operations
+  rpc SendNotification(SendNotificationRequest) returns (SendNotificationResponse);
+  rpc SendBulkNotifications(SendBulkNotificationsRequest) returns (SendBulkNotificationsResponse);
+  rpc ScheduleNotification(ScheduleNotificationRequest) returns (ScheduleNotificationResponse);
+  rpc CancelNotification(CancelNotificationRequest) returns (google.protobuf.Empty);
+  
+  // Notification management
+  rpc GetNotification(GetNotificationRequest) returns (GetNotificationResponse);
+  rpc GetNotifications(GetNotificationsRequest) returns (GetNotificationsResponse);
+  rpc UpdateNotificationStatus(UpdateNotificationStatusRequest) returns (google.protobuf.Empty);
+  
+  // Template management
+  rpc GetTemplate(GetTemplateRequest) returns (GetTemplateResponse);
+  rpc CreateTemplate(CreateTemplateRequest) returns (CreateTemplateResponse);
+  rpc UpdateTemplate(UpdateTemplateRequest) returns (UpdateTemplateResponse);
+  
+  // User preferences
+  rpc GetUserPreferences(GetUserPreferencesRequest) returns (GetUserPreferencesResponse);
+  rpc UpdateUserPreferences(UpdateUserPreferencesRequest) returns (UpdateUserPreferencesResponse);
+  
+  // WebSocket management
+  rpc EstablishWebSocketConnection(EstablishWebSocketConnectionRequest) returns (stream WebSocketMessage);
+  rpc SendWebSocketMessage(SendWebSocketMessageRequest) returns (google.protobuf.Empty);
+  
+  // Analytics and reporting
+  rpc GetDeliveryStats(GetDeliveryStatsRequest) returns (GetDeliveryStatsResponse);
+  rpc GetEngagementMetrics(GetEngagementMetricsRequest) returns (GetEngagementMetricsResponse);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Notification sending messages
+message SendNotificationRequest {
+  string user_id = 1;
+  NotificationType type = 2;
+  repeated NotificationChannel channels = 3;
+  string template_id = 4;
+  map<string, string> template_data = 5;
+  NotificationPriority priority = 6;
+  google.protobuf.Timestamp send_at = 7;
+  map<string, string> metadata = 8;
+}
+
+message SendNotificationResponse {
+  string notification_id = 1;
+  repeated ChannelResult channel_results = 2;
+}
+
+message SendBulkNotificationsRequest {
+  repeated SendNotificationRequest notifications = 1;
+  string batch_id = 2;
+}
+
+message SendBulkNotificationsResponse {
+  string batch_id = 1;
+  int32 total_notifications = 2;
+  int32 successful_notifications = 3;
+  int32 failed_notifications = 4;
+  repeated ChannelResult results = 5;
+}
+
+message ScheduleNotificationRequest {
+  string user_id = 1;
+  NotificationType type = 2;
+  repeated NotificationChannel channels = 3;
+  string template_id = 4;
+  map<string, string> template_data = 5;
+  google.protobuf.Timestamp scheduled_at = 6;
+  string recurrence_rule = 7; // RRULE format
+  google.protobuf.Timestamp expires_at = 8;
+}
+
+message ScheduleNotificationResponse {
+  string scheduled_notification_id = 1;
+  google.protobuf.Timestamp next_execution = 2;
+}
+
+message CancelNotificationRequest {
+  string user_id = 1;
+  string notification_id = 2;
+}
+
+// Notification management messages
+message GetNotificationRequest {
+  string user_id = 1;
+  string notification_id = 2;
+}
+
+message GetNotificationResponse {
+  Notification notification = 1;
+}
+
+message GetNotificationsRequest {
+  string user_id = 1;
+  repeated NotificationType types = 2;
+  repeated NotificationStatus statuses = 3;
+  google.protobuf.Timestamp start_date = 4;
+  google.protobuf.Timestamp end_date = 5;
+  int32 limit = 6;
+  int32 offset = 7;
+}
+
+message GetNotificationsResponse {
+  repeated Notification notifications = 1;
+  int32 total_count = 2;
+}
+
+message UpdateNotificationStatusRequest {
+  string notification_id = 1;
+  NotificationStatus status = 2;
+  string reason = 3;
+}
+
+// Template management messages
+message GetTemplateRequest {
+  string template_id = 1;
+  string language = 2;
+}
+
+message GetTemplateResponse {
+  NotificationTemplate template = 1;
+}
+
+message CreateTemplateRequest {
+  NotificationTemplate template = 1;
+}
+
+message CreateTemplateResponse {
+  string template_id = 1;
+}
+
+message UpdateTemplateRequest {
+  string template_id = 1;
+  NotificationTemplate template = 2;
+}
+
+message UpdateTemplateResponse {
+  NotificationTemplate template = 1;
+}
+
+// User preferences messages
+message GetUserPreferencesRequest {
+  string user_id = 1;
+}
+
+message GetUserPreferencesResponse {
+  NotificationPreferences preferences = 1;
+}
+
+message UpdateUserPreferencesRequest {
+  string user_id = 1;
+  NotificationPreferences preferences = 2;
+}
+
+message UpdateUserPreferencesResponse {
+  NotificationPreferences preferences = 1;
+}
+
+// WebSocket messages
+message EstablishWebSocketConnectionRequest {
+  string user_id = 1;
+  string device_id = 2;
+  map<string, string> metadata = 3;
+}
+
+message WebSocketMessage {
+  string message_id = 1;
+  WebSocketMessageType type = 2;
+  string data = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message SendWebSocketMessageRequest {
+  string user_id = 1;
+  WebSocketMessage message = 2;
+}
+
+// Analytics messages
+message GetDeliveryStatsRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  repeated NotificationChannel channels = 3;
+  repeated NotificationType types = 4;
+}
+
+message GetDeliveryStatsResponse {
+  DeliveryStats overall_stats = 1;
+  repeated ChannelStats channel_stats = 2;
+  repeated TypeStats type_stats = 3;
+}
+
+message GetEngagementMetricsRequest {
+  google.protobuf.Timestamp start_date = 1;
+  google.protobuf.Timestamp end_date = 2;
+  repeated NotificationChannel channels = 3;
+}
+
+message GetEngagementMetricsResponse {
+  EngagementMetrics metrics = 1;
+}
+
+// Health check
+message HealthResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  repeated ServiceHealth service_health = 3;
+}
+
+// Data models
+message Notification {
+  string id = 1;
+  string user_id = 2;
+  NotificationType type = 3;
+  string subject = 4;
+  string content = 5;
+  repeated NotificationChannel channels = 6;
+  NotificationPriority priority = 7;
+  NotificationStatus status = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp scheduled_at = 10;
+  google.protobuf.Timestamp sent_at = 11;
+  google.protobuf.Timestamp delivered_at = 12;
+  repeated ChannelDelivery channel_deliveries = 13;
+  map<string, string> metadata = 14;
+}
+
+message ChannelDelivery {
+  NotificationChannel channel = 1;
+  NotificationStatus status = 2;
+  string external_id = 3;
+  string provider = 4;
+  google.protobuf.Timestamp sent_at = 5;
+  google.protobuf.Timestamp delivered_at = 6;
+  google.protobuf.Timestamp opened_at = 7;
+  google.protobuf.Timestamp clicked_at = 8;
+  string error_message = 9;
+  int32 retry_count = 10;
+}
+
+message ChannelResult {
+  NotificationChannel channel = 1;
+  bool success = 2;
+  string external_id = 3;
+  string message = 4;
+  string error = 5;
+}
+
+message NotificationTemplate {
+  string id = 1;
+  string name = 2;
+  NotificationType type = 3;
+  string language = 4;
+  string subject_template = 5;
+  string body_template = 6;
+  string sms_template = 7;
+  string push_title_template = 8;
+  string push_body_template = 9;
+  repeated string required_variables = 10;
+  bool active = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message NotificationPreferences {
+  string user_id = 1;
+  repeated ChannelPreference channel_preferences = 2;
+  repeated TypePreference type_preferences = 3;
+  QuietHours quiet_hours = 4;
+  string timezone = 5;
+  string language = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message ChannelPreference {
+  NotificationChannel channel = 1;
+  bool enabled = 2;
+  string contact_info = 3; // email, phone, device token
+  repeated NotificationType enabled_types = 4;
+}
+
+message TypePreference {
+  NotificationType type = 1;
+  bool enabled = 2;
+  repeated NotificationChannel preferred_channels = 3;
+  NotificationFrequency frequency = 4;
+}
+
+message QuietHours {
+  string start_time = 1; // HH:MM format
+  string end_time = 2;   // HH:MM format
+  bool enabled = 3;
+  repeated string days_of_week = 4; // MON, TUE, etc.
+}
+
+message DeliveryStats {
+  int64 total_sent = 1;
+  int64 total_delivered = 2;
+  int64 total_failed = 3;
+  int64 total_opened = 4;
+  int64 total_clicked = 5;
+  double delivery_rate = 6;
+  double open_rate = 7;
+  double click_rate = 8;
+  double bounce_rate = 9;
+}
+
+message ChannelStats {
+  NotificationChannel channel = 1;
+  DeliveryStats stats = 2;
+}
+
+message TypeStats {
+  NotificationType type = 1;
+  DeliveryStats stats = 2;
+}
+
+message EngagementMetrics {
+  double average_open_rate = 1;
+  double average_click_rate = 2;
+  double average_response_time_minutes = 3;
+  repeated EngagementTrend trends = 4;
+  repeated TopPerformingTemplate top_templates = 5;
+}
+
+message EngagementTrend {
+  google.protobuf.Timestamp date = 1;
+  double open_rate = 2;
+  double click_rate = 3;
+  int64 volume = 4;
+}
+
+message TopPerformingTemplate {
+  string template_id = 1;
+  string template_name = 2;
+  double open_rate = 3;
+  double click_rate = 4;
+  int64 usage_count = 5;
+}
+
+message ServiceHealth {
+  string service_name = 1;
+  bool healthy = 2;
+  double response_time_ms = 3;
+  string last_error = 4;
+  google.protobuf.Timestamp last_check = 5;
+}
+
+// Enums
+enum NotificationChannel {
+  NOTIFICATION_CHANNEL_UNSPECIFIED = 0;
+  NOTIFICATION_CHANNEL_EMAIL = 1;
+  NOTIFICATION_CHANNEL_SMS = 2;
+  NOTIFICATION_CHANNEL_PUSH = 3;
+  NOTIFICATION_CHANNEL_WEBSOCKET = 4;
+  NOTIFICATION_CHANNEL_IN_APP = 5;
+}
+
+enum NotificationType {
+  NOTIFICATION_TYPE_UNSPECIFIED = 0;
+  NOTIFICATION_TYPE_WELCOME = 1;
+  NOTIFICATION_TYPE_SECURITY_ALERT = 2;
+  NOTIFICATION_TYPE_GOAL_MILESTONE = 3;
+  NOTIFICATION_TYPE_MARKET_ALERT = 4;
+  NOTIFICATION_TYPE_SIMULATION_COMPLETE = 5;
+  NOTIFICATION_TYPE_ACCOUNT_SYNC_ERROR = 6;
+  NOTIFICATION_TYPE_MONTHLY_SUMMARY = 7;
+  NOTIFICATION_TYPE_RECOMMENDATION = 8;
+  NOTIFICATION_TYPE_PAYMENT_REMINDER = 9;
+  NOTIFICATION_TYPE_BUDGET_ALERT = 10;
+  NOTIFICATION_TYPE_TRANSACTION_ALERT = 11;
+  NOTIFICATION_TYPE_PASSWORD_RESET = 12;
+  NOTIFICATION_TYPE_ACCOUNT_LOCKED = 13;
+  NOTIFICATION_TYPE_LOGIN_DETECTED = 14;
+  NOTIFICATION_TYPE_DOCUMENT_READY = 15;
+}
+
+enum NotificationPriority {
+  NOTIFICATION_PRIORITY_UNSPECIFIED = 0;
+  NOTIFICATION_PRIORITY_LOW = 1;
+  NOTIFICATION_PRIORITY_NORMAL = 2;
+  NOTIFICATION_PRIORITY_HIGH = 3;
+  NOTIFICATION_PRIORITY_URGENT = 4;
+}
+
+enum NotificationStatus {
+  NOTIFICATION_STATUS_UNSPECIFIED = 0;
+  NOTIFICATION_STATUS_PENDING = 1;
+  NOTIFICATION_STATUS_QUEUED = 2;
+  NOTIFICATION_STATUS_SENDING = 3;
+  NOTIFICATION_STATUS_SENT = 4;
+  NOTIFICATION_STATUS_DELIVERED = 5;
+  NOTIFICATION_STATUS_OPENED = 6;
+  NOTIFICATION_STATUS_CLICKED = 7;
+  NOTIFICATION_STATUS_FAILED = 8;
+  NOTIFICATION_STATUS_CANCELLED = 9;
+  NOTIFICATION_STATUS_EXPIRED = 10;
+}
+
+enum NotificationFrequency {
+  NOTIFICATION_FREQUENCY_UNSPECIFIED = 0;
+  NOTIFICATION_FREQUENCY_IMMEDIATE = 1;
+  NOTIFICATION_FREQUENCY_DAILY = 2;
+  NOTIFICATION_FREQUENCY_WEEKLY = 3;
+  NOTIFICATION_FREQUENCY_MONTHLY = 4;
+  NOTIFICATION_FREQUENCY_NEVER = 5;
+}
+
+enum WebSocketMessageType {
+  WEBSOCKET_MESSAGE_TYPE_UNSPECIFIED = 0;
+  WEBSOCKET_MESSAGE_TYPE_NOTIFICATION = 1;
+  WEBSOCKET_MESSAGE_TYPE_REAL_TIME_UPDATE = 2;
+  WEBSOCKET_MESSAGE_TYPE_SYSTEM_MESSAGE = 3;
+  WEBSOCKET_MESSAGE_TYPE_HEARTBEAT = 4;
+}

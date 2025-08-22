@@ -1,0 +1,125 @@
+# Banking Service Configuration
+service:
+  name: banking-service
+  version: "1.0.0"
+  port: 8003
+  host: "0.0.0.0"
+  debug: false
+  workers: 4
+  
+plaid:
+  client_id: "${PLAID_CLIENT_ID}"
+  secret: "${PLAID_SECRET}"
+  environment: "${PLAID_ENV:-sandbox}"  # sandbox, development, production
+  webhook_url: "https://api.financial-planning.app/api/v1/banking/webhooks/plaid"
+  
+yodlee:
+  cobrand_name: "${YODLEE_COBRAND_NAME}"
+  application_id: "${YODLEE_APPLICATION_ID}"
+  secret: "${YODLEE_SECRET}"
+  environment: "${YODLEE_ENV:-sandbox}"
+  webhook_url: "https://api.financial-planning.app/api/v1/banking/webhooks/yodlee"
+  
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-banking_service_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 20
+  max_overflow: 40
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 3
+  password: "${REDIS_PASSWORD}"
+  max_connections: 20
+  
+encryption:
+  key: "${ENCRYPTION_KEY}"
+  algorithm: "AES-256-GCM"
+  credential_encryption: true
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/banking-service.log"
+  max_file_size: 50MB
+  backup_count: 5
+  pii_masking: true
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9092
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  
+api:
+  title: "Financial Planning Banking Service"
+  description: "Banking data aggregation service with Plaid and Yodlee integration"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+sync_settings:
+  transaction_sync_days: 365
+  balance_sync_interval_hours: 4
+  account_sync_interval_hours: 24
+  max_retries: 3
+  retry_delay_seconds: 30
+  
+transaction_processing:
+  categorization_enabled: true
+  duplicate_detection: true
+  spending_pattern_analysis: true
+  cash_flow_prediction: true
+  
+security:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  credential_vault_enabled: true
+  pci_compliance: true
+  data_masking: true
+  
+rate_limiting:
+  plaid_requests_per_minute: 600
+  yodlee_requests_per_minute: 1000
+  api_requests_per_minute: 120
+  webhook_requests_per_minute: 1000
+  
+webhooks:
+  verify_signatures: true
+  plaid_webhook_secret: "${PLAID_WEBHOOK_SECRET}"
+  yodlee_webhook_secret: "${YODLEE_WEBHOOK_SECRET}"
+  retry_failed_webhooks: true
+  max_webhook_retries: 5
+  
+monitoring:
+  account_status_checks: true
+  connection_health_monitoring: true
+  error_rate_alerting: true
+  latency_monitoring: true
+  
+external_services:
+  user_service:
+    url: "http://user-service:8002"
+    timeout: 30
+  notification_service:
+    url: "http://notification-service:8005"
+    timeout: 30
+    
+compliance:
+  pci_dss: true
+  sox_compliance: true
+  gdpr_compliance: true
+  data_retention_days: 2555
+  audit_logging: true

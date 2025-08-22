@@ -1,0 +1,159 @@
+{
+  "type": "record",
+  "name": "MarketData",
+  "namespace": "com.financialplanning.streaming",
+  "fields": [
+    {
+      "name": "symbol",
+      "type": "string",
+      "doc": "Stock symbol or ticker"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Timestamp of the market data point"
+    },
+    {
+      "name": "price",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Current price of the security"
+    },
+    {
+      "name": "volume",
+      "type": "long",
+      "doc": "Trading volume"
+    },
+    {
+      "name": "bid",
+      "type": ["null", {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      }],
+      "default": null,
+      "doc": "Bid price"
+    },
+    {
+      "name": "ask",
+      "type": ["null", {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      }],
+      "default": null,
+      "doc": "Ask price"
+    },
+    {
+      "name": "open",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Opening price for the day"
+    },
+    {
+      "name": "high",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Highest price for the day"
+    },
+    {
+      "name": "low",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Lowest price for the day"
+    },
+    {
+      "name": "previous_close",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Previous day's closing price"
+    },
+    {
+      "name": "change",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 10,
+        "scale": 2
+      },
+      "doc": "Price change from previous close"
+    },
+    {
+      "name": "change_percent",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 5,
+        "scale": 4
+      },
+      "doc": "Percentage change from previous close"
+    },
+    {
+      "name": "market_cap",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Market capitalization"
+    },
+    {
+      "name": "pe_ratio",
+      "type": ["null", {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 8,
+        "scale": 2
+      }],
+      "default": null,
+      "doc": "Price to earnings ratio"
+    },
+    {
+      "name": "dividend_yield",
+      "type": ["null", {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 5,
+        "scale": 4
+      }],
+      "default": null,
+      "doc": "Annual dividend yield percentage"
+    },
+    {
+      "name": "source",
+      "type": "string",
+      "doc": "Data source identifier"
+    },
+    {
+      "name": "data_quality_score",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 3,
+        "scale": 2
+      },
+      "default": "1.00",
+      "doc": "Data quality score (0.00 to 1.00)"
+    }
+  ]
+}

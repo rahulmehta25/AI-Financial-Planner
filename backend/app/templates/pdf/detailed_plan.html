@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Detailed Financial Plan - {{ user.name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.75in;
+            @bottom-right {
+                content: "Page " counter(page) " | Generated " "{{ generated_at }}";
+                font-size: 8px;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 10px;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #2E86AB;
+            padding-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2E86AB;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2E86AB;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 5px;
+        }
+        
+        .subsection {
+            margin-bottom: 15px;
+        }
+        
+        .subsection-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 8px;
+        }
+        
+        .chart-container {
+            text-align: center;
+            margin: 15px 0;
+            page-break-inside: avoid;
+        }
+        
+        .chart-container img {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 9px;
+        }
+        
+        .data-table th,
+        .data-table td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: left;
+        }
+        
+        .data-table th {
+            background-color: #2E86AB;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .data-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .metric-card {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 8px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #2E86AB;
+        }
+        
+        .goal-detailed {
+            border: 1px solid #ddd;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .goal-header {
+            background-color: #2E86AB;
+            color: white;
+            padding: 10px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        
+        .goal-content {
+            padding: 12px;
+        }
+        
+        .goal-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .goal-stat {
+            text-align: center;
+        }
+        
+        .goal-stat-label {
+            font-size: 8px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .goal-stat-value {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2E86AB;
+        }
+        
+        .progress-bar-detailed {
+            background-color: #e9ecef;
+            border-radius: 10px;
+            height: 12px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        
+        .progress-fill-detailed {
+            background-color: #2E86AB;
+            height: 100%;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 8px;
+            font-weight: bold;
+        }
+        
+        .analysis-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #2E86AB;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .recommendation-detailed {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .recommendation-title {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 5px;
+        }
+        
+        .disclaimer {
+            font-size: 7px;
+            color: #666;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            page-break-inside: avoid;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .no-break {
+            page-break-inside: avoid;
+        }
+        
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header">
+        <h1 class="title">Detailed Financial Analysis Report</h1>
+        <p class="subtitle">Comprehensive Financial Planning & Strategic Recommendations</p>
+        <p>Prepared for {{ user.name }} | Generated {{ generated_at }}</p>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="section">
+        <h2 class="section-title">Executive Summary</h2>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Current Age</div>
+                <div class="metric-value">{{ profile.age }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Annual Income</div>
+                <div class="metric-value">${{ "{:,.0f}".format(profile.annual_income) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Net Worth</div>
+                <div class="metric-value">${{ "{:,.0f}".format(profile.net_worth) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Risk Profile</div>
+                <div class="metric-value">{{ profile.risk_tolerance }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Experience Level</div>
+                <div class="metric-value">{{ profile.investment_experience }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Employment</div>
+                <div class="metric-value">{{ profile.employment_status }}</div>
+            </div>
+        </div>
+
+        {% if ai_narrative %}
+        <div class="analysis-box">
+            <h3 class="subsection-title">AI-Generated Analysis</h3>
+            <p>{{ ai_narrative }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Detailed Asset & Liability Breakdown -->
+    <div class="section">
+        <h2 class="section-title">Assets & Liabilities Analysis</h2>
+        
+        <div class="two-column">
+            <div class="subsection">
+                <h3 class="subsection-title">Asset Breakdown</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Asset Category</th>
+                            <th>Current Value</th>
+                            <th>% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if detailed_analysis and detailed_analysis.assets_breakdown %}
+                        {% set total_assets = detailed_analysis.assets_breakdown.values() | sum %}
+                        {% for asset, value in detailed_analysis.assets_breakdown.items() %}
+                        <tr>
+                            <td>{{ asset.replace('_', ' ').title() }}</td>
+                            <td>${{ "{:,.0f}".format(value) }}</td>
+                            <td>{{ "{:.1%}".format(value / total_assets if total_assets > 0 else 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr style="font-weight: bold; background-color: #e9ecef;">
+                            <td>Total Assets</td>
+                            <td>${{ "{:,.0f}".format(total_assets) }}</td>
+                            <td>100.0%</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subsection">
+                <h3 class="subsection-title">Liability Breakdown</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Liability Category</th>
+                            <th>Current Balance</th>
+                            <th>% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if detailed_analysis and detailed_analysis.liabilities_breakdown %}
+                        {% set total_liabilities = detailed_analysis.liabilities_breakdown.values() | sum %}
+                        {% for liability, value in detailed_analysis.liabilities_breakdown.items() %}
+                        <tr>
+                            <td>{{ liability.replace('_', ' ').title() }}</td>
+                            <td>${{ "{:,.0f}".format(value) }}</td>
+                            <td>{{ "{:.1%}".format(value / total_liabilities if total_liabilities > 0 else 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr style="font-weight: bold; background-color: #f8d7da;">
+                            <td>Total Liabilities</td>
+                            <td>${{ "{:,.0f}".format(total_liabilities) }}</td>
+                            <td>100.0%</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Allocation Chart -->
+    {% if charts.asset_allocation %}
+    <div class="section no-break">
+        <h2 class="section-title">Current Asset Allocation</h2>
+        <div class="chart-container">
+            <img src="{{ charts.asset_allocation }}" alt="Asset Allocation Chart">
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Cash Flow Analysis -->
+    <div class="section">
+        <h2 class="section-title">Cash Flow Analysis</h2>
+        
+        {% if detailed_analysis and detailed_analysis.monthly_cash_flow %}
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Monthly Income</div>
+                <div class="metric-value">${{ "{:,.0f}".format(detailed_analysis.monthly_cash_flow.income) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Monthly Expenses</div>
+                <div class="metric-value">${{ "{:,.0f}".format(detailed_analysis.monthly_cash_flow.expenses) }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Monthly Surplus</div>
+                <div class="metric-value" style="color: {% if detailed_analysis.monthly_cash_flow.surplus >= 0 %}#28a745{% else %}#dc3545{% endif %}">
+                    ${{ "{:,.0f}".format(detailed_analysis.monthly_cash_flow.surplus) }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if charts.cash_flow %}
+        <div class="chart-container">
+            <img src="{{ charts.cash_flow }}" alt="Cash Flow Chart">
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Financial Goals Detailed Analysis -->
+    <div class="section page-break">
+        <h2 class="section-title">Financial Goals Detailed Analysis</h2>
+        
+        {% if goals %}
+        {% for goal in goals %}
+        <div class="goal-detailed no-break">
+            <div class="goal-header">
+                {{ goal.name }} - {{ goal.target_date }}
+            </div>
+            <div class="goal-content">
+                <div class="goal-stats">
+                    <div class="goal-stat">
+                        <div class="goal-stat-label">Target Amount</div>
+                        <div class="goal-stat-value">${{ "{:,.0f}".format(goal.target_amount) }}</div>
+                    </div>
+                    <div class="goal-stat">
+                        <div class="goal-stat-label">Current Amount</div>
+                        <div class="goal-stat-value">${{ "{:,.0f}".format(goal.current_amount) }}</div>
+                    </div>
+                    <div class="goal-stat">
+                        <div class="goal-stat-label">Monthly Contribution</div>
+                        <div class="goal-stat-value">${{ "{:,.0f}".format(goal.monthly_contribution) }}</div>
+                    </div>
+                </div>
+                
+                <div class="progress-bar-detailed">
+                    <div class="progress-fill-detailed" style="width: {{ goal.progress_percentage }}%">
+                        {{ "{:.1f}".format(goal.progress_percentage) }}%
+                    </div>
+                </div>
+                
+                <p style="margin-top: 10px; font-size: 9px;">
+                    <strong>Remaining:</strong> ${{ "{:,.0f}".format(goal.target_amount - goal.current_amount) }} |
+                    <strong>Status:</strong> {{ goal.status.replace('_', ' ').title() }}
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if charts.goals_progress %}
+        <div class="chart-container">
+            <img src="{{ charts.goals_progress }}" alt="Goals Progress Chart">
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <p style="text-align: center; color: #666; font-style: italic;">No financial goals have been defined yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Net Worth Projection -->
+    {% if charts.net_worth %}
+    <div class="section">
+        <h2 class="section-title">Net Worth Projection Analysis</h2>
+        <div class="chart-container">
+            <img src="{{ charts.net_worth }}" alt="Net Worth Projection">
+        </div>
+        <div class="analysis-box">
+            <p>This projection assumes current savings rate and investment returns based on your risk profile. 
+            Actual results may vary based on market conditions, changes in income, and spending patterns.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Monte Carlo Simulation -->
+    {% if charts.monte_carlo %}
+    <div class="section">
+        <h2 class="section-title">Portfolio Performance Simulation</h2>
+        <div class="chart-container">
+            <img src="{{ charts.monte_carlo }}" alt="Monte Carlo Simulation">
+        </div>
+        <div class="analysis-box">
+            <h3 class="subsection-title">Simulation Analysis</h3>
+            <p>This Monte Carlo simulation shows potential portfolio outcomes based on historical market data and volatility. 
+            The shaded area represents the 80% confidence interval, meaning there's an 80% probability your portfolio 
+            value will fall within this range.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed Recommendations -->
+    <div class="section page-break">
+        <h2 class="section-title">Detailed Recommendations & Action Plan</h2>
+        
+        {% if recommendations %}
+        {% for rec in recommendations %}
+        <div class="recommendation-detailed">
+            <div class="recommendation-title">{{ rec.title }}</div>
+            <p>{{ rec.description }}</p>
+            {% if rec.action_items %}
+            <ul style="margin: 5px 0; padding-left: 15px;">
+                {% for item in rec.action_items %}
+                <li style="margin: 2px 0;">{{ item }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <!-- Standard Recommendations Based on Profile -->
+        <div class="subsection">
+            <h3 class="subsection-title">Standard Recommendations for {{ profile.risk_tolerance }} Investors</h3>
+            
+            {% if profile.risk_tolerance == 'conservative' %}
+            <div class="recommendation-detailed">
+                <div class="recommendation-title">Conservative Investment Strategy</div>
+                <p>Focus on capital preservation with steady, predictable returns. Recommended allocation: 70% bonds, 30% stocks.</p>
+            </div>
+            {% elif profile.risk_tolerance == 'moderate' %}
+            <div class="recommendation-detailed">
+                <div class="recommendation-title">Balanced Investment Strategy</div>
+                <p>Balance growth potential with risk management. Recommended allocation: 60% stocks, 40% bonds.</p>
+            </div>
+            {% else %}
+            <div class="recommendation-detailed">
+                <div class="recommendation-title">Growth-Oriented Investment Strategy</div>
+                <p>Focus on long-term growth with higher risk tolerance. Recommended allocation: 80% stocks, 20% bonds.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Emergency Fund Recommendations -->
+        <div class="recommendation-detailed">
+            <div class="recommendation-title">Emergency Fund Planning</div>
+            <p>Target: 6 months of expenses (${{ "{:,.0f}".format((detailed_analysis.monthly_cash_flow.expenses if detailed_analysis and detailed_analysis.monthly_cash_flow else profile.annual_income / 12) * 6) }}).</p>
+            <p>Current Status: {{ "Adequate" if (detailed_analysis.assets_breakdown.liquid_assets if detailed_analysis and detailed_analysis.assets_breakdown else 0) >= (detailed_analysis.monthly_cash_flow.expenses if detailed_analysis and detailed_analysis.monthly_cash_flow else profile.annual_income / 12) * 6 else "Needs Improvement" }}</p>
+        </div>
+
+        <!-- Retirement Planning -->
+        <div class="recommendation-detailed">
+            <div class="recommendation-title">Retirement Planning</div>
+            <p>Based on your age ({{ profile.age }}), consider increasing retirement contributions to 15-20% of income. 
+            Current retirement savings rate appears to be {{ "{:.1%}".format((detailed_analysis.assets_breakdown.retirement_accounts if detailed_analysis and detailed_analysis.assets_breakdown else 0) / profile.annual_income) }} of annual income.</p>
+        </div>
+    </div>
+
+    <!-- Risk Analysis -->
+    <div class="section">
+        <h2 class="section-title">Risk Analysis & Mitigation</h2>
+        
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Risk Factor</th>
+                    <th>Current Level</th>
+                    <th>Target Level</th>
+                    <th>Mitigation Strategy</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Debt-to-Income Ratio</td>
+                    <td>{{ "{:.1%}".format(profile.debt_to_income_ratio) }}</td>
+                    <td>&lt; 36%</td>
+                    <td>{% if profile.debt_to_income_ratio > 0.36 %}Focus on debt reduction{% else %}Maintain current level{% endif %}</td>
+                </tr>
+                <tr>
+                    <td>Emergency Fund Coverage</td>
+                    <td>{{ "{:.1f}".format((detailed_analysis.assets_breakdown.liquid_assets if detailed_analysis and detailed_analysis.assets_breakdown else 0) / (detailed_analysis.monthly_cash_flow.expenses if detailed_analysis and detailed_analysis.monthly_cash_flow else profile.annual_income / 12)) }} months</td>
+                    <td>6 months</td>
+                    <td>{% if (detailed_analysis.assets_breakdown.liquid_assets if detailed_analysis and detailed_analysis.assets_breakdown else 0) < (detailed_analysis.monthly_cash_flow.expenses if detailed_analysis and detailed_analysis.monthly_cash_flow else profile.annual_income / 12) * 6 %}Increase liquid savings{% else %}Maintain current level{% endif %}</td>
+                </tr>
+                <tr>
+                    <td>Investment Diversification</td>
+                    <td>Review needed</td>
+                    <td>Well diversified</td>
+                    <td>Regular portfolio rebalancing</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Implementation Timeline -->
+    <div class="section">
+        <h2 class="section-title">Implementation Timeline</h2>
+        
+        <div class="analysis-box">
+            <h3 class="subsection-title">Immediate Actions (Next 30 days)</h3>
+            <ul>
+                <li>Review and optimize current budget</li>
+                <li>Set up automatic transfers for emergency fund</li>
+                <li>Review insurance coverage adequacy</li>
+            </ul>
+        </div>
+
+        <div class="analysis-box">
+            <h3 class="subsection-title">Short-term Goals (3-6 months)</h3>
+            <ul>
+                <li>Establish target emergency fund level</li>
+                <li>Optimize investment allocation based on risk profile</li>
+                <li>Consider debt consolidation if applicable</li>
+            </ul>
+        </div>
+
+        <div class="analysis-box">
+            <h3 class="subsection-title">Long-term Strategy (6+ months)</h3>
+            <ul>
+                <li>Regular portfolio review and rebalancing</li>
+                <li>Annual goal progress assessment</li>
+                <li>Tax planning and optimization strategies</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Compliance Disclaimer -->
+    <div class="disclaimer">
+        {{ compliance_disclaimer }}
+        
+        <br><br>
+        <strong>Plan Details:</strong><br>
+        Report Type: Detailed Financial Analysis<br>
+        Generated: {{ generated_at }}<br>
+        Client: {{ user.name }}<br>
+        Risk Profile: {{ profile.risk_tolerance.title() }}<br>
+        Investment Experience: {{ profile.investment_experience.title() }}
+    </div>
+</body>
+</html>
