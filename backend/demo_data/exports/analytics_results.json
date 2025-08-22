@@ -1,0 +1,41 @@
+{
+  "market_analytics": {
+    "total_securities": 8,
+    "avg_price_by_sector": {
+      "Energy": 235.52935724962632,
+      "Healthcare": 240.5664344065353,
+      "Finance": 233.30832572298326,
+      "Tech": 238.92960844925295
+    },
+    "total_records": 8000
+  },
+  "portfolio_analytics": {
+    "total_customers": 500,
+    "asset_allocation_avg": {
+      "Stocks": 21.64268,
+      "Bonds": 21.69728,
+      "Real Estate": 20.99216,
+      "Commodities": 35.66816
+    },
+    "risk_distribution": {
+      "Medium": 633,
+      "Low": 468,
+      "Very High": 465,
+      "High": 434
+    }
+  },
+  "streaming_analytics": {
+    "total_events": 5000,
+    "events_by_action": {
+      "withdrawal": 1257,
+      "update_allocation": 1219,
+      "view_portfolio": 1256,
+      "risk_assessment": 1268
+    },
+    "avg_transaction_value": 5020.784634,
+    "peak_hours": {
+      "18": 5000
+    },
+    "alerts_generated": 240
+  }
+}
