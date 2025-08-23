@@ -1,15 +1,15 @@
 import { Navigation } from "@/components/Navigation";
-import { HeroSection } from "@/components/HeroSection";
+import { Dashboard } from "@/components/Dashboard";
 import { ParticleBackground } from "@/components/ParticleBackground";
 
-const Index = () => {
+const DashboardPage = () => {
   return (
     <div className="relative min-h-screen">
       <ParticleBackground />
       <Navigation />
-      <HeroSection />
+      <Dashboard />
     </div>
   );
 };
 
-export default Index;
+export default DashboardPage;
