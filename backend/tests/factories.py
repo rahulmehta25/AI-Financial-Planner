@@ -238,6 +238,131 @@ class AggressiveProfileFactory(FinancialProfileFactory):
     investment_timeline = factory.LazyAttribute(lambda obj: fake.random_int(min=15, max=30))
 
 
+# Advanced scenario factories for comprehensive testing
+
+class TaxOptimizationScenarioFactory(AsyncSQLAlchemyModelFactory):
+    """Factory for creating tax optimization test scenarios."""
+    
+    class Meta:
+        abstract = True
+    
+    @classmethod
+    async def create_tax_scenario(cls, session: AsyncSession, scenario_type: str = 'basic'):
+        """Create comprehensive tax optimization scenario."""
+        
+        if scenario_type == 'high_earner':
+            return await cls.create_high_earner_scenario(session)
+        elif scenario_type == 'retiree':
+            return await cls.create_retiree_scenario(session)
+        elif scenario_type == 'young_professional':
+            return await cls.create_young_professional_scenario(session)
+        else:
+            return await cls.create_basic_scenario(session)
+    
+    @classmethod
+    async def create_high_earner_scenario(cls, session: AsyncSession):
+        """High earner with complex tax situation."""
+        user = await UserFactory.create(session=session)
+        
+        profile = await FinancialProfileFactory.create(
+            session=session,
+            user_id=user.id,
+            annual_income=Decimal('250000'),
+            current_savings=Decimal('500000'),
+            current_debt=Decimal('75000'),
+            risk_tolerance='aggressive'
+        )
+        
+        # Multiple account types
+        accounts = {
+            'taxable': Decimal('300000'),
+            'traditional_401k': Decimal('400000'),
+            'roth_ira': Decimal('75000'),
+            'hsa': Decimal('25000')
+        }
+        
+        # Tax lots with gains and losses
+        tax_lots = [
+            {'symbol': 'AAPL', 'quantity': 500, 'cost_basis': 120.0, 'current_price': 180.0},
+            {'symbol': 'GOOGL', 'quantity': 100, 'cost_basis': 2800.0, 'current_price': 2600.0},
+            {'symbol': 'MSFT', 'quantity': 200, 'cost_basis': 250.0, 'current_price': 420.0},
+            {'symbol': 'TSLA', 'quantity': 150, 'cost_basis': 900.0, 'current_price': 250.0}
+        ]
+        
+        return {
+            'user': user,
+            'profile': profile,
+            'accounts': accounts,
+            'tax_lots': tax_lots,
+            'scenario_type': 'high_earner'
+        }
+    
+    @classmethod
+    async def create_basic_scenario(cls, session: AsyncSession):
+        """Basic tax scenario."""
+        user = await UserFactory.create(session=session)
+        
+        profile = await FinancialProfileFactory.create(
+            session=session,
+            user_id=user.id,
+            annual_income=Decimal('75000'),
+            current_savings=Decimal('50000'),
+            risk_tolerance='moderate'
+        )
+        
+        accounts = {
+            'taxable': Decimal('30000'),
+            'traditional_401k': Decimal('50000')
+        }
+        
+        return {
+            'user': user,
+            'profile': profile,
+            'accounts': accounts,
+            'scenario_type': 'basic'
+        }
+
+
+class EnhancedMarketDataFactory(MarketDataFactory):
+    """Enhanced market data factory for advanced testing."""
+    
+    @classmethod
+    async def create_time_series(cls, session: AsyncSession, symbol: str, days: int = 252):
+        """Create time series data for backtesting."""
+        import numpy as np
+        
+        start_date = fake.date_between(start_date='-2y', end_date='-1y')
+        base_price = Decimal(fake.random.uniform(50, 500))
+        
+        data_points = []
+        current_price = base_price
+        
+        for i in range(days):
+            # Simulate realistic price movements
+            daily_return = np.random.normal(0.0005, 0.02)  # ~12.5% annual return, 20% volatility
+            current_price *= Decimal(1 + daily_return)
+            
+            # Generate OHLCV data
+            high_price = current_price * Decimal(fake.random.uniform(1.0, 1.05))
+            low_price = current_price * Decimal(fake.random.uniform(0.95, 1.0))
+            volume = fake.random_int(min=100000, max=10000000)
+            
+            data_point = await cls.create(
+                session=session,
+                symbol=symbol,
+                timestamp=datetime.combine(start_date + timedelta(days=i), datetime.min.time()),
+                open_price=current_price,
+                high_price=high_price,
+                low_price=low_price,
+                close_price=current_price,
+                volume=volume,
+                adjusted_close=current_price
+            )
+            data_points.append(data_point)
+        
+        return data_points
+
+
 # Helper functions for creating test data scenarios
 async def create_complete_user_scenario(session: AsyncSession, risk_tolerance: str = 'moderate'):
     """Create a complete user scenario with profile, goals, and investments."""
@@ -292,3 +417,28 @@ async def create_retirement_scenario(session: AsyncSession, age: int = 35):
         'profile': profile,
         'retirement_goal': retirement_goal
     }
+
+
+async def create_tax_optimization_scenario(session: AsyncSession, scenario_type: str = 'basic'):
+    """Create tax optimization scenario with multiple accounts and positions."""
+    
+    return await TaxOptimizationScenarioFactory.create_tax_scenario(
+        session=session,
+        scenario_type=scenario_type
+    )
+
+
+async def create_market_data_universe(session: AsyncSession, symbols: list, days: int = 252):
+    """Create comprehensive market data for multiple symbols."""
+    
+    market_data = {}
+    
+    for symbol in symbols:
+        data_points = await EnhancedMarketDataFactory.create_time_series(
+            session=session,
+            symbol=symbol,
+            days=days
+        )
+        market_data[symbol] = data_points
+    
+    return market_data
