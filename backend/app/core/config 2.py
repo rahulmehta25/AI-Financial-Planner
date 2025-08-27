@@ -35,10 +35,7 @@ class Settings(BaseSettings):
             "http://localhost:5173",  # Vite dev server
             "http://127.0.0.1:5173",
             "http://localhost:4173",  # Vite preview
-            "http://127.0.0.1:4173",
-            "https://ai-financial-planner-zeta.vercel.app",  # Production frontend
-            "https://ai-financial-planner-*.vercel.app",  # Preview deployments
-            "*"  # Allow all origins for development (remove in strict production)
+            "http://127.0.0.1:4173"
         ],
         env="BACKEND_CORS_ORIGINS"
     )
@@ -51,7 +48,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     DATABASE_URL: str = Field(
-        "sqlite+aiosqlite:///./financial_planning.db",
+        "postgresql+asyncpg://user:password@localhost/financial_planning",
         env="DATABASE_URL"
     )
     DATABASE_POOL_SIZE: int = Field(20, env="DATABASE_POOL_SIZE")
@@ -132,88 +129,6 @@ class Settings(BaseSettings):
     ENABLE_BACKGROUND_TASKS: bool = Field(True, env="ENABLE_BACKGROUND_TASKS")
     CELERY_BROKER_URL: str = Field("redis://localhost:6379/0", env="CELERY_BROKER_URL")
     CELERY_RESULT_BACKEND: str = Field("redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
-    
-    # Message Broker Configuration
-    MESSAGE_BROKER_TYPE: str = Field("redis", env="MESSAGE_BROKER_TYPE")  # redis, rabbitmq
-    RABBITMQ_HOST: str = Field("localhost", env="RABBITMQ_HOST")
-    RABBITMQ_PORT: int = Field(5672, env="RABBITMQ_PORT")
-    RABBITMQ_USERNAME: str = Field("guest", env="RABBITMQ_USERNAME")
-    RABBITMQ_PASSWORD: SecretStr = Field("guest", env="RABBITMQ_PASSWORD")
-    RABBITMQ_VHOST: str = Field("/", env="RABBITMQ_VHOST")
-    
-    # Cache Configuration
-    CACHE_TYPE: str = Field("redis", env="CACHE_TYPE")  # memory, redis, multi_tier
-    CACHE_DEFAULT_TTL: int = Field(3600, env="CACHE_DEFAULT_TTL")  # 1 hour
-    CACHE_MAX_SIZE_MB: int = Field(100, env="CACHE_MAX_SIZE_MB")
-    CACHE_COMPRESSION_ENABLED: bool = Field(True, env="CACHE_COMPRESSION_ENABLED")
-    CACHE_COMPRESSION_THRESHOLD: int = Field(1024, env="CACHE_COMPRESSION_THRESHOLD")  # 1KB
-    
-    # Memory Cache Settings
-    MEMORY_CACHE_MAX_ENTRIES: int = Field(1000, env="MEMORY_CACHE_MAX_ENTRIES")
-    MEMORY_CACHE_TTL: int = Field(300, env="MEMORY_CACHE_TTL")  # 5 minutes
-    
-    # TimescaleDB Configuration  
-    TIMESCALEDB_ENABLED: bool = Field(False, env="TIMESCALEDB_ENABLED")
-    TIMESCALEDB_CHUNK_TIME_INTERVAL: str = Field("1 day", env="TIMESCALEDB_CHUNK_TIME_INTERVAL")
-    TIMESCALEDB_COMPRESSION_ENABLED: bool = Field(True, env="TIMESCALEDB_COMPRESSION_ENABLED")
-    TIMESCALEDB_RETENTION_PERIOD: str = Field("5 years", env="TIMESCALEDB_RETENTION_PERIOD")
-    
-    # Service Discovery and Load Balancing
-    SERVICE_DISCOVERY_ENABLED: bool = Field(False, env="SERVICE_DISCOVERY_ENABLED")
-    CONSUL_HOST: str = Field("localhost", env="CONSUL_HOST")
-    CONSUL_PORT: int = Field(8500, env="CONSUL_PORT")
-    LOAD_BALANCER_STRATEGY: str = Field("round_robin", env="LOAD_BALANCER_STRATEGY")
-    
-    # Circuit Breaker Configuration
-    CIRCUIT_BREAKER_ENABLED: bool = Field(True, env="CIRCUIT_BREAKER_ENABLED")
-    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5, env="CIRCUIT_BREAKER_FAILURE_THRESHOLD")
-    CIRCUIT_BREAKER_TIMEOUT_SECONDS: int = Field(60, env="CIRCUIT_BREAKER_TIMEOUT_SECONDS")
-    CIRCUIT_BREAKER_RETRY_TIMEOUT: int = Field(30, env="CIRCUIT_BREAKER_RETRY_TIMEOUT")
-    
-    # Health Check Configuration
-    HEALTH_CHECK_ENABLED: bool = Field(True, env="HEALTH_CHECK_ENABLED")
-    HEALTH_CHECK_INTERVAL_SECONDS: int = Field(30, env="HEALTH_CHECK_INTERVAL_SECONDS")
-    HEALTH_CHECK_TIMEOUT_SECONDS: int = Field(10, env="HEALTH_CHECK_TIMEOUT_SECONDS")
-    
-    # Metrics and Observability
-    METRICS_ENABLED: bool = Field(True, env="METRICS_ENABLED")
-    METRICS_PORT: int = Field(8001, env="METRICS_PORT")
-    PROMETHEUS_ENABLED: bool = Field(False, env="PROMETHEUS_ENABLED")
-    JAEGER_ENABLED: bool = Field(False, env="JAEGER_ENABLED")
-    JAEGER_AGENT_HOST: str = Field("localhost", env="JAEGER_AGENT_HOST")
-    JAEGER_AGENT_PORT: int = Field(6831, env="JAEGER_AGENT_PORT")
-    
-    # Distributed Tracing
-    TRACING_ENABLED: bool = Field(False, env="TRACING_ENABLED")
-    TRACING_SAMPLE_RATE: float = Field(0.1, env="TRACING_SAMPLE_RATE")  # 10%
-    
-    # Performance Optimization
-    CONNECTION_POOL_SIZE: int = Field(20, env="CONNECTION_POOL_SIZE")
-    CONNECTION_POOL_MAX_OVERFLOW: int = Field(30, env="CONNECTION_POOL_MAX_OVERFLOW")
-    QUERY_TIMEOUT_SECONDS: int = Field(30, env="QUERY_TIMEOUT_SECONDS")
-    BATCH_PROCESSING_SIZE: int = Field(100, env="BATCH_PROCESSING_SIZE")
-    
-    # Security Enhancement
-    SECURITY_SCAN_ENABLED: bool = Field(True, env="SECURITY_SCAN_ENABLED")
-    IP_WHITELIST_ENABLED: bool = Field(False, env="IP_WHITELIST_ENABLED")
-    IP_WHITELIST: List[str] = Field([], env="IP_WHITELIST")
-    REQUEST_ID_HEADER: str = Field("X-Request-ID", env="REQUEST_ID_HEADER")
-    
-    # Data Validation
-    STRICT_DATA_VALIDATION: bool = Field(True, env="STRICT_DATA_VALIDATION")
-    DATA_ENCRYPTION_AT_REST: bool = Field(False, env="DATA_ENCRYPTION_AT_REST")
-    DATA_ENCRYPTION_KEY: Optional[SecretStr] = Field(None, env="DATA_ENCRYPTION_KEY")
-    
-    # Audit Configuration
-    AUDIT_READ_OPERATIONS: bool = Field(False, env="AUDIT_READ_OPERATIONS")
-    AUDIT_DETAILED_LOGGING: bool = Field(True, env="AUDIT_DETAILED_LOGGING")
-    AUDIT_RETENTION_DAYS: int = Field(2555, env="AUDIT_RETENTION_DAYS")  # 7 years
-    
-    # Feature Flags
-    FEATURE_MONTE_CARLO_GPU: bool = Field(False, env="FEATURE_MONTE_CARLO_GPU")
-    FEATURE_REAL_TIME_ANALYTICS: bool = Field(False, env="FEATURE_REAL_TIME_ANALYTICS")
-    FEATURE_ADVANCED_CACHING: bool = Field(True, env="FEATURE_ADVANCED_CACHING")
-    FEATURE_DISTRIBUTED_TRANSACTIONS: bool = Field(False, env="FEATURE_DISTRIBUTED_TRANSACTIONS")
     
     # Banking Integration Configuration
     PLAID_CLIENT_ID: Optional[SecretStr] = Field(None, env="PLAID_CLIENT_ID")

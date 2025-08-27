@@ -23,6 +23,8 @@ class MarketDataType(str, Enum):
 
 class DataProvider(str, Enum):
     """Market data providers"""
+    POLYGON_IO = "polygon_io"
+    DATABENTO = "databento"
     ALPHA_VANTAGE = "alpha_vantage"
     YAHOO_FINANCE = "yahoo_finance"
     IEX_CLOUD = "iex_cloud"

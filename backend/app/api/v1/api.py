@@ -3,7 +3,7 @@ Main API router for v1 endpoints
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, financial_profiles, goals, investments, simulations, market_data, monte_carlo, pdf_export, ml_recommendations, banking, voice, notifications, financial, ai, portfolio, websocket
+from app.api.v1.endpoints import auth, users, financial_profiles, goals, investments, simulations, market_data, monte_carlo, pdf_export, ml_recommendations, banking, voice, notifications, financial, ai, portfolio, websocket, advanced_strategies, retirement, irs_compliance
 from app.social.router import router as social_router
 
 api_router = APIRouter()
@@ -25,4 +25,7 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(financial.router, prefix="/financial", tags=["financial"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
+api_router.include_router(retirement.router, prefix="/retirement", tags=["retirement"])
+api_router.include_router(irs_compliance.router, prefix="/irs", tags=["irs-compliance"])
+api_router.include_router(advanced_strategies.router, prefix="", tags=["advanced-strategies"])
 api_router.include_router(websocket.router, prefix="", tags=["websocket"])
