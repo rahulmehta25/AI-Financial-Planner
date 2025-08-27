@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ai-financial-planner-backend
+    env: python
+    repo: # Your GitHub repo URL will go here
+    buildCommand: pip install -r requirements_simple.txt
+    startCommand: python simple_backend.py
+    region: oregon
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"

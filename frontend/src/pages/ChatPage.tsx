@@ -1,29 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Sparkles, MessageSquare, TrendingUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
+import { Send, Bot, User, Sparkles, MessageSquare, TrendingUp, Loader2, AlertCircle } from "lucide-react";
 import { ParticleBackground } from "@/components/ParticleBackground";
-
-interface Message {
-  id: number;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
+import { chatService, ChatMessage, ChatSession } from "@/services/chat";
+import { userService } from "@/services/user";
+import { portfolioService } from "@/services/portfolio";
 
 const ChatPage = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      content: "Hello! I'm your AI financial advisor. How can I help you optimize your finances today?",
-      sender: 'ai',
-      timestamp: new Date()
-    }
-  ]);
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [userContext, setUserContext] = useState<any>(null);
 
   const quickPrompts = [
     "Analyze my portfolio performance",
@@ -33,34 +35,191 @@ const ChatPage = () => {
     "Risk assessment for my goals"
   ];
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
+  // Load user context and initialize chat
+  useEffect(() => {
+    const initializeChat = async () => {
+      if (!isAuthenticated) {
+        setIsLoading(false);
+        return;
+      }
 
-    const newMessage: Message = {
-      id: messages.length + 1,
-      content: inputMessage,
-      sender: 'user',
-      timestamp: new Date()
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Load user context (portfolio, profile, etc.)
+        const [portfolioData, financialProfile] = await Promise.allSettled([
+          portfolioService.getPortfolioOverview().catch(() => null),
+          userService.getFinancialProfile().catch(() => null)
+        ]);
+
+        const context = {
+          portfolioData: portfolioData.status === 'fulfilled' ? portfolioData.value : null,
+          financialProfile: financialProfile.status === 'fulfilled' ? financialProfile.value : null,
+          user: user
+        };
+        setUserContext(context);
+
+        // Try to get or create a chat session
+        const sessions = await chatService.getChatSessions();
+        if (sessions.length > 0) {
+          const latestSession = sessions[0];
+          setCurrentSession(latestSession);
+          setMessages(latestSession.messages || []);
+        } else {
+          // Create a new session
+          const newSession = await chatService.createChatSession(`Chat with ${user?.firstName || 'User'}`);
+          setCurrentSession(newSession);
+          
+          // Add welcome message
+          const welcomeMessage: ChatMessage = {
+            id: `welcome-${Date.now()}`,
+            content: `Hello ${user?.firstName || 'there'}! I'm your AI financial advisor. I can help you analyze your portfolio, create financial plans, and answer questions about your investments. How can I assist you today?`,
+            role: 'assistant',
+            timestamp: new Date().toISOString(),
+          };
+          setMessages([welcomeMessage]);
+        }
+      } catch (err: any) {
+        console.error('Failed to initialize chat:', err);
+        setError(err.message || 'Failed to initialize chat. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    setMessages(prev => [...prev, newMessage]);
-    setInputMessage("");
+    initializeChat();
+  }, [isAuthenticated, user]);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: messages.length + 2,
-        content: "I understand you're looking for financial guidance. Based on your portfolio data, I can provide personalized recommendations. Would you like me to analyze your current investments and suggest optimizations?",
-        sender: 'ai',
-        timestamp: new Date()
+  // Auto scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || !currentSession || isSending) return;
+
+    const messageContent = inputMessage.trim();
+    setInputMessage("");
+    setIsSending(true);
+
+    // Add user message immediately
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      content: messageContent,
+      role: 'user',
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+
+    try {
+      // Send message to AI with user context
+      const response = await chatService.sendMessage({
+        message: messageContent,
+        sessionId: currentSession.id,
+        context: userContext
+      });
+
+      // Add AI response
+      setMessages(prev => [...prev, response.message]);
+
+      toast({
+        title: "Message sent",
+        description: "Your message has been processed successfully.",
+      });
+    } catch (err: any) {
+      console.error('Failed to send message:', err);
+      
+      // Add error message
+      const errorMessage: ChatMessage = {
+        id: `error-${Date.now()}`,
+        content: "I apologize, but I'm having trouble processing your message right now. Please try again in a moment.",
+        role: 'assistant',
+        timestamp: new Date().toISOString(),
       };
-      setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: "Message failed",
+        description: err.message || "Failed to send message. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleQuickPrompt = (prompt: string) => {
     setInputMessage(prompt);
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background relative overflow-hidden">
+        <ParticleBackground />
+        <Navigation />
+        
+        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+          <div className="mb-8">
+            <Skeleton className="h-10 w-64 mb-2" />
+            <Skeleton className="h-6 w-80 mb-8" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="glass border-white/10">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="w-12 h-12 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-6 w-16" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Show authentication required state
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background relative overflow-hidden">
+        <ParticleBackground />
+        <Navigation />
+        
+        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+          <div className="max-w-2xl mx-auto text-center py-20">
+            <Alert className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please <a href="/login" className="text-primary hover:underline font-semibold">log in</a> to access your personalized AI financial advisor.
+              </AlertDescription>
+            </Alert>
+            <h1 className="text-4xl font-bold mb-4">AI Financial Advisor</h1>
+            <p className="text-lg text-muted-foreground mb-8">
+              Get personalized financial advice based on your portfolio and goals
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => window.location.href = '/login'}>
+                Sign In
+              </Button>
+              <Button variant="outline" onClick={() => window.location.href = '/signup'}>
+                Get Started
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -149,32 +308,64 @@ const ChatPage = () => {
                 {messages.map((message, index) => (
                   <div
                     key={message.id}
-                    className={`flex gap-3 animate-fade-in ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}
+                    className={`flex gap-3 animate-fade-in ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      message.sender === 'ai' 
+                      message.role === 'assistant' 
                         ? 'bg-gradient-to-br from-primary to-primary-glow' 
                         : 'bg-gradient-to-br from-success to-success-dark'
                     }`}>
-                      {message.sender === 'ai' ? (
+                      {message.role === 'assistant' ? (
                         <Bot className="w-4 h-4 text-white" />
                       ) : (
                         <User className="w-4 h-4 text-white" />
                       )}
                     </div>
                     <div className={`max-w-[70%] p-4 rounded-2xl ${
-                      message.sender === 'ai'
+                      message.role === 'assistant'
                         ? 'bg-white/5 border border-white/10'
                         : 'bg-gradient-to-br from-primary/20 to-success/20 border border-primary/20'
                     }`}>
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      {message.metadata?.suggestions && (
+                        <div className="mt-3 space-y-1">
+                          {message.metadata.suggestions.map((suggestion, i) => (
+                            <Button
+                              key={i}
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto p-2 text-xs text-left justify-start"
+                              onClick={() => setInputMessage(suggestion)}
+                            >
+                              💡 {suggestion}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                       <p className="text-xs text-muted-foreground mt-2">
-                        {message.timestamp.toLocaleTimeString()}
+                        {new Date(message.timestamp).toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
                 ))}
+                
+                {/* Loading indicator for AI response */}
+                {isSending && (
+                  <div className="flex gap-3 animate-fade-in">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+                      <Bot className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="max-w-[70%] p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <p className="text-sm text-muted-foreground">AI is thinking...</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div ref={messagesEndRef} />
               </CardContent>
 
               {/* Input */}
@@ -189,9 +380,14 @@ const ChatPage = () => {
                   />
                   <Button 
                     onClick={handleSendMessage}
+                    disabled={isSending || !inputMessage.trim()}
                     className="bg-gradient-to-r from-primary to-success hover:shadow-glow"
                   >
-                    <Send className="w-4 h-4" />
+                    {isSending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>

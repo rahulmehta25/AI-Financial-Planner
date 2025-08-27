@@ -1,0 +1,11 @@
+{
+  "backup_type": "full",
+  "timestamp": "2025-08-23T14:11:48.260984",
+  "source_path": "demo_data/financial_data.db",
+  "backup_path": "backups/backup_full_20250823_141148.db",
+  "description": "Disaster recovery test",
+  "file_size": 98304,
+  "checksum": "27a775a4297c1932d207a7542ea8983e",
+  "verified": true,
+  "duration": 0.000614166259765625
+}

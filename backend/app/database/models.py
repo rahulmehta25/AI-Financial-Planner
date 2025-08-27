@@ -19,6 +19,16 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 from .base import Base
 
+# Import authentication models to ensure they're registered
+from app.models.auth import (
+    TokenBlacklist,
+    UserSession,
+    LoginAttempt,
+    PasswordResetToken,
+    TwoFactorAuth,
+    SecurityEvent
+)
+
 
 class AuditMixin:
     """Mixin class for audit fields"""

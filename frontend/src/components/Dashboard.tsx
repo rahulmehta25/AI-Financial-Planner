@@ -1,5 +1,10 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -8,37 +13,148 @@ import {
   PieChart,
   MessageCircle,
   Bell,
-  Plus
+  Plus,
+  RefreshCw,
+  AlertCircle
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { FinancialSimulation } from "./FinancialSimulation";
+import { userService, DashboardData } from "@/services/user";
+import { portfolioService } from "@/services/portfolio";
 
 export const Dashboard = () => {
-  const portfolioData = {
-    totalValue: 125000,
-    todayChange: 2340,
-    todayPercentage: 1.87,
-    goals: [
-      { name: "Emergency Fund", current: 15000, target: 25000, progress: 60 },
-      { name: "Retirement", current: 85000, target: 500000, progress: 17 },
-      { name: "House Down Payment", current: 30000, target: 100000, progress: 30 },
-    ],
-    recentTransactions: [
-      { name: "Salary Deposit", amount: 5000, type: "income", date: "Today" },
-      { name: "Grocery Store", amount: -150, type: "expense", date: "Yesterday" },
-      { name: "Investment Dividend", amount: 280, type: "income", date: "2 days ago" },
-    ]
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDashboardData = async (showToast = false) => {
+    try {
+      setIsLoading(!dashboardData); // Only show loading on first load
+      setIsRefreshing(showToast);
+      setError(null);
+
+      const data = await userService.getDashboardData();
+      setDashboardData(data);
+
+      if (showToast) {
+        toast({
+          title: "Dashboard updated",
+          description: "Your dashboard data has been refreshed successfully.",
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch dashboard data:', err);
+      const errorMessage = err.message || 'Failed to load dashboard data. Please try again.';
+      setError(errorMessage);
+      
+      if (showToast) {
+        toast({
+          title: "Refresh failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDashboardData();
+    }
+  }, [isAuthenticated]);
+
+  const handleRefresh = () => {
+    fetchDashboardData(true);
+  };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <Skeleton className="h-10 w-64 mb-2" />
+            <Skeleton className="h-6 w-80" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="glass">
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-24 mb-2" />
+                  <Skeleton className="h-4 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && !dashboardData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
+        <div className="max-w-7xl mx-auto">
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Retry"
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-slide-in-bottom">
-          <h1 className="text-4xl font-bold mb-2">Welcome back, Alex!</h1>
-          <p className="text-muted-foreground text-lg">
-            Here's what's happening with your finances today.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">
+                Welcome back, {dashboardData?.user.firstName || user?.firstName || 'there'}!
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                Here's what's happening with your finances today.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="glass border-white/20"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Portfolio Overview */}

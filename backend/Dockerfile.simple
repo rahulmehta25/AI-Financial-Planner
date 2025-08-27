@@ -1,0 +1,21 @@
+# Simple Dockerfile for AI Financial Planner Backend
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy only necessary files
+COPY requirements_simple.txt .
+COPY simple_backend.py .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements_simple.txt
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Run the application
+CMD ["python", "simple_backend.py"]

@@ -1,69 +1,155 @@
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus, RefreshCw } from "lucide-react";
 import { ParticleBackground } from "@/components/ParticleBackground";
+import { portfolioService, PortfolioOverview, Holding } from "@/services/portfolio";
+import { useToast } from "@/hooks/use-toast";
+
+interface SectorData {
+  name: string
+  percentage: number
+  color: string
+}
 
 const PortfolioPage = () => {
-  const portfolioData = {
-    totalValue: 485750,
-    totalGain: 45750,
-    gainPercentage: 10.4,
-    dayChange: 2340,
-    dayChangePercentage: 0.48
-  };
+  const [portfolioOverview, setPortfolioOverview] = useState<PortfolioOverview | null>(null);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const assets = [
-    {
-      name: "Apple Inc.",
-      symbol: "AAPL",
-      shares: 50,
-      currentPrice: 175.23,
-      totalValue: 8761.50,
-      gain: 1250.50,
-      gainPercentage: 16.7,
-      allocation: 18
-    },
-    {
-      name: "Microsoft Corp.",
-      symbol: "MSFT", 
-      shares: 30,
-      currentPrice: 415.50,
-      totalValue: 12465.00,
-      gain: 2100.00,
-      gainPercentage: 20.3,
-      allocation: 26
-    },
-    {
-      name: "Tesla Inc.",
-      symbol: "TSLA",
-      shares: 25,
-      currentPrice: 245.67,
-      totalValue: 6141.75,
-      gain: -845.25,
-      gainPercentage: -12.1,
-      allocation: 13
-    },
-    {
-      name: "S&P 500 ETF",
-      symbol: "SPY",
-      shares: 100,
-      currentPrice: 485.30,
-      totalValue: 48530.00,
-      gain: 5830.00,
-      gainPercentage: 13.7,
-      allocation: 43
-    }
-  ];
+  const { user } = useAuth();
+  const { toast } = useToast();
 
-  const sectors = [
+  // Mock sector data - in real app, this would come from backend analysis
+  const sectors: SectorData[] = [
     { name: "Technology", percentage: 45, color: "from-primary to-primary-glow" },
     { name: "Healthcare", percentage: 20, color: "from-success to-success-dark" },
     { name: "Financial", percentage: 15, color: "from-accent to-accent-dark" },
     { name: "Consumer", percentage: 12, color: "from-warning to-warning-dark" },
     { name: "Energy", percentage: 8, color: "from-destructive to-destructive-dark" }
   ];
+
+  const fetchPortfolioData = async (showToast = false) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const [overviewData, holdingsData] = await Promise.all([
+        portfolioService.getPortfolioOverview(),
+        portfolioService.getHoldings()
+      ]);
+
+      setPortfolioOverview(overviewData);
+      setHoldings(holdingsData);
+
+      if (showToast) {
+        toast({
+          title: "Portfolio updated",
+          description: "Your portfolio data has been refreshed successfully.",
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch portfolio data:', err);
+      const errorMessage = err.message || 'Failed to load portfolio data. Please try again.';
+      setError(errorMessage);
+      
+      toast({
+        title: "Error loading portfolio",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPortfolioData();
+  }, []);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchPortfolioData(true);
+  };
+
+  const calculateAllocation = (holding: Holding) => {
+    if (!portfolioOverview?.totalValue) return 0;
+    return Math.round((holding.marketValue / portfolioOverview.totalValue) * 100);
+  };
+
+  if (isLoading) {
+    return (
+      <div id="portfolio-loading" className="min-h-screen bg-background relative overflow-hidden">
+        <ParticleBackground />
+        <Navigation />
+        
+        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <Skeleton className="h-10 w-64 mb-2" />
+                <Skeleton className="h-6 w-80" />
+              </div>
+              <Skeleton className="h-10 w-32" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="glass border-white/10">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="w-12 h-12 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-6 w-24" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error && !portfolioOverview) {
+    return (
+      <div id="portfolio-error" className="min-h-screen bg-background relative overflow-hidden">
+        <ParticleBackground />
+        <Navigation />
+        
+        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+          <Alert variant="destructive" className="mb-6">
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Retry"
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -79,13 +165,25 @@ const PortfolioPage = () => {
                 Portfolio Overview
               </h1>
               <p className="text-lg text-muted-foreground">
-                Track your investments and market performance
+                {user ? `Welcome back, ${user.firstName}` : 'Track your investments and market performance'}
               </p>
             </div>
-            <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Investment
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="glass border-white/20"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Investment
+              </Button>
+            </div>
           </div>
 
           {/* Portfolio Summary */}
@@ -98,7 +196,7 @@ const PortfolioPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Value</p>
-                    <p className="text-2xl font-bold">${portfolioData.totalValue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold">${portfolioOverview?.totalValue.toLocaleString() || '0'}</p>
                   </div>
                 </div>
               </CardContent>
@@ -112,7 +210,12 @@ const PortfolioPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Gain</p>
-                    <p className="text-2xl font-bold text-success">+${portfolioData.totalGain.toLocaleString()}</p>
+                    <p className={`text-2xl font-bold ${portfolioOverview?.totalGain && portfolioOverview.totalGain >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      {portfolioOverview?.totalGain ? 
+                        `${portfolioOverview.totalGain >= 0 ? '+' : ''}$${portfolioOverview.totalGain.toLocaleString()}` : 
+                        '$0'
+                      }
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -126,7 +229,12 @@ const PortfolioPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Gain %</p>
-                    <p className="text-2xl font-bold text-success">+{portfolioData.gainPercentage}%</p>
+                    <p className={`text-2xl font-bold ${portfolioOverview?.totalGainPercentage && portfolioOverview.totalGainPercentage >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      {portfolioOverview?.totalGainPercentage ? 
+                        `${portfolioOverview.totalGainPercentage >= 0 ? '+' : ''}${portfolioOverview.totalGainPercentage.toFixed(1)}%` : 
+                        '0.0%'
+                      }
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -136,11 +244,20 @@ const PortfolioPage = () => {
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-warning to-warning-dark flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-white" />
+                    {portfolioOverview?.dayChange && portfolioOverview.dayChange >= 0 ? (
+                      <TrendingUp className="w-6 h-6 text-white" />
+                    ) : (
+                      <TrendingDown className="w-6 h-6 text-white" />
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Today</p>
-                    <p className="text-2xl font-bold text-success">+${portfolioData.dayChange.toLocaleString()}</p>
+                    <p className={`text-2xl font-bold ${portfolioOverview?.dayChange && portfolioOverview.dayChange >= 0 ? 'text-success' : 'text-destructive'}`}>
+                      {portfolioOverview?.dayChange ? 
+                        `${portfolioOverview.dayChange >= 0 ? '+' : ''}$${portfolioOverview.dayChange.toLocaleString()}` : 
+                        '$0'
+                      }
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -160,32 +277,40 @@ const PortfolioPage = () => {
                 <CardDescription>Your current investment positions</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {assets.map((asset, index) => (
-                  <div key={asset.symbol} className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                {holdings.length > 0 ? holdings.map((holding, index) => (
+                  <div key={holding.id} className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
-                        <span className="text-sm font-bold text-white">{asset.symbol.charAt(0)}</span>
+                        <span className="text-sm font-bold text-white">{holding.symbol.charAt(0)}</span>
                       </div>
                       <div>
-                        <p className="font-semibold">{asset.name}</p>
-                        <p className="text-sm text-muted-foreground">{asset.shares} shares • ${asset.currentPrice}</p>
+                        <p className="font-semibold">{holding.name}</p>
+                        <p className="text-sm text-muted-foreground">{holding.shares} shares • ${holding.currentPrice.toFixed(2)}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">${asset.totalValue.toLocaleString()}</p>
+                      <p className="font-semibold">${holding.marketValue.toLocaleString()}</p>
                       <div className="flex items-center gap-1">
-                        {asset.gain > 0 ? (
+                        {holding.totalGain >= 0 ? (
                           <TrendingUp className="w-4 h-4 text-success" />
                         ) : (
                           <TrendingDown className="w-4 h-4 text-destructive" />
                         )}
-                        <span className={asset.gain > 0 ? "text-success" : "text-destructive"}>
-                          {asset.gain > 0 ? '+' : ''}${asset.gain.toLocaleString()} ({asset.gainPercentage > 0 ? '+' : ''}{asset.gainPercentage}%)
+                        <span className={holding.totalGain >= 0 ? "text-success" : "text-destructive"}>
+                          {holding.totalGain >= 0 ? '+' : ''}${holding.totalGain.toLocaleString()} ({holding.totalGainPercentage >= 0 ? '+' : ''}{holding.totalGainPercentage.toFixed(1)}%)
                         </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No holdings found. Start investing to see your portfolio here.</p>
+                    <Button className="mt-4 bg-gradient-to-r from-primary to-success">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Your First Investment
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -201,20 +326,27 @@ const PortfolioPage = () => {
                 <CardDescription>Portfolio distribution by asset</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {assets.map((asset, index) => (
-                  <div key={asset.symbol} className="space-y-2 animate-fade-in" style={{ animationDelay: `${index * 50}ms` }}>
-                    <div className="flex justify-between text-sm">
-                      <span>{asset.symbol}</span>
-                      <span className="font-medium">{asset.allocation}%</span>
+                {holdings.length > 0 ? holdings.map((holding, index) => {
+                  const allocation = calculateAllocation(holding);
+                  return (
+                    <div key={holding.id} className="space-y-2 animate-fade-in" style={{ animationDelay: `${index * 50}ms` }}>
+                      <div className="flex justify-between text-sm">
+                        <span>{holding.symbol}</span>
+                        <span className="font-medium">{allocation}%</span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2">
+                        <div 
+                          className="bg-gradient-to-r from-primary to-primary-glow h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${allocation}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-primary to-primary-glow h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${asset.allocation}%` }}
-                      />
-                    </div>
+                  );
+                }) : (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground text-sm">No allocation data available</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
 

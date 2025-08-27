@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X, TrendingUp } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Menu, X, TrendingUp, User, Settings, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard" },
@@ -14,6 +18,18 @@ export const Navigation = () => {
     { name: "AI Chat", href: "/chat" },
     { name: "Analytics", href: "/analytics" }
   ];
+
+  const getUserInitials = () => {
+    if (!user) return "";
+    const firstInitial = user.firstName?.charAt(0) || user.email?.charAt(0) || "";
+    const lastInitial = user.lastName?.charAt(0) || "";
+    return `${firstInitial}${lastInitial}`.toUpperCase();
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10">
@@ -43,21 +59,64 @@ export const Navigation = () => {
             ))}
           </div>
 
-          {/* Auth Buttons */}
+          {/* Auth Section */}
           <div className="hidden md:flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              className="glass border-white/20 hover:bg-white/10"
-              onClick={() => navigate('/login')}
-            >
-              Sign In
-            </Button>
-            <Button 
-              className="bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow"
-              onClick={() => navigate('/register')}
-            >
-              Get Started
-            </Button>
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger id="user-menu-trigger" asChild>
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar id="nav-user-avatar" className="h-10 w-10">
+                      <AvatarImage src={user?.profileImage} alt={user?.firstName || ""} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-success text-white text-sm">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent id="user-menu-content" className="w-56 glass border-white/20" align="end" forceMount>
+                  <div className="flex items-center justify-start gap-2 p-2">
+                    <div className="flex flex-col space-y-1 leading-none">
+                      {user?.firstName && (
+                        <p className="font-medium">{user.firstName} {user.lastName}</p>
+                      )}
+                      <p className="w-[200px] truncate text-sm text-muted-foreground">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem id="profile-menu-item" onClick={() => navigate("/profile")}>
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem id="settings-menu-item" onClick={() => navigate("/settings")}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem id="logout-menu-item" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign Out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  className="glass border-white/20 hover:bg-white/10"
+                  onClick={() => navigate('/login')}
+                >
+                  Sign In
+                </Button>
+                <Button 
+                  className="bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow"
+                  onClick={() => navigate('/register')}
+                >
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -86,25 +145,65 @@ export const Navigation = () => {
                 </button>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
-                <Button 
-                  variant="outline" 
-                  className="glass border-white/20"
-                  onClick={() => {
-                    navigate('/login');
-                    setIsOpen(false);
-                  }}
-                >
-                  Sign In
-                </Button>
-                <Button 
-                  className="bg-gradient-to-r from-primary to-primary-hover"
-                  onClick={() => {
-                    navigate('/register');
-                    setIsOpen(false);
-                  }}
-                >
-                  Get Started
-                </Button>
+                {isAuthenticated ? (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="glass border-white/20 justify-start"
+                      onClick={() => {
+                        navigate('/profile');
+                        setIsOpen(false);
+                      }}
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      Profile
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      className="glass border-white/20 justify-start"
+                      onClick={() => {
+                        navigate('/settings');
+                        setIsOpen(false);
+                      }}
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Settings
+                    </Button>
+                    <Button 
+                      variant="destructive"
+                      className="justify-start"
+                      onClick={() => {
+                        handleLogout();
+                        setIsOpen(false);
+                      }}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="glass border-white/20"
+                      onClick={() => {
+                        navigate('/login');
+                        setIsOpen(false);
+                      }}
+                    >
+                      Sign In
+                    </Button>
+                    <Button 
+                      className="bg-gradient-to-r from-primary to-primary-hover"
+                      onClick={() => {
+                        navigate('/register');
+                        setIsOpen(false);
+                      }}
+                    >
+                      Get Started
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>

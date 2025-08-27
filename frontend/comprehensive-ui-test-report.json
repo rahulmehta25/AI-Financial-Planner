@@ -1,0 +1,250 @@
+{
+  "timestamp": "2025-08-26T15:46:02.738Z",
+  "testResults": [
+    {
+      "viewport": "Desktop",
+      "route": "Home Page",
+      "path": "/",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 915,
+      "screenshot": "desktop-home-page.png"
+    },
+    {
+      "viewport": "Desktop",
+      "route": "Dashboard",
+      "path": "/dashboard",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 703,
+      "screenshot": "desktop-dashboard.png"
+    },
+    {
+      "viewport": "Desktop",
+      "route": "Portfolio",
+      "path": "/portfolio",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 626,
+      "screenshot": "desktop-portfolio.png"
+    },
+    {
+      "viewport": "Desktop",
+      "route": "Goals",
+      "path": "/goals",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 631,
+      "screenshot": "desktop-goals.png"
+    },
+    {
+      "viewport": "Desktop",
+      "route": "AI Chat",
+      "path": "/chat",
+      "status": "warning",
+      "issues": [
+        "2 buttons without accessible labels"
+      ],
+      "loadTime": 634,
+      "screenshot": "desktop-ai-chat.png"
+    },
+    {
+      "viewport": "Desktop",
+      "route": "Analytics",
+      "path": "/analytics",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 623,
+      "screenshot": "desktop-analytics.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "Home Page",
+      "path": "/",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 770,
+      "screenshot": "tablet-home-page.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "Dashboard",
+      "path": "/dashboard",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 640,
+      "screenshot": "tablet-dashboard.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "Portfolio",
+      "path": "/portfolio",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 627,
+      "screenshot": "tablet-portfolio.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "Goals",
+      "path": "/goals",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 635,
+      "screenshot": "tablet-goals.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "AI Chat",
+      "path": "/chat",
+      "status": "warning",
+      "issues": [
+        "2 buttons without accessible labels"
+      ],
+      "loadTime": 628,
+      "screenshot": "tablet-ai-chat.png"
+    },
+    {
+      "viewport": "Tablet",
+      "route": "Analytics",
+      "path": "/analytics",
+      "status": "warning",
+      "issues": [
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 643,
+      "screenshot": "tablet-analytics.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "Home Page",
+      "path": "/",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "Mobile navigation may not be responsive",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 685,
+      "screenshot": "mobile-home-page.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "Dashboard",
+      "path": "/dashboard",
+      "status": "failed",
+      "issues": [
+        "Main content area not found",
+        "Mobile navigation may not be responsive",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 636,
+      "screenshot": "mobile-dashboard.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "Portfolio",
+      "path": "/portfolio",
+      "status": "warning",
+      "issues": [
+        "Mobile navigation may not be responsive",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 615,
+      "screenshot": "mobile-portfolio.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "Goals",
+      "path": "/goals",
+      "status": "warning",
+      "issues": [
+        "Mobile navigation may not be responsive",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 630,
+      "screenshot": "mobile-goals.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "AI Chat",
+      "path": "/chat",
+      "status": "warning",
+      "issues": [
+        "Mobile navigation may not be responsive",
+        "2 buttons without accessible labels"
+      ],
+      "loadTime": 649,
+      "screenshot": "mobile-ai-chat.png"
+    },
+    {
+      "viewport": "Mobile",
+      "route": "Analytics",
+      "path": "/analytics",
+      "status": "warning",
+      "issues": [
+        "Mobile navigation may not be responsive",
+        "1 buttons without accessible labels"
+      ],
+      "loadTime": 646,
+      "screenshot": "mobile-analytics.png"
+    }
+  ],
+  "summary": {
+    "totalTests": 18,
+    "passed": 0,
+    "failed": 6,
+    "warnings": 12
+  },
+  "screenshots": [
+    "desktop-home-page.png",
+    "desktop-dashboard.png",
+    "desktop-portfolio.png",
+    "desktop-goals.png",
+    "desktop-ai-chat.png",
+    "desktop-analytics.png",
+    "tablet-home-page.png",
+    "tablet-dashboard.png",
+    "tablet-portfolio.png",
+    "tablet-goals.png",
+    "tablet-ai-chat.png",
+    "tablet-analytics.png",
+    "mobile-home-page.png",
+    "mobile-dashboard.png",
+    "mobile-portfolio.png",
+    "mobile-goals.png",
+    "mobile-ai-chat.png",
+    "mobile-analytics.png"
+  ],
+  "consoleErrors": [],
+  "networkErrors": [],
+  "performanceMetrics": {
+    "Home Page": {
+      "domContentLoaded": 258.19999998807907,
+      "loadComplete": 261.0999999642372
+    }
+  },
+  "accessibilityIssues": []
+}

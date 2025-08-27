@@ -155,6 +155,10 @@ except ImportError as e:
             "http://localhost:3001", 
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
+            "http://localhost:5173",  # Vite dev server
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",  # Vite preview
+            "http://127.0.0.1:4173",
             "*"
         ]
         ALLOWED_HOSTS = ["*"]
@@ -354,6 +358,23 @@ if AVAILABLE_SERVICES["middleware"] and hasattr(settings, 'ALLOWED_HOSTS'):
         logger.info(f"TrustedHost middleware added successfully with hosts: {allowed_hosts}")
     except Exception as e:
         logger.warning(f"Failed to add TrustedHost middleware: {e}")
+
+# Add authentication middleware if available
+try:
+    from app.middleware.auth import (
+        AuthenticationMiddleware,
+        SessionValidationMiddleware,
+        RequestLoggingMiddleware
+    )
+    
+    # Add middleware in reverse order (they are processed in reverse)
+    app.add_middleware(AuthenticationMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
+    logger.info("Authentication middleware added successfully")
+except ImportError as e:
+    logger.warning(f"Authentication middleware not available: {e}")
+except Exception as e:
+    logger.warning(f"Failed to add authentication middleware: {e}")
 
 # Include API router if available
 if api_router and AVAILABLE_SERVICES["api_router"]:

@@ -1,14 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 import { financialPlanningService, FinancialProfile, SimulationResult } from '@/services/financialPlanning'
-import { Calculator, TrendingUp, Target, AlertCircle, CheckCircle } from 'lucide-react'
+import { userService } from '@/services/user'
+import { Calculator, TrendingUp, Target, AlertCircle, CheckCircle, Save } from 'lucide-react'
 
 export const FinancialSimulation = () => {
+  const { user, isAuthenticated } = useAuth()
+  const { toast } = useToast()
+  
   const [profile, setProfile] = useState<FinancialProfile>({
     age: 35,
     income: 75000,
@@ -18,7 +25,92 @@ export const FinancialSimulation = () => {
   
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // Load user's existing financial profile
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (isAuthenticated && user) {
+        try {
+          const financialProfile = await userService.getFinancialProfile()
+          if (financialProfile) {
+            setProfile({
+              age: financialProfile.age,
+              income: financialProfile.income,
+              savings: financialProfile.monthlyExpenses * financialProfile.emergencyFundMonths || 1500,
+              risk_tolerance: financialProfile.riskTolerance
+            })
+          }
+        } catch (err) {
+          console.error('Failed to load financial profile:', err)
+          // Don't show error for this - just use defaults
+        }
+      }
+    }
+
+    loadUserProfile()
+  }, [isAuthenticated, user])
+
+  // Track changes
+  useEffect(() => {
+    setHasUnsavedChanges(true)
+  }, [profile])
+
+  const savePreferences = async () => {
+    if (!isAuthenticated || !user) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to save your preferences.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      // Convert simulation profile to financial profile format
+      const updates = {
+        age: profile.age,
+        income: profile.income,
+        monthlyExpenses: profile.savings, // Approximation
+        riskTolerance: profile.risk_tolerance as any,
+        // Keep existing values or use defaults for other fields
+        investmentExperience: 'intermediate' as any,
+        investmentGoals: ['retirement'],
+        timeHorizon: 65 - profile.age,
+        liquidityNeeds: 'moderate' as any,
+        dependents: 0,
+        retirementAge: 65,
+        emergencyFundMonths: 6,
+        debtAmount: 0,
+        employmentStatus: 'employed' as any,
+        netWorth: profile.savings * 12, // Rough estimation
+      }
+
+      const existingProfile = await userService.getFinancialProfile()
+      if (existingProfile) {
+        await userService.updateFinancialProfile(updates)
+      } else {
+        await userService.createFinancialProfile(updates)
+      }
+
+      setHasUnsavedChanges(false)
+      toast({
+        title: "Preferences saved",
+        description: "Your financial preferences have been saved successfully.",
+      })
+    } catch (err: any) {
+      toast({
+        title: "Save failed",
+        description: err.message || "Failed to save preferences. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,6 +120,7 @@ export const FinancialSimulation = () => {
     try {
       const simulationResult = await financialPlanningService.runSimulation(profile)
       setResult(simulationResult)
+      setHasUnsavedChanges(false) // Reset unsaved changes after successful simulation
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run simulation')
     } finally {
@@ -119,13 +212,37 @@ export const FinancialSimulation = () => {
               </div>
             </div>
             
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={loading}
-            >
-              {loading ? 'Running Simulation...' : '🚀 Run Simulation'}
-            </Button>
+            <div className="flex gap-3">
+              <Button 
+                type="submit" 
+                className="flex-1" 
+                disabled={loading}
+              >
+                {loading ? 'Running Simulation...' : '🚀 Run Simulation'}
+              </Button>
+              
+              {isAuthenticated && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={savePreferences}
+                  disabled={saving || !hasUnsavedChanges}
+                  className="flex items-center gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save Preferences'}
+                </Button>
+              )}
+            </div>
+            
+            {!isAuthenticated && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <a href="/login" className="text-primary hover:underline">Log in</a> to save your preferences and access personalized recommendations.
+                </AlertDescription>
+              </Alert>
+            )}
           </form>
         </CardContent>
       </Card>
@@ -198,3 +315,4 @@ export const FinancialSimulation = () => {
     </div>
   )
 }
+

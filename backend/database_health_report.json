@@ -1,0 +1,155 @@
+{
+  "timestamp": "2025-08-23T14:08:30.125052",
+  "database_path": "/Users/rahulmehta/Desktop/Financial Planning/backend/demo_data/financial_data.db",
+  "tests": {
+    "Database Accessibility": {
+      "status": "success",
+      "accessible": true,
+      "sqlite_version": "3.50.2",
+      "file_size_bytes": 90112,
+      "file_path": "/Users/rahulmehta/Desktop/Financial Planning/backend/demo_data/financial_data.db"
+    },
+    "Schema and Tables": {
+      "status": "success",
+      "tables": [
+        "market_data",
+        "customer_portfolios",
+        "pipeline_metrics",
+        "market_summary"
+      ],
+      "table_count": 4,
+      "table_schemas": {
+        "market_data": "CREATE TABLE market_data (\n                id INTEGER PRIMARY KEY,\n                symbol TEXT,\n                price REAL,\n                volume INTEGER,\n                timestamp DATETIME,\n                source TEXT\n            )",
+        "customer_portfolios": "CREATE TABLE customer_portfolios (\n                id INTEGER PRIMARY KEY,\n                customer_id TEXT,\n                asset_type TEXT,\n                allocation_percent REAL,\n                value REAL,\n                risk_score REAL,\n                created_at DATETIME\n            )",
+        "pipeline_metrics": "CREATE TABLE pipeline_metrics (\n                id INTEGER PRIMARY KEY,\n                stage TEXT,\n                records_processed INTEGER,\n                processing_time REAL,\n                memory_usage REAL,\n                error_count INTEGER,\n                throughput REAL,\n                timestamp DATETIME\n            )",
+        "market_summary": "CREATE TABLE market_summary (\n                    symbol TEXT,\n                    sector TEXT,\n                    price_mean REAL,\n                    price_std REAL,\n                    price_min REAL,\n                    price_max REAL,\n                    volume_sum INTEGER,\n                    volume_mean REAL,\n                    record_count INTEGER\n                )"
+      },
+      "table_row_counts": {
+        "market_data": 1000,
+        "customer_portfolios": 0,
+        "pipeline_metrics": 0,
+        "market_summary": 32
+      },
+      "integrity_checks": {
+        "market_data": {
+          "has_data": true,
+          "sample_row_columns": 6
+        },
+        "customer_portfolios": {
+          "has_data": false,
+          "sample_row_columns": 0
+        },
+        "pipeline_metrics": {
+          "has_data": false,
+          "sample_row_columns": 0
+        },
+        "market_summary": {
+          "has_data": true,
+          "sample_row_columns": 9
+        }
+      }
+    },
+    "CRUD Operations": {
+      "create": true,
+      "read": true,
+      "update": true,
+      "delete": true,
+      "errors": [],
+      "success_rate": 1.0,
+      "status": "success"
+    },
+    "Data Persistence": {
+      "status": "success",
+      "persistent": true,
+      "test_value": "persistence_test_2025-08-23T14:08:30.144757",
+      "test_id": 1
+    },
+    "Concurrent Access": {
+      "status": "success",
+      "num_workers": 5,
+      "operations_per_worker": 10,
+      "total_operations": 50,
+      "successful_operations": 50,
+      "success_rate": 1.0,
+      "total_errors": 0,
+      "total_duration": 0.04945707321166992,
+      "worker_results": [
+        {
+          "worker_id": 1,
+          "operations_attempted": 10,
+          "operations_successful": 10,
+          "errors": [],
+          "duration": 0.005400896072387695
+        },
+        {
+          "worker_id": 4,
+          "operations_attempted": 10,
+          "operations_successful": 10,
+          "errors": [],
+          "duration": 0.01014399528503418
+        },
+        {
+          "worker_id": 0,
+          "operations_attempted": 10,
+          "operations_successful": 10,
+          "errors": [],
+          "duration": 0.012995243072509766
+        },
+        {
+          "worker_id": 2,
+          "operations_attempted": 10,
+          "operations_successful": 10,
+          "errors": [],
+          "duration": 0.025274038314819336
+        },
+        {
+          "worker_id": 3,
+          "operations_attempted": 10,
+          "operations_successful": 10,
+          "errors": [],
+          "duration": 0.048384904861450195
+        }
+      ]
+    },
+    "Backup and Recovery": {
+      "status": "success",
+      "backup_created": true,
+      "backup_duration": 0.0011630058288574219,
+      "backup_size_bytes": 98304,
+      "original_size_bytes": 98304,
+      "integrity_verified": true,
+      "recovery_duration": 0.00027680397033691406,
+      "recovery_verified": true,
+      "size_match": true
+    },
+    "Performance Benchmark": {
+      "status": "success",
+      "benchmarks": {
+        "simple_count": {
+          "duration": 5.602836608886719e-05,
+          "result": 0
+        },
+        "aggregation_query": {
+          "duration": 2.7179718017578125e-05,
+          "result_count": 0
+        },
+        "filtered_query": {
+          "duration": 2.0265579223632812e-05,
+          "result_count": 0
+        }
+      },
+      "database_stats": {
+        "page_count": 24,
+        "page_size": 4096,
+        "total_size": 98304
+      }
+    }
+  },
+  "summary": {
+    "total_tests": 7,
+    "passed_tests": 7,
+    "failed_tests": 0,
+    "success_rate": 1.0,
+    "overall_health": "healthy"
+  }
+}
