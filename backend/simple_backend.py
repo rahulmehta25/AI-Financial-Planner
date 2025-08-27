@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import numpy as np
 from datetime import datetime
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,17 +25,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# CORS configuration - Allow the Vercel frontend
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://ai-financial-planner-zeta.vercel.app")
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
+
+# Set up allowed origins
+allowed_origins = [
+    FRONTEND_URL,
+    "https://ai-financial-planner-zeta.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173"
+]
+
+# In development, allow all origins
+if DEBUG_MODE:
+    allowed_origins.append("*")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://ai-financial-planner-zeta.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "*"  # Allow all for demo purposes
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

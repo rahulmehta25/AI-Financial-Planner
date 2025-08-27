@@ -146,9 +146,14 @@ class JWTManager:
         }
         
         try:
+            # Handle both SecretStr and regular string secret keys
+            secret_key = settings.SECRET_KEY
+            if hasattr(secret_key, 'get_secret_value'):
+                secret_key = secret_key.get_secret_value()
+            
             encoded_jwt = jwt.encode(
                 payload,
-                settings.SECRET_KEY.get_secret_value(),
+                secret_key,
                 algorithm=settings.ALGORITHM
             )
             return encoded_jwt
@@ -184,9 +189,14 @@ class JWTManager:
         }
         
         try:
+            # Handle both SecretStr and regular string secret keys
+            secret_key = settings.SECRET_KEY
+            if hasattr(secret_key, 'get_secret_value'):
+                secret_key = secret_key.get_secret_value()
+            
             encoded_jwt = jwt.encode(
                 payload,
-                settings.SECRET_KEY.get_secret_value(),
+                secret_key,
                 algorithm=settings.ALGORITHM
             )
             return encoded_jwt
@@ -203,9 +213,14 @@ class JWTManager:
             if not verify_exp:
                 options["verify_exp"] = False
             
+            # Handle both SecretStr and regular string secret keys
+            secret_key = settings.SECRET_KEY
+            if hasattr(secret_key, 'get_secret_value'):
+                secret_key = secret_key.get_secret_value()
+            
             payload = jwt.decode(
                 token,
-                settings.SECRET_KEY.get_secret_value(),
+                secret_key,
                 algorithms=[settings.ALGORITHM],
                 options=options
             )
@@ -224,9 +239,14 @@ class JWTManager:
         """Extract JTI from token without full validation"""
         try:
             # Decode without verification for logout scenarios
+            # Handle both SecretStr and regular string secret keys
+            secret_key = settings.SECRET_KEY
+            if hasattr(secret_key, 'get_secret_value'):
+                secret_key = secret_key.get_secret_value()
+            
             payload = jwt.decode(
                 token,
-                settings.SECRET_KEY.get_secret_value(),
+                secret_key,
                 algorithms=[settings.ALGORITHM],
                 options={"verify_exp": False, "verify_aud": False, "verify_iss": False}
             )
@@ -238,9 +258,14 @@ class JWTManager:
     def get_token_expiry(token: str) -> Optional[datetime]:
         """Get token expiry time"""
         try:
+            # Handle both SecretStr and regular string secret keys
+            secret_key = settings.SECRET_KEY
+            if hasattr(secret_key, 'get_secret_value'):
+                secret_key = secret_key.get_secret_value()
+            
             payload = jwt.decode(
                 token,
-                settings.SECRET_KEY.get_secret_value(),
+                secret_key,
                 algorithms=[settings.ALGORITHM],
                 options={"verify_exp": False}
             )

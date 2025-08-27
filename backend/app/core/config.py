@@ -35,7 +35,10 @@ class Settings(BaseSettings):
             "http://localhost:5173",  # Vite dev server
             "http://127.0.0.1:5173",
             "http://localhost:4173",  # Vite preview
-            "http://127.0.0.1:4173"
+            "http://127.0.0.1:4173",
+            "https://ai-financial-planner-zeta.vercel.app",  # Production frontend
+            "https://ai-financial-planner-*.vercel.app",  # Preview deployments
+            "*"  # Allow all origins for development (remove in strict production)
         ],
         env="BACKEND_CORS_ORIGINS"
     )
@@ -48,7 +51,7 @@ class Settings(BaseSettings):
     
     # Database Configuration
     DATABASE_URL: str = Field(
-        "postgresql+asyncpg://user:password@localhost/financial_planning",
+        "sqlite+aiosqlite:///./financial_planning.db",
         env="DATABASE_URL"
     )
     DATABASE_POOL_SIZE: int = Field(20, env="DATABASE_POOL_SIZE")

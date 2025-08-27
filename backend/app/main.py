@@ -159,6 +159,8 @@ except ImportError as e:
             "http://127.0.0.1:5173",
             "http://localhost:4173",  # Vite preview
             "http://127.0.0.1:4173",
+            "https://ai-financial-planner-zeta.vercel.app",  # Production frontend
+            "https://ai-financial-planner-*.vercel.app",  # Preview deployments
             "*"
         ]
         ALLOWED_HOSTS = ["*"]
@@ -187,7 +189,7 @@ except ImportError as e:
 api_router = None
 try:
     from app.api.v1.api import api_router
-from app.routes.demo_metrics import router as demo_metrics_router
+    from app.routes.demo_metrics import router as demo_metrics_router
     AVAILABLE_SERVICES["api_router"] = True
     logger.info("API router imported successfully")
 except ImportError as e:
