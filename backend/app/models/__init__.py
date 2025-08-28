@@ -22,15 +22,13 @@ from .auth import (
 
 # Enhanced models with comprehensive fields
 from .enhanced_models import (
-    User,
-    Portfolio,
-    Account,
-    Holding,
-    Transaction,
-    Goal,
-    MarketData,
-    Simulation,
-    Alert
+    User as EnhancedUser,
+    Portfolio as EnhancedPortfolio,
+    Account as EnhancedAccount,
+    Transaction as EnhancedTransaction,
+    EnhancedMarketData,
+    UserActivityLog,
+    RegulatoryReport,
 )
 
 # Time-series models

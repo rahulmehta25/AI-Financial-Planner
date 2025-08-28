@@ -430,6 +430,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </Button>
         </div>
       </div>
+    </div>
     </ErrorBoundary>
   );
 };

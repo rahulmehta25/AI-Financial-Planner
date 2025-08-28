@@ -102,6 +102,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+# Backwards-compatible alias expected by various modules
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async for session in get_db_session():
+        yield session
+
+
 async def init_db() -> None:
     """Initialize database"""
     

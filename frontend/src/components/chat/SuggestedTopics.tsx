@@ -20,7 +20,7 @@ import {
   AlertTriangle,
   Info,
   ChevronRight,
-  Refresh
+  RotateCcw
 } from 'lucide-react';
 
 interface SuggestedTopic {
@@ -278,7 +278,7 @@ const SuggestedTopics: React.FC<SuggestedTopicsProps> = ({
           onClick={refreshTopics}
           className="text-muted-foreground hover:text-foreground"
         >
-          <Refresh className="w-4 h-4" />
+          <RotateCcw className="w-4 h-4" />
         </Button>
       </div>
 

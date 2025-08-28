@@ -9,8 +9,8 @@ import pickle
 import logging
 from typing import Optional, Any, Dict, List, Union
 from datetime import datetime, timedelta
-import aioredis
-from aioredis import Redis
+from redis import asyncio as aioredis
+from redis.asyncio import Redis
 
 from ..models import MarketDataPoint, HistoricalData, CompanyInfo
 from ..config import config

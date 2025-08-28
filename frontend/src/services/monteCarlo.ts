@@ -1,4 +1,4 @@
-import { api } from './api';
+import { apiService } from './api';
 
 export interface MonteCarloRequest {
   // Basic Parameters
@@ -78,7 +78,7 @@ class MonteCarloService {
    */
   async runSimulation(parameters: MonteCarloRequest): Promise<MonteCarloResponse> {
     try {
-      const response = await api.post<MonteCarloResponse>(`${this.baseURL}/monte-carlo`, {
+      const response = await apiService.post<MonteCarloResponse>(`${this.baseURL}/monte-carlo`, {
         // Map frontend parameter names to backend expected format
         n_years: parameters.timeHorizon,
         initial_investment: parameters.initialInvestment,
@@ -116,7 +116,7 @@ class MonteCarloService {
     result?: MonteCarloResponse;
   }> {
     try {
-      const response = await api.get(`${this.baseURL}/status/${simulationId}`);
+      const response = await apiService.get(`${this.baseURL}/status/${simulationId}`);
       return response.data;
     } catch (error: any) {
       console.error('Failed to get simulation status:', error);
@@ -129,7 +129,7 @@ class MonteCarloService {
    */
   async cancelSimulation(simulationId: string): Promise<void> {
     try {
-      await api.delete(`${this.baseURL}/cancel/${simulationId}`);
+      await apiService.delete(`${this.baseURL}/cancel/${simulationId}`);
     } catch (error: any) {
       console.error('Failed to cancel simulation:', error);
       throw new Error('Failed to cancel simulation');
@@ -144,7 +144,7 @@ class MonteCarloService {
     parameters: MonteCarloRequest;
   }[]): Promise<ScenarioComparison> {
     try {
-      const response = await api.post<ScenarioComparison>(`${this.baseURL}/compare`, {
+      const response = await apiService.post<ScenarioComparison>(`${this.baseURL}/compare`, {
         scenarios: scenarios.map(scenario => ({
           name: scenario.name,
           parameters: {
@@ -178,7 +178,7 @@ class MonteCarloService {
    */
   async exportResults(simulationId: string, format: 'csv' | 'json' | 'pdf' = 'csv'): Promise<Blob> {
     try {
-      const response = await api.get(`${this.baseURL}/export/${simulationId}`, {
+      const response = await apiService.get(`${this.baseURL}/export/${simulationId}`, {
         params: { format },
         responseType: 'blob'
       });
@@ -202,7 +202,7 @@ class MonteCarloService {
     }>;
   }> {
     try {
-      const response = await api.get(`${this.baseURL}/history`, {
+      const response = await apiService.get(`${this.baseURL}/history`, {
         params: { limit }
       });
 

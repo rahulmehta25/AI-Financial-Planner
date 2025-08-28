@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import Plot from 'react-plotly.js';
+import React, { useMemo, lazy, Suspense } from 'react';
+// Dynamic import for plotly to avoid build issues
+const Plot = lazy(() => import('react-plotly.js'));
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -251,7 +252,8 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({
           
           <TabsContent value="histogram" id="histogram-content">
             <div className="h-96" id="histogram-chart">
-              <Plot
+              <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <Plot
                 data={histogramData || []}
                 layout={{
                   ...plotLayout,
@@ -272,12 +274,14 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({
                 useResizeHandler={true}
                 style={{ width: '100%', height: '100%' }}
               />
+              </Suspense>
             </div>
           </TabsContent>
           
           <TabsContent value="density" id="density-content">
             <div className="h-96" id="density-chart">
-              <Plot
+              <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <Plot
                 data={densityData || []}
                 layout={{
                   ...plotLayout,
@@ -298,12 +302,14 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({
                 useResizeHandler={true}
                 style={{ width: '100%', height: '100%' }}
               />
+              </Suspense>
             </div>
           </TabsContent>
           
           <TabsContent value="cumulative" id="cumulative-content">
             <div className="h-96" id="cumulative-chart">
-              <Plot
+              <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <Plot
                 data={cumulativeData || []}
                 layout={{
                   ...plotLayout,
@@ -324,12 +330,14 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({
                 useResizeHandler={true}
                 style={{ width: '100%', height: '100%' }}
               />
+              </Suspense>
             </div>
           </TabsContent>
           
           <TabsContent value="percentiles" id="percentiles-content">
             <div className="h-96" id="percentiles-chart">
-              <Plot
+              <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                <Plot
                 data={riskMetricsData || []}
                 layout={{
                   ...plotLayout,
@@ -350,6 +358,7 @@ const ProbabilityChart: React.FC<ProbabilityChartProps> = ({
                 useResizeHandler={true}
                 style={{ width: '100%', height: '100%' }}
               />
+              </Suspense>
             </div>
           </TabsContent>
         </Tabs>

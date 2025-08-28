@@ -5,7 +5,8 @@ Configuration settings for all market data providers and system components.
 """
 
 from typing import Dict, List, Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from enum import Enum
 import os
 

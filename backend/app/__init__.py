@@ -1,5 +1,7 @@
-# Backend application package
+# Backend application package (avoid heavy imports at module load)
 
-from .automation import DailyOperationsManager
+__all__: list[str] = []
 
-__all__ = ["DailyOperationsManager"]
+def get_daily_operations_manager():
+    from .automation import DailyOperationsManager
+    return DailyOperationsManager

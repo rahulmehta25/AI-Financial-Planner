@@ -286,8 +286,8 @@ class SecurityEvent(Base):
     user_agent = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
-    # Metadata
-    metadata = Column(Text, nullable=True)  # JSON data
+    # Additional event metadata (stored as JSON text)
+    event_metadata = Column('metadata', Text, nullable=True)
     resolved = Column(Boolean, default=False, nullable=False)
     resolved_at = Column(DateTime, nullable=True)
 

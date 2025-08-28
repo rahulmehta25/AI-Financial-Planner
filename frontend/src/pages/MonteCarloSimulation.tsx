@@ -8,15 +8,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { 
-  PlayIcon, 
-  StopCircleIcon, 
-  DownloadIcon, 
-  CompareIcon, 
-  HistoryIcon,
-  AlertTriangleIcon,
-  CheckCircleIcon,
-  InfoIcon,
-  TrendingUpIcon,
+  Play, 
+  StopCircle, 
+  Download, 
+  GitCompare, 
+  History,
+  AlertTriangle,
+  CheckCircle,
+  Info,
+  TrendingUp,
   Calculator
 } from 'lucide-react';
 
@@ -243,7 +243,7 @@ const MonteCarloSimulation: React.FC = () => {
             onClick={() => handleLoadPreset('mixed')}
             id="load-preset-button"
           >
-            <TrendingUpIcon className="h-4 w-4 mr-2" />
+            <TrendingUp className="h-4 w-4 mr-2" />
             Load Preset
           </Button>
           {results && (
@@ -252,7 +252,7 @@ const MonteCarloSimulation: React.FC = () => {
               onClick={handleAddToComparison}
               id="add-to-comparison-button"
             >
-              <CompareIcon className="h-4 w-4 mr-2" />
+              <GitCompare className="h-4 w-4 mr-2" />
               Add to Comparison
             </Button>
           )}
@@ -264,21 +264,21 @@ const MonteCarloSimulation: React.FC = () => {
         <div className="space-y-2" id="status-section">
           {error && (
             <Alert variant="destructive" id="error-alert">
-              <AlertTriangleIcon className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
           
           {warnings.map((warning, index) => (
             <Alert key={index} id={`warning-alert-${index}`}>
-              <InfoIcon className="h-4 w-4" />
+              <Info className="h-4 w-4" />
               <AlertDescription>{warning}</AlertDescription>
             </Alert>
           ))}
           
           {isRunning && (
             <Alert id="running-alert">
-              <CheckCircleIcon className="h-4 w-4" />
+              <CheckCircle className="h-4 w-4" />
               <AlertDescription>
                 <div className="flex items-center justify-between" id="progress-content">
                   <span>Running simulation...</span>
@@ -311,7 +311,7 @@ const MonteCarloSimulation: React.FC = () => {
             <Card id="quick-stats-card">
               <CardHeader id="quick-stats-header">
                 <CardTitle className="flex items-center gap-2" id="quick-stats-title">
-                  <TrendingUpIcon className="h-5 w-5" />
+                  <TrendingUp className="h-5 w-5" />
                   Simulation Summary
                 </CardTitle>
               </CardHeader>
@@ -368,7 +368,7 @@ const MonteCarloSimulation: React.FC = () => {
           <Card id="scenario-comparison-card">
             <CardHeader id="scenario-comparison-header">
               <CardTitle className="flex items-center gap-2" id="scenario-comparison-title">
-                <CompareIcon className="h-5 w-5" />
+                <GitCompare className="h-5 w-5" />
                 Scenario Comparison
               </CardTitle>
               <CardDescription id="scenario-comparison-description">
@@ -441,7 +441,7 @@ const MonteCarloSimulation: React.FC = () => {
                     className="w-full"
                     id="compare-scenarios-button"
                   >
-                    <CompareIcon className="h-4 w-4 mr-2" />
+                    <GitCompare className="h-4 w-4 mr-2" />
                     Run Detailed Comparison Analysis
                   </Button>
                 </div>

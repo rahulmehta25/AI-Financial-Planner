@@ -16,14 +16,32 @@ export default defineConfig({
     strictPort: true,
     open: false
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom'],
+    exclude: ['playwright', 'three', 'plotly.js', 'react-plotly.js', 'd3']
+  },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 2000,
+    commonjsOptions: {
+      transformMixedEsModules: true
+    },
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          ui: ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
+          'three-js': ['three'],
+          'plotly': ['plotly.js', 'react-plotly.js'],
+          'd3-charts': ['d3'],
+          'ui-radix': [
+            '@radix-ui/react-accordion',
+            '@radix-ui/react-alert-dialog', 
+            '@radix-ui/react-avatar',
+            '@radix-ui/react-checkbox',
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu'
+          ]
         }
       }
     }
