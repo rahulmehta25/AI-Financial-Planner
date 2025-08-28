@@ -1,0 +1,144 @@
+---
+# Service Account for Financial Planning Application
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-api
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    version: v1.0.0
+  annotations:
+    kubernetes.io/managed-by: "platform-team"
+    security.audit/log-level: "detailed"
+automountServiceAccountToken: true
+---
+# Role for application-specific permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning-prod
+  name: financial-planning-api-role
+  labels:
+    app: financial-planning-api
+    environment: production
+rules:
+# ConfigMaps and Secrets access (read-only for config, limited write for cache)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["financial-planning-cache"]
+  verbs: ["create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+  resourceNames: ["financial-planning-secrets", "database-credentials", "api-keys"]
+  
+# Pod and Service discovery
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+  
+# Events for debugging (read-only)
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list", "watch", "create"]
+  
+# Metrics and monitoring
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+---
+# RoleBinding to connect ServiceAccount with Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: financial-planning-api-binding
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-api
+  namespace: financial-planning-prod
+roleRef:
+  kind: Role
+  name: financial-planning-api-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole for cross-namespace monitoring (minimal permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: financial-planning-monitoring
+  labels:
+    app: financial-planning-api
+    environment: production
+rules:
+# Read-only access to nodes for health monitoring
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+  
+# Read-only access to cluster metrics
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+---
+# ClusterRoleBinding for monitoring permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: financial-planning-monitoring-binding
+  labels:
+    app: financial-planning-api
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-api
+  namespace: financial-planning-prod
+roleRef:
+  kind: ClusterRole
+  name: financial-planning-monitoring
+  apiGroup: rbac.authorization.k8s.io
+---
+# Network Policy Service Account (for managing network policies)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: network-policy-manager
+  namespace: financial-planning-prod
+  labels:
+    app: network-policy-manager
+    environment: production
+automountServiceAccountToken: false
+---
+# Role for Network Policy Management
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning-prod
+  name: network-policy-manager-role
+rules:
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+# RoleBinding for Network Policy Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: network-policy-manager-binding
+  namespace: financial-planning-prod
+subjects:
+- kind: ServiceAccount
+  name: network-policy-manager
+  namespace: financial-planning-prod
+roleRef:
+  kind: Role
+  name: network-policy-manager-role
+  apiGroup: rbac.authorization.k8s.io

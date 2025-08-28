@@ -618,3 +618,181 @@ class FactorBasedOptimization:
                 weights[asset_indices[asset]] = -1.0 / n_short
                 
         return weights
+    
+    def smart_beta_portfolio(
+        self,
+        factor_exposures: Dict[str, FactorExposure],
+        target_factors: Dict[str, float],
+        risk_budget: Optional[Dict[str, float]] = None
+    ) -> np.ndarray:
+        """
+        Create smart beta portfolio with targeted factor exposures
+        
+        Args:
+            factor_exposures: Asset factor exposures
+            target_factors: Target exposure to each factor
+            risk_budget: Risk budget per factor
+            
+        Returns:
+            Smart beta portfolio weights
+        """
+        assets = list(factor_exposures.keys())
+        n_assets = len(assets)
+        
+        # Build factor loading matrix
+        factors = list(target_factors.keys())
+        B = np.zeros((len(factors), n_assets))
+        
+        for i, asset in enumerate(assets):
+            exposure = factor_exposures[asset]
+            for j, factor in enumerate(factors):
+                if factor in exposure.factor_loadings:
+                    B[j, i] = exposure.factor_loadings[factor]
+                    
+        # Optimization for smart beta
+        weights = cp.Variable(n_assets)
+        portfolio_exposures = B @ weights
+        
+        # Tracking error to target exposures
+        target_exp = np.array([target_factors[f] for f in factors])
+        tracking_error = cp.norm(portfolio_exposures - target_exp)
+        
+        # Constraints
+        constraints = [
+            cp.sum(weights) == 1,
+            weights >= 0,
+            weights <= 0.1  # Max 10% per asset
+        ]
+        
+        # Risk budget constraints if specified
+        if risk_budget:
+            for j, factor in enumerate(factors):
+                if factor in risk_budget:
+                    constraints.append(
+                        cp.abs(portfolio_exposures[j]) <= risk_budget[factor]
+                    )
+                    
+        # Minimize tracking error
+        objective = cp.Minimize(tracking_error)
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.OSQP, verbose=False)
+        
+        if problem.status not in ["optimal", "optimal_inaccurate"]:
+            raise ValueError(f"Smart beta optimization failed: {problem.status}")
+            
+        return weights.value
+    
+    def factor_timing_strategy(
+        self,
+        factor_returns: pd.DataFrame,
+        lookback_window: int = 60,
+        rebalance_freq: int = 12
+    ) -> pd.DataFrame:
+        """
+        Dynamic factor timing strategy based on momentum and mean reversion
+        
+        Args:
+            factor_returns: Historical factor returns
+            lookback_window: Window for signal calculation
+            rebalance_freq: Rebalancing frequency in months
+            
+        Returns:
+            Time series of factor allocations
+        """
+        allocations = []
+        
+        for i in range(lookback_window, len(factor_returns), rebalance_freq):
+            window = factor_returns.iloc[i-lookback_window:i]
+            
+            # Calculate factor signals
+            signals = {}
+            for factor in window.columns:
+                # Momentum signal
+                momentum = window[factor].rolling(12).mean().iloc[-1]
+                
+                # Mean reversion signal
+                z_score = (window[factor].iloc[-1] - window[factor].mean()) / window[factor].std()
+                mean_reversion = -z_score if abs(z_score) > 2 else 0
+                
+                # Combined signal
+                signals[factor] = 0.7 * momentum + 0.3 * mean_reversion
+                
+            # Convert signals to weights
+            total_signal = sum(abs(s) for s in signals.values())
+            if total_signal > 0:
+                weights = {f: abs(signals[f]) / total_signal for f in signals}
+            else:
+                weights = {f: 1.0 / len(signals) for f in signals}
+                
+            allocations.append({
+                'date': factor_returns.index[i],
+                **weights
+            })
+            
+        return pd.DataFrame(allocations)
+    
+    def multi_factor_risk_model(
+        self,
+        returns_data: pd.DataFrame,
+        factor_data: pd.DataFrame,
+        n_factors: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Build multi-factor risk model with PCA augmentation
+        
+        Args:
+            returns_data: Asset returns
+            factor_data: Known factor returns
+            n_factors: Number of statistical factors to extract
+            
+        Returns:
+            Complete factor risk model
+        """
+        from sklearn.decomposition import PCA
+        
+        # Regress returns on known factors
+        residuals = returns_data.copy()
+        factor_exposures = {}
+        
+        for asset in returns_data.columns:
+            y = returns_data[asset].values
+            X = factor_data.values
+            
+            # Add intercept
+            X_with_const = np.column_stack([np.ones(len(X)), X])
+            
+            # OLS regression
+            coef = np.linalg.lstsq(X_with_const, y, rcond=None)[0]
+            factor_exposures[asset] = coef[1:]  # Exclude intercept
+            
+            # Calculate residuals
+            fitted = X @ coef[1:] + coef[0]
+            residuals[asset] = y - fitted
+            
+        # PCA on residuals to find statistical factors
+        pca = PCA(n_components=n_factors)
+        stat_factors = pca.fit_transform(residuals)
+        stat_factor_exposures = pca.components_.T
+        
+        # Combine fundamental and statistical factors
+        combined_exposures = np.hstack([
+            np.array(list(factor_exposures.values())),
+            stat_factor_exposures
+        ])
+        
+        # Factor covariance
+        all_factors = np.hstack([factor_data.values, stat_factors])
+        factor_cov = np.cov(all_factors.T)
+        
+        # Specific risk (residual variance after all factors)
+        final_residuals = residuals - stat_factors @ stat_factor_exposures.T
+        specific_risk = np.diag(np.var(final_residuals, axis=0))
+        
+        return {
+            'factor_exposures': combined_exposures,
+            'factor_covariance': factor_cov,
+            'specific_risk': specific_risk,
+            'explained_variance': pca.explained_variance_ratio_,
+            'n_fundamental_factors': len(factor_data.columns),
+            'n_statistical_factors': n_factors
+        }

@@ -8,6 +8,7 @@ and brute force protection for the financial planning system.
 import time
 import hashlib
 import ipaddress
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
@@ -18,6 +19,8 @@ import redis.asyncio as redis
 from fastapi import HTTPException, Request, status
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimitType(Enum):
@@ -722,6 +725,77 @@ class APIThrottler:
                 "api_general",
                 user_id
             )
+
+
+class DistributedRateLimiter:
+    """
+    Simplified distributed rate limiter for SecurityManager integration
+    """
+    
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+        self.default_window = 60  # 1 minute default
+    
+    async def check_limit(
+        self,
+        key: str,
+        max_requests: int,
+        window_seconds: int = None
+    ) -> bool:
+        """
+        Check if rate limit is exceeded
+        
+        Returns:
+            True if request is allowed, False if limit exceeded
+        """
+        window = window_seconds or self.default_window
+        full_key = f"rate:{key}"
+        
+        try:
+            # Use pipeline for atomic operations
+            pipe = self.redis.pipeline()
+            pipe.incr(full_key)
+            pipe.expire(full_key, window)
+            results = await pipe.execute()
+            
+            current_count = results[0]
+            return current_count <= max_requests
+            
+        except Exception as e:
+            # On Redis failure, allow request (fail open)
+            logger.error(f"Rate limiter error: {str(e)}")
+            return True
+    
+    async def get_remaining(self, key: str, limit: int) -> int:
+        """Get remaining requests in current window"""
+        full_key = f"rate:{key}"
+        
+        try:
+            count = await self.redis.get(full_key)
+            if count:
+                return max(0, limit - int(count))
+            return limit
+        except:
+            return limit
+    
+    async def get_reset_time(self, key: str) -> int:
+        """Get seconds until rate limit resets"""
+        full_key = f"rate:{key}"
+        
+        try:
+            ttl = await self.redis.ttl(full_key)
+            return max(0, ttl)
+        except:
+            return 0
+    
+    async def reset(self, key: str):
+        """Reset rate limit for a key"""
+        full_key = f"rate:{key}"
+        
+        try:
+            await self.redis.delete(full_key)
+        except Exception as e:
+            logger.error(f"Failed to reset rate limit: {str(e)}")
 
 
 class BruteForceProtection:

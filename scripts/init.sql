@@ -1,28 +1,18 @@
--- Initial database setup script for AI Financial Planning System
+-- Initialize financial planning database
+CREATE DATABASE IF NOT EXISTS financial_planner;
+CREATE DATABASE IF NOT EXISTS financial_planner_ts;
 
--- Create database extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+-- Create extensions for TimescaleDB
+\c financial_planner_ts;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- Create indexes for performance
--- Note: Actual table creation will be handled by SQLAlchemy migrations
+-- Basic user table
+\c financial_planner;
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- Initial data seeding can be added here
--- For example, default asset classes, risk profiles, etc.
-
--- Example: Insert default asset classes
--- INSERT INTO asset_classes (name, description, risk_level) VALUES
--- ('Stocks', 'Equity investments', 'high'),
--- ('Bonds', 'Fixed income securities', 'medium'),
--- ('Cash', 'Cash equivalents', 'low');
-
--- Create function for updating updated_at timestamps
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- This function will be applied to tables via SQLAlchemy triggers
+-- Insert sample user
+INSERT INTO users (email) VALUES ('demo@financialplanner.com') ON CONFLICT DO NOTHING;

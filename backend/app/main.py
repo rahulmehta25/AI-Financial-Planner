@@ -14,6 +14,20 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from contextlib import asynccontextmanager
+import uvicorn
+import logging
+from typing import Dict, Any
+
+from app.core.config import settings
+from app.services.financial_modeling.monte_carlo_engine import AdvancedMonteCarloEngine
+from app.services.market_data.data_aggregator import MarketDataAggregator
+from app.services.optimization.portfolio_optimizer import IntelligentPortfolioOptimizer
+from app.services.ai.financial_advisor_ai import PersonalizedFinancialAdvisor
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -255,154 +269,404 @@ if not AVAILABLE_SERVICES["fastapi"]:
         print("Error: FastAPI is not installed. Cannot start server.")
         sys.exit(1)
 
-# Create FastAPI application
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Security
+security = HTTPBearer()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management"""
+    # Startup
+    logger.info("Starting AI Financial Planner API...")
+    
+    # Initialize services
+    app.state.market_data = MarketDataAggregator()
+    app.state.monte_carlo = AdvancedMonteCarloEngine(app.state.market_data)
+    app.state.portfolio_optimizer = IntelligentPortfolioOptimizer()
+    app.state.ai_advisor = PersonalizedFinancialAdvisor()
+    
+    logger.info("All services initialized successfully")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down AI Financial Planner API...")
+
+# Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="AI-driven financial planning and simulation system with graceful degradation",
     version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json" if hasattr(settings, 'API_V1_STR') else "/api/v1/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    description="AI-driven financial planning and simulation system with graceful degradation",
+    lifespan=lifespan
 )
 
-def create_fallback_routes():
-    """Create fallback routes when main API router is not available"""
-    logger.info("Creating fallback routes for unavailable services")
-    
-    @app.get("/api/v1/users/me")
-    async def fallback_current_user():
-        """Fallback endpoint for current user"""
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "User service is temporarily unavailable",
-                "error_code": "SERVICE_UNAVAILABLE",
-                "fallback": True,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT
+    }
+
+# Market data endpoints
+@app.get("/api/v1/market-data/historical")
+async def get_historical_data(
+    symbols: str,
+    start_date: str,
+    end_date: str,
+    interval: str = "1d"
+):
+    """Get historical market data"""
+    try:
+        from datetime import datetime
+        start = datetime.fromisoformat(start_date)
+        end = datetime.fromisoformat(end_date)
+        symbol_list = symbols.split(",")
+        
+        data = await app.state.market_data.get_historical_data(
+            symbol_list, start, end, interval
         )
-    
-    @app.get("/api/v1/simulations")
-    async def fallback_simulations():
-        """Fallback endpoint for simulations list"""
+        
+        return {"data": data.to_dict() if hasattr(data, 'to_dict') else str(data)}
+    except Exception as e:
+        logger.error(f"Error fetching historical data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch historical data: {str(e)}"
+        )
+
+@app.get("/api/v1/market-data/fundamental/{symbol}")
+async def get_fundamental_data(symbol: str):
+    """Get fundamental data for a symbol"""
+    try:
+        data = await app.state.market_data.get_fundamental_data([symbol])
+        return {"data": data}
+    except Exception as e:
+        logger.error(f"Error fetching fundamental data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch fundamental data: {str(e)}"
+        )
+
+# Monte Carlo simulation endpoints
+@app.post("/api/v1/simulations/monte-carlo")
+async def run_monte_carlo_simulation(
+    request: Dict[str, Any]
+):
+    """Run Monte Carlo simulation"""
+    try:
+        from app.services.financial_modeling.monte_carlo_engine import SimulationParams
+        
+        # Extract parameters from request
+        params = SimulationParams(
+            num_simulations=request.get("num_simulations", 10000),
+            time_horizon=request.get("time_horizon", 30),
+            batch_size=request.get("batch_size", 1000),
+            confidence_level=request.get("confidence_level", 0.95)
+        )
+        
+        # Create mock portfolio for simulation
+        class MockPortfolio:
+            def __init__(self):
+                self.total_value = request.get("portfolio_value", 100000)
+                self.holdings = []
+                self.goals = []
+        
+        portfolio = MockPortfolio()
+        
+        # Run simulation
+        results = await app.state.monte_carlo.simulate_portfolio(portfolio, params)
+        
         return {
-            "simulations": [],
-            "message": "Simulation service is not available",
-            "fallback": True,
-            "mock_data": {
-                "sample_simulation": {
-                    "id": "mock-simulation-001",
-                    "name": "Sample Retirement Plan",
-                    "status": "completed",
-                    "probability_of_success": 0.85,
-                    "projected_value": 1500000,
-                    "created_at": datetime.utcnow().isoformat()
-                }
+            "simulation_id": str(results.params),
+            "results": {
+                "statistics": results.analysis["statistics"],
+                "risk_metrics": results.analysis["risk_metrics"],
+                "confidence_intervals": results.analysis["confidence_intervals"],
+                "computation_time": results.computation_time
             },
-            "timestamp": datetime.utcnow().isoformat()
+            "regime": results.regime
         }
-    
-    @app.post("/api/v1/simulations")
-    async def fallback_create_simulation():
-        """Fallback endpoint for simulation creation"""
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Simulation creation service is temporarily unavailable",
-                "error_code": "SERVICE_UNAVAILABLE",
-                "fallback": True,
-                "timestamp": datetime.utcnow().isoformat()
-            }
+        
+    except Exception as e:
+        logger.error(f"Error running Monte Carlo simulation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to run simulation: {str(e)}"
         )
-    
-    @app.get("/api/v1/health")
-    async def fallback_health():
-        """Fallback health check endpoint"""
+
+# Portfolio optimization endpoints
+@app.post("/api/v1/portfolio/optimize")
+async def optimize_portfolio(
+    request: Dict[str, Any]
+):
+    """Optimize portfolio"""
+    try:
+        from app.services.optimization.portfolio_optimizer import OptimizationConstraints
+        
+        # Create mock user profile
+        class MockUserProfile:
+            def __init__(self):
+                self.risk_tolerance = request.get("risk_tolerance", 0.5)
+                self.tax_bracket = request.get("tax_bracket", 0.22)
+        
+        user_profile = MockUserProfile()
+        
+        # Create mock current holdings
+        current_holdings = request.get("current_holdings", [])
+        
+        # Create mock market data
+        class MockMarketData:
+            pass
+        
+        market_data = MockMarketData()
+        
+        # Create constraints
+        constraints = OptimizationConstraints(
+            max_position_size=request.get("max_position_size", 0.25),
+            min_position_size=request.get("min_position_size", 0.01)
+        )
+        
+        # Run optimization
+        result = await app.state.portfolio_optimizer.optimize_portfolio(
+            user_profile, current_holdings, market_data, constraints
+        )
+        
         return {
-            "status": "degraded",
-            "message": "Running in fallback mode with limited functionality",
-            "services": AVAILABLE_SERVICES,
-            "timestamp": datetime.utcnow().isoformat()
+            "optimal_weights": result.optimal_weights,
+            "expected_return": result.expected_return,
+            "expected_risk": result.expected_risk,
+            "sharpe_ratio": result.sharpe_ratio,
+            "implementation_plan": result.implementation_plan,
+            "confidence_scores": result.confidence_scores
         }
-    
-    logger.info("Fallback routes created successfully")
-
-# Set up CORS if middleware is available
-if AVAILABLE_SERVICES["middleware"] and hasattr(settings, 'BACKEND_CORS_ORIGINS'):
-    try:
-        cors_origins = settings.BACKEND_CORS_ORIGINS
-        if isinstance(cors_origins, str):
-            cors_origins = [cors_origins]
         
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in cors_origins],
-            allow_credentials=True,
-            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
-            allow_headers=["*"],
-            expose_headers=["*"]
-        )
-        logger.info(f"CORS middleware added successfully with origins: {cors_origins}")
     except Exception as e:
-        logger.warning(f"Failed to add CORS middleware: {e}")
+        logger.error(f"Error optimizing portfolio: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to optimize portfolio: {str(e)}"
+        )
 
-# Add trusted host middleware if available
-if AVAILABLE_SERVICES["middleware"] and hasattr(settings, 'ALLOWED_HOSTS'):
+# AI advice endpoints
+@app.post("/api/v1/ai/advice")
+async def get_ai_advice(
+    request: Dict[str, Any]
+):
+    """Get AI-generated financial advice"""
     try:
-        allowed_hosts = settings.ALLOWED_HOSTS
-        if isinstance(allowed_hosts, str):
-            allowed_hosts = [allowed_hosts]
+        from app.services.ai.financial_advisor_ai import UserContext, MarketContext
         
-        app.add_middleware(
-            TrustedHostMiddleware,
-            allowed_hosts=allowed_hosts
+        # Create user context
+        user_context = UserContext(
+            user_id=request.get("user_id", "demo_user"),
+            profile=request.get("profile", {}),
+            portfolio_analysis=request.get("portfolio_analysis", {}),
+            goal_progress=request.get("goal_progress", [])
         )
-        logger.info(f"TrustedHost middleware added successfully with hosts: {allowed_hosts}")
+        
+        # Create market context
+        market_context = MarketContext(
+            current_market_conditions=request.get("market_conditions", "normal"),
+            volatility_regime=request.get("volatility_regime", "medium"),
+            economic_outlook=request.get("economic_outlook", "stable")
+        )
+        
+        # Get user query
+        user_query = request.get("query", "How should I allocate my portfolio?")
+        
+        # Generate advice
+        advice = await app.state.ai_advisor.generate_personalized_advice(
+            user_query, user_context, market_context
+        )
+        
+        return {
+            "advice": advice.narrative,
+            "key_points": advice.key_points,
+            "action_plan": {
+                "items": [
+                    {
+                        "title": item.title,
+                        "description": item.description,
+                        "priority": item.priority,
+                        "impact": item.impact,
+                        "timeline": item.timeline
+                    }
+                    for item in advice.action_plan.items
+                ],
+                "total_estimated_impact": advice.action_plan.total_estimated_impact,
+                "implementation_timeline": advice.action_plan.implementation_timeline
+            },
+            "confidence_score": advice.confidence_score,
+            "disclaimers": advice.disclaimers
+        }
+        
     except Exception as e:
-        logger.warning(f"Failed to add TrustedHost middleware: {e}")
+        logger.error(f"Error generating AI advice: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate advice: {str(e)}"
+        )
 
-# Add authentication middleware if available
-try:
-    from app.middleware.auth import (
-        AuthenticationMiddleware,
-        SessionValidationMiddleware,
-        RequestLoggingMiddleware
-    )
-    
-    # Add middleware in reverse order (they are processed in reverse)
-    app.add_middleware(AuthenticationMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
-    logger.info("Authentication middleware added successfully")
-except ImportError as e:
-    logger.warning(f"Authentication middleware not available: {e}")
-except Exception as e:
-    logger.warning(f"Failed to add authentication middleware: {e}")
-
-# Include API router if available
-if api_router and AVAILABLE_SERVICES["api_router"]:
-    # Add demo metrics routes
-    api_router.include_router(demo_metrics_router, prefix="/demo")
-    
-    def get_available_demo_routes() -> List[dict]:
-        """Retrieve available demo metric routes"""
-        return [
-            {"path": route.path, "methods": list(route.methods)} 
-            for route in demo_metrics_router.routes
-        ]
-    
-    app.state.demo_routes = get_available_demo_routes()
-    
+# Portfolio analysis endpoints
+@app.get("/api/v1/portfolio/{portfolio_id}/analysis")
+async def get_portfolio_analysis(portfolio_id: str):
+    """Get comprehensive portfolio analysis"""
     try:
-        api_prefix = getattr(settings, 'API_V1_STR', '/api/v1')
-        app.include_router(api_router, prefix=api_prefix)
-        logger.info(f"API router included successfully with prefix: {api_prefix}")
+        # Mock portfolio analysis
+        analysis = {
+            "portfolio_id": portfolio_id,
+            "total_value": 150000,
+            "allocation": {
+                "equity": 0.60,
+                "bonds": 0.25,
+                "cash": 0.10,
+                "alternatives": 0.05
+            },
+            "risk_metrics": {
+                "volatility": 0.15,
+                "sharpe_ratio": 0.85,
+                "max_drawdown": 0.12,
+                "var_95": 0.08
+            },
+            "performance": {
+                "ytd": 0.08,
+                "1_year": 0.12,
+                "3_year": 0.09,
+                "5_year": 0.11
+            },
+            "rebalancing_needed": True,
+            "tax_efficiency_score": 0.75
+        }
+        
+        return analysis
+        
     except Exception as e:
-        logger.error(f"Failed to include API router: {e}")
-        # Create fallback routes
-        create_fallback_routes()
-else:
-    logger.warning("API router not available, creating fallback routes")
-    create_fallback_routes()
+        logger.error(f"Error analyzing portfolio: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze portfolio: {str(e)}"
+        )
+
+# Risk management endpoints
+@app.post("/api/v1/risk/analysis")
+async def analyze_portfolio_risk(
+    request: Dict[str, Any]
+):
+    """Analyze portfolio risk"""
+    try:
+        # Mock risk analysis
+        risk_analysis = {
+            "overall_risk_score": 0.65,
+            "risk_level": "moderate",
+            "risk_decomposition": {
+                "market_risk": 0.45,
+                "credit_risk": 0.15,
+                "liquidity_risk": 0.05
+            },
+            "stress_test_results": {
+                "2008_crisis_scenario": -0.25,
+                "covid_crash_scenario": -0.20,
+                "inflation_spike_scenario": -0.15
+            },
+            "recommendations": [
+                "Consider increasing bond allocation for stability",
+                "Review international exposure for diversification",
+                "Implement stop-loss orders for high-risk positions"
+            ]
+        }
+        
+        return risk_analysis
+        
+    except Exception as e:
+        logger.error(f"Error analyzing risk: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze risk: {str(e)}"
+        )
+
+# Tax optimization endpoints
+@app.post("/api/v1/tax/optimization")
+async def optimize_tax_strategy(
+    request: Dict[str, Any]
+):
+    """Optimize tax strategy"""
+    try:
+        # Mock tax optimization
+        tax_optimization = {
+            "estimated_tax_savings": 2500,
+            "recommended_actions": [
+                "Harvest tax losses on underperforming positions",
+                "Increase 401(k) contributions to reduce taxable income",
+                "Consider Roth conversion for tax-free growth"
+            ],
+            "account_allocation": {
+                "taxable": ["growth_stocks", "index_funds"],
+                "401k": ["bonds", "reits"],
+                "roth_ira": ["high_growth_stocks", "international"]
+            },
+            "implementation_timeline": "3-6 months"
+        }
+        
+        return tax_optimization
+        
+    except Exception as e:
+        logger.error(f"Error optimizing tax strategy: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to optimize tax strategy: {str(e)}"
+        )
+
+# Goal planning endpoints
+@app.post("/api/v1/goals/plan")
+async def create_goal_plan(
+    request: Dict[str, Any]
+):
+    """Create financial goal plan"""
+    try:
+        # Mock goal planning
+        goal_plan = {
+            "goal_id": "goal_123",
+            "target_amount": request.get("target_amount", 1000000),
+            "target_date": request.get("target_date", "2035-01-01"),
+            "monthly_contribution": 2500,
+            "expected_return": 0.08,
+            "probability_of_success": 0.85,
+            "milestones": [
+                {"year": 2025, "target": 200000, "milestone": "25% of goal"},
+                {"year": 2030, "target": 600000, "milestone": "60% of goal"},
+                {"year": 2035, "target": 1000000, "milestone": "Goal achieved"}
+            ],
+            "recommendations": [
+                "Increase monthly contributions by $500",
+                "Consider higher-risk allocation for longer time horizon",
+                "Review progress quarterly and adjust as needed"
+            ]
+        }
+        
+        return goal_plan
+        
+    except Exception as e:
+        logger.error(f"Error creating goal plan: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create goal plan: {str(e)}"
+        )
 
 # Exception handler
 @app.exception_handler(CustomException)
@@ -684,21 +948,10 @@ async def debug_info():
 
 # Main execution
 if __name__ == "__main__":
-    import uvicorn
-    
-    host = getattr(settings, 'HOST', '0.0.0.0')
-    port = getattr(settings, 'PORT', 8000)
-    debug = getattr(settings, 'DEBUG', False)
-    
-    logger.info(f"Starting server on {host}:{port}")
-    logger.info(f"Debug mode: {debug}")
-    logger.info(f"Environment: {getattr(settings, 'ENVIRONMENT', 'unknown')}")
-    
     uvicorn.run(
         "app.main:app",
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="debug" if debug else "info",
-        access_log=True
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+        workers=settings.WORKERS
     )

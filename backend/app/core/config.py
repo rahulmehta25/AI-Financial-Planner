@@ -5,293 +5,84 @@ Configuration management using Pydantic settings with environment variable suppo
 """
 
 import os
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseSettings, Field, validator
 from pydantic.types import SecretStr
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application settings with environment variable support"""
+    # Application
+    APP_NAME: str = "AI Financial Planner"
+    APP_VERSION: str = "2.0.0"
+    DEBUG: bool = False
+    ENVIRONMENT: str = "development"
     
-    # Project Information
-    PROJECT_NAME: str = "AI Financial Planning System"
-    VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
-    DESCRIPTION: str = "AI-driven financial planning and simulation system"
+    # Server
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    WORKERS: int = 4
     
-    # Server Configuration
-    HOST: str = Field("0.0.0.0", env="HOST")
-    PORT: int = Field(8000, env="PORT")
-    RELOAD: bool = Field(False, env="RELOAD")
-    WORKERS: int = Field(1, env="WORKERS")
+    # Database
+    DATABASE_URL: str = "postgresql://user:pass@localhost/financial_planner"
+    DATABASE_POOL_SIZE: int = 20
+    DATABASE_MAX_OVERFLOW: int = 30
     
-    # CORS Configuration
-    BACKEND_CORS_ORIGINS: List[str] = Field(
-        [
-            "http://localhost:3000", 
-            "http://localhost:3001", 
-            "http://127.0.0.1:3000", 
-            "http://127.0.0.1:3001",
-            "http://localhost:5173",  # Vite dev server
-            "http://127.0.0.1:5173",
-            "http://localhost:4173",  # Vite preview
-            "http://127.0.0.1:4173",
-            "https://ai-financial-planner-zeta.vercel.app",  # Production frontend
-            "https://ai-financial-planner-*.vercel.app",  # Preview deployments
-            "*"  # Allow all origins for development (remove in strict production)
-        ],
-        env="BACKEND_CORS_ORIGINS"
-    )
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_POOL_SIZE: int = 10
     
-    # Allowed Hosts
-    ALLOWED_HOSTS: List[str] = Field(
-        ["localhost", "127.0.0.1", "0.0.0.0"],
-        env="ALLOWED_HOSTS"
-    )
+    # JWT
+    JWT_SECRET: str = "your-secret-key"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     
-    # Database Configuration
-    DATABASE_URL: str = Field(
-        "sqlite+aiosqlite:///./financial_planning.db",
-        env="DATABASE_URL"
-    )
-    DATABASE_POOL_SIZE: int = Field(20, env="DATABASE_POOL_SIZE")
-    DATABASE_MAX_OVERFLOW: int = Field(30, env="DATABASE_MAX_OVERFLOW")
-    DATABASE_POOL_TIMEOUT: int = Field(30, env="DATABASE_POOL_TIMEOUT")
+    # Market Data APIs
+    POLYGON_API_KEY: str = ""
+    DATABENTO_API_KEY: str = ""
+    ALPHA_VANTAGE_API_KEY: str = ""
+    TWELVE_DATA_API_KEY: str = ""
     
-    # Redis Configuration
-    REDIS_URL: str = Field("redis://localhost:6379", env="REDIS_URL")
-    REDIS_PASSWORD: Optional[SecretStr] = Field(None, env="REDIS_PASSWORD")
-    REDIS_DB: int = Field(0, env="REDIS_DB")
+    # AI/ML APIs
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
     
-    # Security Configuration
-    SECRET_KEY: SecretStr = Field(..., env="SECRET_KEY")
-    ALGORITHM: str = Field("HS256", env="ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
-    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(7, env="REFRESH_TOKEN_EXPIRE_DAYS")
+    # External Services
+    PLAID_CLIENT_ID: str = ""
+    PLAID_SECRET: str = ""
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
     
-    # Password Security
-    MIN_PASSWORD_LENGTH: int = Field(8, env="MIN_PASSWORD_LENGTH")
-    PASSWORD_HASH_ROUNDS: int = Field(12, env="PASSWORD_HASH_ROUNDS")
+    # Security
+    SECRET_KEY: str = "your-secret-key-here"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Rate Limiting
-    RATE_LIMIT_PER_MINUTE: int = Field(60, env="RATE_LIMIT_PER_MINUTE")
-    RATE_LIMIT_PER_HOUR: int = Field(1000, env="RATE_LIMIT_PER_HOUR")
+    # Monitoring
+    SENTRY_DSN: Optional[str] = None
+    DATADOG_API_KEY: Optional[str] = None
     
-    # Simulation Configuration
-    DEFAULT_MONTE_CARLO_ITERATIONS: int = Field(50_000, env="DEFAULT_MONTE_CARLO_ITERATIONS")
-    MAX_MONTE_CARLO_ITERATIONS: int = Field(100_000, env="MAX_MONTE_CARLO_ITERATIONS")
-    SIMULATION_TIMEOUT_SECONDS: int = Field(300, env="SIMULATION_TIMEOUT_SECONDS")  # 5 minutes
-    MAX_CONCURRENT_SIMULATIONS: int = Field(10, env="MAX_CONCURRENT_SIMULATIONS")
-    
-    # AI/LLM Configuration
-    OPENAI_API_KEY: Optional[SecretStr] = Field(None, env="OPENAI_API_KEY")
-    ANTHROPIC_API_KEY: Optional[SecretStr] = Field(None, env="ANTHROPIC_API_KEY")
-    DEFAULT_LLM_PROVIDER: str = Field("openai", env="DEFAULT_LLM_PROVIDER")
-    LLM_MODEL: str = Field("gpt-4", env="LLM_MODEL")
-    LLM_MAX_TOKENS: int = Field(2000, env="LLM_MAX_TOKENS")
-    LLM_TEMPERATURE: float = Field(0.7, env="LLM_TEMPERATURE")
-    
-    # Capital Market Assumptions
-    DEFAULT_CMA_VERSION: str = Field("2024.1", env="DEFAULT_CMA_VERSION")
-    CMA_UPDATE_FREQUENCY_DAYS: int = Field(90, env="CMA_UPDATE_FREQUENCY_DAYS")
-    
-    # Audit and Compliance
-    AUDIT_LOG_RETENTION_DAYS: int = Field(2555, env="AUDIT_LOG_RETENTION_DAYS")  # 7 years
-    COMPLIANCE_DISCLAIMER: str = Field(
-        "Simulations are estimates, not guarantees.",
-        env="COMPLIANCE_DISCLAIMER"
-    )
-    REQUIRED_DISCLAIMERS: List[str] = Field(
-        ["Simulations are estimates, not guarantees."],
-        env="REQUIRED_DISCLAIMERS"
-    )
-    
-    # PDF Export Configuration
-    PDF_TEMPLATE_DIR: str = Field("templates/pdf", env="PDF_TEMPLATE_DIR")
-    PDF_OUTPUT_DIR: str = Field("exports/pdf", env="PDF_OUTPUT_DIR")
-    MAX_PDF_SIZE_MB: int = Field(10, env="MAX_PDF_SIZE_MB")
-    
-    # Monitoring and Logging
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
-    LOG_FORMAT: str = Field(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        env="LOG_FORMAT"
-    )
-    SENTRY_DSN: Optional[str] = Field(None, env="SENTRY_DSN")
-    ENABLE_METRICS: bool = Field(True, env="ENABLE_METRICS")
-    
-    # Email Configuration
-    SMTP_HOST: Optional[str] = Field(None, env="SMTP_HOST")
-    SMTP_PORT: int = Field(587, env="SMTP_PORT")
-    SMTP_USERNAME: Optional[str] = Field(None, env="SMTP_USERNAME")
-    SMTP_PASSWORD: Optional[SecretStr] = Field(None, env="SMTP_PASSWORD")
-    SMTP_TLS: bool = Field(True, env="SMTP_TLS")
-    FROM_EMAIL: str = Field("noreply@financialplanner.com", env="FROM_EMAIL")
-    
-    # Background Tasks
-    ENABLE_BACKGROUND_TASKS: bool = Field(True, env="ENABLE_BACKGROUND_TASKS")
-    CELERY_BROKER_URL: str = Field("redis://localhost:6379/0", env="CELERY_BROKER_URL")
-    CELERY_RESULT_BACKEND: str = Field("redis://localhost:6379/0", env="CELERY_RESULT_BACKEND")
-    
-    # Message Broker Configuration
-    MESSAGE_BROKER_TYPE: str = Field("redis", env="MESSAGE_BROKER_TYPE")  # redis, rabbitmq
-    RABBITMQ_HOST: str = Field("localhost", env="RABBITMQ_HOST")
-    RABBITMQ_PORT: int = Field(5672, env="RABBITMQ_PORT")
-    RABBITMQ_USERNAME: str = Field("guest", env="RABBITMQ_USERNAME")
-    RABBITMQ_PASSWORD: SecretStr = Field("guest", env="RABBITMQ_PASSWORD")
-    RABBITMQ_VHOST: str = Field("/", env="RABBITMQ_VHOST")
-    
-    # Cache Configuration
-    CACHE_TYPE: str = Field("redis", env="CACHE_TYPE")  # memory, redis, multi_tier
-    CACHE_DEFAULT_TTL: int = Field(3600, env="CACHE_DEFAULT_TTL")  # 1 hour
-    CACHE_MAX_SIZE_MB: int = Field(100, env="CACHE_MAX_SIZE_MB")
-    CACHE_COMPRESSION_ENABLED: bool = Field(True, env="CACHE_COMPRESSION_ENABLED")
-    CACHE_COMPRESSION_THRESHOLD: int = Field(1024, env="CACHE_COMPRESSION_THRESHOLD")  # 1KB
-    
-    # Memory Cache Settings
-    MEMORY_CACHE_MAX_ENTRIES: int = Field(1000, env="MEMORY_CACHE_MAX_ENTRIES")
-    MEMORY_CACHE_TTL: int = Field(300, env="MEMORY_CACHE_TTL")  # 5 minutes
-    
-    # TimescaleDB Configuration  
-    TIMESCALEDB_ENABLED: bool = Field(False, env="TIMESCALEDB_ENABLED")
-    TIMESCALEDB_CHUNK_TIME_INTERVAL: str = Field("1 day", env="TIMESCALEDB_CHUNK_TIME_INTERVAL")
-    TIMESCALEDB_COMPRESSION_ENABLED: bool = Field(True, env="TIMESCALEDB_COMPRESSION_ENABLED")
-    TIMESCALEDB_RETENTION_PERIOD: str = Field("5 years", env="TIMESCALEDB_RETENTION_PERIOD")
-    
-    # Service Discovery and Load Balancing
-    SERVICE_DISCOVERY_ENABLED: bool = Field(False, env="SERVICE_DISCOVERY_ENABLED")
-    CONSUL_HOST: str = Field("localhost", env="CONSUL_HOST")
-    CONSUL_PORT: int = Field(8500, env="CONSUL_PORT")
-    LOAD_BALANCER_STRATEGY: str = Field("round_robin", env="LOAD_BALANCER_STRATEGY")
-    
-    # Circuit Breaker Configuration
-    CIRCUIT_BREAKER_ENABLED: bool = Field(True, env="CIRCUIT_BREAKER_ENABLED")
-    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(5, env="CIRCUIT_BREAKER_FAILURE_THRESHOLD")
-    CIRCUIT_BREAKER_TIMEOUT_SECONDS: int = Field(60, env="CIRCUIT_BREAKER_TIMEOUT_SECONDS")
-    CIRCUIT_BREAKER_RETRY_TIMEOUT: int = Field(30, env="CIRCUIT_BREAKER_RETRY_TIMEOUT")
-    
-    # Health Check Configuration
-    HEALTH_CHECK_ENABLED: bool = Field(True, env="HEALTH_CHECK_ENABLED")
-    HEALTH_CHECK_INTERVAL_SECONDS: int = Field(30, env="HEALTH_CHECK_INTERVAL_SECONDS")
-    HEALTH_CHECK_TIMEOUT_SECONDS: int = Field(10, env="HEALTH_CHECK_TIMEOUT_SECONDS")
-    
-    # Metrics and Observability
-    METRICS_ENABLED: bool = Field(True, env="METRICS_ENABLED")
-    METRICS_PORT: int = Field(8001, env="METRICS_PORT")
-    PROMETHEUS_ENABLED: bool = Field(False, env="PROMETHEUS_ENABLED")
-    JAEGER_ENABLED: bool = Field(False, env="JAEGER_ENABLED")
-    JAEGER_AGENT_HOST: str = Field("localhost", env="JAEGER_AGENT_HOST")
-    JAEGER_AGENT_PORT: int = Field(6831, env="JAEGER_AGENT_PORT")
-    
-    # Distributed Tracing
-    TRACING_ENABLED: bool = Field(False, env="TRACING_ENABLED")
-    TRACING_SAMPLE_RATE: float = Field(0.1, env="TRACING_SAMPLE_RATE")  # 10%
-    
-    # Performance Optimization
-    CONNECTION_POOL_SIZE: int = Field(20, env="CONNECTION_POOL_SIZE")
-    CONNECTION_POOL_MAX_OVERFLOW: int = Field(30, env="CONNECTION_POOL_MAX_OVERFLOW")
-    QUERY_TIMEOUT_SECONDS: int = Field(30, env="QUERY_TIMEOUT_SECONDS")
-    BATCH_PROCESSING_SIZE: int = Field(100, env="BATCH_PROCESSING_SIZE")
-    
-    # Security Enhancement
-    SECURITY_SCAN_ENABLED: bool = Field(True, env="SECURITY_SCAN_ENABLED")
-    IP_WHITELIST_ENABLED: bool = Field(False, env="IP_WHITELIST_ENABLED")
-    IP_WHITELIST: List[str] = Field([], env="IP_WHITELIST")
-    REQUEST_ID_HEADER: str = Field("X-Request-ID", env="REQUEST_ID_HEADER")
-    
-    # Data Validation
-    STRICT_DATA_VALIDATION: bool = Field(True, env="STRICT_DATA_VALIDATION")
-    DATA_ENCRYPTION_AT_REST: bool = Field(False, env="DATA_ENCRYPTION_AT_REST")
-    DATA_ENCRYPTION_KEY: Optional[SecretStr] = Field(None, env="DATA_ENCRYPTION_KEY")
-    
-    # Audit Configuration
-    AUDIT_READ_OPERATIONS: bool = Field(False, env="AUDIT_READ_OPERATIONS")
-    AUDIT_DETAILED_LOGGING: bool = Field(True, env="AUDIT_DETAILED_LOGGING")
-    AUDIT_RETENTION_DAYS: int = Field(2555, env="AUDIT_RETENTION_DAYS")  # 7 years
-    
-    # Feature Flags
-    FEATURE_MONTE_CARLO_GPU: bool = Field(False, env="FEATURE_MONTE_CARLO_GPU")
-    FEATURE_REAL_TIME_ANALYTICS: bool = Field(False, env="FEATURE_REAL_TIME_ANALYTICS")
-    FEATURE_ADVANCED_CACHING: bool = Field(True, env="FEATURE_ADVANCED_CACHING")
-    FEATURE_DISTRIBUTED_TRANSACTIONS: bool = Field(False, env="FEATURE_DISTRIBUTED_TRANSACTIONS")
-    
-    # Banking Integration Configuration
-    PLAID_CLIENT_ID: Optional[SecretStr] = Field(None, env="PLAID_CLIENT_ID")
-    PLAID_SECRET: Optional[SecretStr] = Field(None, env="PLAID_SECRET")
-    PLAID_PUBLIC_KEY: Optional[SecretStr] = Field(None, env="PLAID_PUBLIC_KEY")
-    PLAID_ENVIRONMENT: str = Field("sandbox", env="PLAID_ENVIRONMENT")  # sandbox, development, production
-    PLAID_WEBHOOK_URL: Optional[str] = Field(None, env="PLAID_WEBHOOK_URL")
-    
-    # Yodlee Configuration
-    YODLEE_BASE_URL: str = Field("https://sandbox.api.yodlee.com/ysl", env="YODLEE_BASE_URL")
-    YODLEE_CLIENT_ID: Optional[SecretStr] = Field(None, env="YODLEE_CLIENT_ID")
-    YODLEE_SECRET: Optional[SecretStr] = Field(None, env="YODLEE_SECRET")
-    YODLEE_ADMIN_LOGIN_NAME: Optional[str] = Field(None, env="YODLEE_ADMIN_LOGIN_NAME")
-    
-    # Banking Security
-    BANKING_ENCRYPTION_KEY: Optional[SecretStr] = Field(None, env="BANKING_ENCRYPTION_KEY")
-    BANKING_CREDENTIAL_VAULT_TTL: int = Field(86400, env="BANKING_CREDENTIAL_VAULT_TTL")  # 24 hours
-    BANKING_MAX_RETRY_ATTEMPTS: int = Field(3, env="BANKING_MAX_RETRY_ATTEMPTS")
-    BANKING_RETRY_DELAY_SECONDS: int = Field(5, env="BANKING_RETRY_DELAY_SECONDS")
-    
-    # Transaction Processing
-    TRANSACTION_SYNC_DAYS: int = Field(30, env="TRANSACTION_SYNC_DAYS")
-    TRANSACTION_CATEGORIZATION_CONFIDENCE_THRESHOLD: float = Field(0.8, env="TRANSACTION_CATEGORIZATION_CONFIDENCE_THRESHOLD")
-    ENABLE_REAL_TIME_TRANSACTION_SYNC: bool = Field(True, env="ENABLE_REAL_TIME_TRANSACTION_SYNC")
-    
-    # Cash Flow Analysis
-    CASH_FLOW_ANALYSIS_LOOKBACK_MONTHS: int = Field(12, env="CASH_FLOW_ANALYSIS_LOOKBACK_MONTHS")
-    SPENDING_PATTERN_ANOMALY_THRESHOLD: float = Field(2.0, env="SPENDING_PATTERN_ANOMALY_THRESHOLD")  # Standard deviations
-    
-    # Balance Monitoring
-    LOW_BALANCE_THRESHOLD_PERCENTAGE: float = Field(0.1, env="LOW_BALANCE_THRESHOLD_PERCENTAGE")  # 10%
-    BALANCE_CHECK_FREQUENCY_HOURS: int = Field(6, env="BALANCE_CHECK_FREQUENCY_HOURS")
-    
-    # Development and Testing
-    DEBUG: bool = Field(False, env="DEBUG")
-    TESTING: bool = Field(False, env="TESTING")
-    ENVIRONMENT: str = Field("production", env="ENVIRONMENT")
-    
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-    
-    @validator("ALLOWED_HOSTS", pre=True)
-    def assemble_allowed_hosts(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-    
-    @validator("REQUIRED_DISCLAIMERS", pre=True)
-    def assemble_disclaimers(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    # AWS (if using)
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_REGION: str = "us-east-1"
+    AWS_S3_BUCKET: Optional[str] = None
     
     class Config:
         env_file = ".env"
-        env_file_encoding = "utf-8"
         case_sensitive = True
-
 
 # Global settings instance
 settings = Settings()
 
-# Environment-specific overrides
-if settings.ENVIRONMENT == "development":
-    settings.DEBUG = True
-    settings.RELOAD = True
-    settings.LOG_LEVEL = "DEBUG"
-
-if settings.ENVIRONMENT == "testing":
-    settings.TESTING = True
-    settings.DEBUG = True
-    settings.LOG_LEVEL = "DEBUG"
+# Feature flags
+FEATURE_FLAGS = {
+    "advanced_monte_carlo": True,
+    "ai_recommendations": True,
+    "real_time_monitoring": True,
+    "tax_optimization": True,
+    "alternative_investments": False,
+    "options_trading": False,
+    "cryptocurrency": False,
+}

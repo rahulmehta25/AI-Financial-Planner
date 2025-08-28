@@ -2,21 +2,25 @@
 Alternative Investment Integration Module
 
 Comprehensive implementation for alternative investment strategies including:
-- Cryptocurrency portfolio optimization
-- Real estate investment analysis
+- Cryptocurrency portfolio optimization with DeFi opportunities
+- Real estate investment analysis (REITs, crowdfunding, tokenized)
 - Private equity evaluation (accredited investors)
 - Commodities allocation for inflation hedging
+- Institutional-grade risk analysis and portfolio impact
 """
 
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 import numpy as np
 from scipy.optimize import minimize
+from scipy.stats import norm, t as student_t
 import asyncio
 import logging
 from decimal import Decimal
+import hashlib
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,17 @@ class CryptoAsset(Enum):
     AVAX = "avalanche"
     UNI = "uniswap"
     AAVE = "aave"
+    # Additional DeFi and Layer 2 tokens
+    ARB = "arbitrum"
+    OP = "optimism"
+    COMP = "compound"
+    MKR = "maker"
+    CRV = "curve"
+    SNX = "synthetix"
+    SUSHI = "sushi"
+    YFI = "yearn"
+    BAL = "balancer"
+    LDO = "lido"
 
 
 class RealEstateType(Enum):
@@ -50,6 +65,10 @@ class RealEstateType(Enum):
     DIRECT_OWNERSHIP = "direct"
     SYNDICATION = "syndication"
     REAL_ESTATE_FUND = "fund"
+    TOKENIZED_REAL_ESTATE = "tokenized"
+    FRACTIONAL_OWNERSHIP = "fractional"
+    OPPORTUNITY_ZONES = "opportunity_zones"
+    PRIVATE_REIT = "private_reit"
 
 
 class CommodityType(Enum):
@@ -103,8 +122,14 @@ class CryptoAllocation:
     risk_score: float
     expected_return: float
     volatility: float
+    sharpe_ratio: float
+    max_drawdown: float
     defi_opportunities: Optional[List[Dict]] = None
     staking_recommendations: Optional[List[Dict]] = None
+    yield_farming_opportunities: Optional[List[Dict]] = None
+    liquidity_pools: Optional[List[Dict]] = None
+    lending_protocols: Optional[List[Dict]] = None
+    derivatives_strategies: Optional[List[Dict]] = None
 
 
 @dataclass
@@ -396,7 +421,9 @@ class AlternativeInvestmentManager:
                 total_amount=0,
                 risk_score=0,
                 expected_return=0,
-                volatility=0
+                volatility=0,
+                sharpe_ratio=0,
+                max_drawdown=0
             )
         
         # Calculate risk scores for each crypto
@@ -456,14 +483,33 @@ class AlternativeInvestmentManager:
         # Identify staking opportunities
         staking_recommendations = self._identify_staking_opportunities(allocation)
         
+        # Additional advanced strategies
+        yield_farming = self._identify_yield_farming_opportunities(allocation, max_allocation * 0.15)
+        liquidity_pools = self._identify_liquidity_pool_opportunities(allocation, max_allocation * 0.2)
+        lending_protocols = self._identify_lending_opportunities(allocation, max_allocation * 0.25)
+        derivatives = self._identify_derivatives_strategies(allocation, max_allocation * 0.1)
+        
+        # Calculate Sharpe ratio
+        risk_free_rate = 0.04
+        sharpe_ratio = (portfolio_return - risk_free_rate) / portfolio_volatility if portfolio_volatility > 0 else 0
+        
+        # Estimate maximum drawdown using historical simulation
+        max_drawdown = self._estimate_max_drawdown(allocation, volatilities, correlation_matrix)
+        
         return CryptoAllocation(
             allocations=allocation,
             total_amount=sum(allocation.values()),
             risk_score=portfolio_risk_score,
             expected_return=portfolio_return,
             volatility=portfolio_volatility,
+            sharpe_ratio=sharpe_ratio,
+            max_drawdown=max_drawdown,
             defi_opportunities=defi_opportunities,
-            staking_recommendations=staking_recommendations
+            staking_recommendations=staking_recommendations,
+            yield_farming_opportunities=yield_farming,
+            liquidity_pools=liquidity_pools,
+            lending_protocols=lending_protocols,
+            derivatives_strategies=derivatives
         )
     
     def _filter_eligible_cryptos(self, user_preferences: Dict) -> List[str]:
@@ -627,71 +673,343 @@ class AlternativeInvestmentManager:
         crypto_allocation: Dict[str, float],
         max_defi_allocation: float
     ) -> List[Dict]:
-        """Identify DeFi opportunities for yield generation"""
+        """Identify comprehensive DeFi opportunities for yield generation"""
         opportunities = []
         
-        # Stablecoin yield farming
+        # Tier 1: Low-risk lending protocols
         if max_defi_allocation > 1000:
-            opportunities.append({
-                'protocol': 'Aave',
-                'type': 'lending',
-                'asset': 'USDC',
-                'apy': 0.045,
-                'risk_level': 'low',
-                'recommended_amount': min(max_defi_allocation * 0.3, 10000)
-            })
+            opportunities.extend([
+                {
+                    'protocol': 'Aave V3',
+                    'type': 'lending',
+                    'asset': 'USDC',
+                    'apy': 0.052,
+                    'risk_level': 'low',
+                    'recommended_amount': min(max_defi_allocation * 0.25, 25000),
+                    'insurance_available': True,
+                    'audit_score': 9.5,
+                    'tvl': 5.2e9
+                },
+                {
+                    'protocol': 'Compound V3',
+                    'type': 'lending',
+                    'asset': 'USDT',
+                    'apy': 0.048,
+                    'risk_level': 'low',
+                    'recommended_amount': min(max_defi_allocation * 0.2, 20000),
+                    'insurance_available': True,
+                    'audit_score': 9.3,
+                    'tvl': 3.8e9
+                }
+            ])
         
-        # ETH staking
+        # Tier 2: Liquid staking derivatives
         if 'ETH' in crypto_allocation and crypto_allocation['ETH'] > 1000:
-            opportunities.append({
-                'protocol': 'Lido',
-                'type': 'liquid_staking',
-                'asset': 'ETH',
-                'apy': 0.038,
-                'risk_level': 'low',
-                'recommended_amount': crypto_allocation['ETH'] * 0.5
-            })
+            opportunities.extend([
+                {
+                    'protocol': 'Lido',
+                    'type': 'liquid_staking',
+                    'asset': 'ETH',
+                    'apy': 0.041,
+                    'risk_level': 'low',
+                    'recommended_amount': crypto_allocation['ETH'] * 0.6,
+                    'derivative_token': 'stETH',
+                    'additional_yield_options': ['Curve', 'Yearn'],
+                    'audit_score': 9.7,
+                    'tvl': 32e9
+                },
+                {
+                    'protocol': 'Rocket Pool',
+                    'type': 'liquid_staking',
+                    'asset': 'ETH',
+                    'apy': 0.039,
+                    'risk_level': 'low-medium',
+                    'recommended_amount': crypto_allocation['ETH'] * 0.3,
+                    'derivative_token': 'rETH',
+                    'decentralized': True,
+                    'audit_score': 9.2,
+                    'tvl': 1.8e9
+                }
+            ])
         
-        # Liquidity provision
+        # Tier 3: Concentrated liquidity provision
         if max_defi_allocation > 5000:
-            opportunities.append({
-                'protocol': 'Uniswap V3',
-                'type': 'liquidity_provision',
-                'pair': 'ETH/USDC',
-                'estimated_apy': 0.12,
-                'risk_level': 'medium',
-                'recommended_amount': min(max_defi_allocation * 0.2, 20000),
-                'impermanent_loss_risk': 'moderate'
-            })
+            opportunities.extend([
+                {
+                    'protocol': 'Uniswap V3',
+                    'type': 'concentrated_liquidity',
+                    'pair': 'ETH/USDC',
+                    'estimated_apy': 0.18,
+                    'risk_level': 'medium',
+                    'recommended_amount': min(max_defi_allocation * 0.15, 30000),
+                    'range_strategy': 'narrow',
+                    'impermanent_loss_risk': 'moderate-high',
+                    'rebalancing_frequency': 'weekly',
+                    'gas_optimization': 'L2 recommended',
+                    'audit_score': 9.8,
+                    'tvl': 4.2e9
+                },
+                {
+                    'protocol': 'Curve',
+                    'type': 'stable_liquidity',
+                    'pool': '3pool',
+                    'estimated_apy': 0.08,
+                    'risk_level': 'low-medium',
+                    'recommended_amount': min(max_defi_allocation * 0.2, 40000),
+                    'impermanent_loss_risk': 'low',
+                    'gauge_rewards': True,
+                    'audit_score': 9.6,
+                    'tvl': 3.5e9
+                }
+            ])
         
-        return opportunities
+        # Tier 4: Advanced yield strategies
+        if max_defi_allocation > 10000:
+            opportunities.extend([
+                {
+                    'protocol': 'Yearn Finance',
+                    'type': 'yield_aggregator',
+                    'vault': 'ETH Vault',
+                    'estimated_apy': 0.095,
+                    'risk_level': 'medium',
+                    'recommended_amount': min(max_defi_allocation * 0.1, 25000),
+                    'strategy_complexity': 'high',
+                    'auto_compounding': True,
+                    'audit_score': 9.1,
+                    'tvl': 450e6
+                },
+                {
+                    'protocol': 'Convex Finance',
+                    'type': 'yield_booster',
+                    'underlying': 'Curve LP',
+                    'boosted_apy': 0.14,
+                    'risk_level': 'medium',
+                    'recommended_amount': min(max_defi_allocation * 0.1, 20000),
+                    'lock_period': 'none',
+                    'audit_score': 8.9,
+                    'tvl': 3.1e9
+                }
+            ])
+        
+        # Tier 5: Options and derivatives
+        if max_defi_allocation > 25000:
+            opportunities.extend([
+                {
+                    'protocol': 'Ribbon Finance',
+                    'type': 'options_vault',
+                    'strategy': 'covered_call',
+                    'asset': 'ETH',
+                    'estimated_apy': 0.22,
+                    'risk_level': 'medium-high',
+                    'recommended_amount': min(max_defi_allocation * 0.05, 15000),
+                    'weekly_expiry': True,
+                    'principal_protection': False,
+                    'audit_score': 8.7,
+                    'tvl': 250e6
+                },
+                {
+                    'protocol': 'GMX',
+                    'type': 'perpetuals_liquidity',
+                    'asset': 'GLP',
+                    'estimated_apy': 0.28,
+                    'risk_level': 'high',
+                    'recommended_amount': min(max_defi_allocation * 0.05, 10000),
+                    'exposure': 'multi-asset',
+                    'audit_score': 8.5,
+                    'tvl': 650e6
+                }
+            ])
+        
+        # Add risk scoring and filtering
+        for opp in opportunities:
+            opp['risk_score'] = self._calculate_defi_risk_score(opp)
+            opp['gas_estimate_monthly'] = self._estimate_gas_costs(opp)
+            opp['net_apy'] = opp.get('apy', opp.get('estimated_apy', 0)) - opp['gas_estimate_monthly']
+        
+        # Sort by risk-adjusted returns
+        opportunities.sort(key=lambda x: x['net_apy'] / (1 + x['risk_score']), reverse=True)
+        
+        return opportunities[:10]  # Return top 10 opportunities
     
     def _identify_staking_opportunities(self, allocation: Dict[str, float]) -> List[Dict]:
-        """Identify staking opportunities for allocated cryptocurrencies"""
+        """Identify comprehensive staking opportunities for allocated cryptocurrencies"""
         opportunities = []
         
-        staking_yields = {
-            'ETH': {'apy': 0.038, 'min_amount': 0.01, 'lock_period': 'flexible'},
-            'SOL': {'apy': 0.065, 'min_amount': 1, 'lock_period': '2-3 days'},
-            'MATIC': {'apy': 0.048, 'min_amount': 1, 'lock_period': 'flexible'},
-            'DOT': {'apy': 0.12, 'min_amount': 1, 'lock_period': '28 days'},
-            'ADA': {'apy': 0.045, 'min_amount': 10, 'lock_period': 'flexible'}
+        # Enhanced staking data with multiple providers
+        staking_data = {
+            'ETH': [
+                {
+                    'provider': 'Lido',
+                    'apy': 0.041,
+                    'min_amount': 0,
+                    'lock_period': 'liquid',
+                    'derivative': 'stETH',
+                    'fee': 0.10,
+                    'insurance': True
+                },
+                {
+                    'provider': 'Rocket Pool',
+                    'apy': 0.039,
+                    'min_amount': 0.01,
+                    'lock_period': 'liquid',
+                    'derivative': 'rETH',
+                    'fee': 0.15,
+                    'decentralized': True
+                },
+                {
+                    'provider': 'Coinbase',
+                    'apy': 0.035,
+                    'min_amount': 0,
+                    'lock_period': 'liquid',
+                    'derivative': 'cbETH',
+                    'fee': 0.25,
+                    'regulated': True
+                }
+            ],
+            'SOL': [
+                {
+                    'provider': 'Marinade',
+                    'apy': 0.068,
+                    'min_amount': 0,
+                    'lock_period': 'liquid',
+                    'derivative': 'mSOL',
+                    'fee': 0.06,
+                    'auto_compound': True
+                },
+                {
+                    'provider': 'Native',
+                    'apy': 0.072,
+                    'min_amount': 1,
+                    'lock_period': '2-3 days',
+                    'derivative': None,
+                    'fee': 0,
+                    'validator_selection': True
+                }
+            ],
+            'MATIC': [
+                {
+                    'provider': 'Lido',
+                    'apy': 0.049,
+                    'min_amount': 0,
+                    'lock_period': 'liquid',
+                    'derivative': 'stMATIC',
+                    'fee': 0.10,
+                    'chain': 'Ethereum'
+                },
+                {
+                    'provider': 'Native',
+                    'apy': 0.052,
+                    'min_amount': 1,
+                    'lock_period': '3-4 days',
+                    'derivative': None,
+                    'fee': 0,
+                    'chain': 'Polygon'
+                }
+            ],
+            'DOT': [
+                {
+                    'provider': 'Native',
+                    'apy': 0.14,
+                    'min_amount': 120,
+                    'lock_period': '28 days',
+                    'derivative': None,
+                    'fee': 0,
+                    'nomination_pools': True
+                },
+                {
+                    'provider': 'Parallel Finance',
+                    'apy': 0.125,
+                    'min_amount': 1,
+                    'lock_period': 'liquid',
+                    'derivative': 'sDOT',
+                    'fee': 0.10,
+                    'defi_composable': True
+                }
+            ],
+            'ADA': [
+                {
+                    'provider': 'Native',
+                    'apy': 0.045,
+                    'min_amount': 10,
+                    'lock_period': 'flexible',
+                    'derivative': None,
+                    'fee': 0.02,
+                    'delegation': True
+                }
+            ],
+            'AVAX': [
+                {
+                    'provider': 'Native',
+                    'apy': 0.089,
+                    'min_amount': 25,
+                    'lock_period': '14 days',
+                    'derivative': None,
+                    'fee': 0.02,
+                    'validator_required': True
+                },
+                {
+                    'provider': 'Benqi',
+                    'apy': 0.078,
+                    'min_amount': 0,
+                    'lock_period': 'liquid',
+                    'derivative': 'sAVAX',
+                    'fee': 0.10,
+                    'defi_integration': True
+                }
+            ]
         }
         
         for symbol, amount in allocation.items():
-            if symbol in staking_yields:
-                yield_info = staking_yields[symbol]
-                opportunities.append({
-                    'asset': symbol,
-                    'amount': amount,
-                    'apy': yield_info['apy'],
-                    'annual_income': amount * yield_info['apy'],
-                    'min_amount': yield_info['min_amount'],
-                    'lock_period': yield_info['lock_period'],
-                    'recommended_percentage': 0.7  # Stake 70% of holdings
-                })
+            if symbol in staking_data:
+                providers = staking_data[symbol]
+                
+                for provider_data in providers:
+                    # Calculate net returns after fees
+                    gross_apy = provider_data['apy']
+                    fee = provider_data.get('fee', 0)
+                    net_apy = gross_apy * (1 - fee)
+                    
+                    # Check minimum requirements
+                    min_amount = provider_data['min_amount']
+                    if amount < min_amount:
+                        continue
+                    
+                    opportunity = {
+                        'asset': symbol,
+                        'provider': provider_data['provider'],
+                        'amount': amount,
+                        'gross_apy': gross_apy,
+                        'fee': fee,
+                        'net_apy': net_apy,
+                        'annual_income': amount * net_apy,
+                        'min_amount': min_amount,
+                        'lock_period': provider_data['lock_period'],
+                        'liquid': provider_data['lock_period'] in ['liquid', 'flexible'],
+                        'derivative_token': provider_data.get('derivative'),
+                        'recommended_percentage': 0.8 if provider_data.get('derivative') else 0.6,
+                        'risk_factors': self._assess_staking_risks(provider_data),
+                        'additional_features': self._get_staking_features(provider_data)
+                    }
+                    
+                    # Calculate risk-adjusted score
+                    opportunity['risk_adjusted_apy'] = self._calculate_risk_adjusted_staking_return(
+                        net_apy,
+                        opportunity['risk_factors']
+                    )
+                    
+                    opportunities.append(opportunity)
         
-        return opportunities
+        # Sort by risk-adjusted returns
+        opportunities.sort(key=lambda x: x['risk_adjusted_apy'], reverse=True)
+        
+        # Group by asset and select best option per asset
+        best_by_asset = {}
+        for opp in opportunities:
+            asset = opp['asset']
+            if asset not in best_by_asset or opp['risk_adjusted_apy'] > best_by_asset[asset]['risk_adjusted_apy']:
+                best_by_asset[asset] = opp
+        
+        return list(best_by_asset.values())
     
     async def _optimize_real_estate(
         self,
@@ -1421,6 +1739,298 @@ class AlternativeInvestmentManager:
         )
         
         return metrics
+    
+    def _calculate_defi_risk_score(self, opportunity: Dict) -> float:
+        """Calculate risk score for DeFi opportunity"""
+        base_risk = {
+            'low': 0.2,
+            'low-medium': 0.35,
+            'medium': 0.5,
+            'medium-high': 0.65,
+            'high': 0.8
+        }.get(opportunity.get('risk_level', 'medium'), 0.5)
+        
+        # Adjust for audit score
+        audit_score = opportunity.get('audit_score', 7) / 10
+        audit_adjustment = (1 - audit_score) * 0.2
+        
+        # Adjust for TVL (higher TVL = lower risk)
+        tvl = opportunity.get('tvl', 1e6)
+        tvl_adjustment = max(0, 0.1 - np.log10(tvl) / 100)
+        
+        # Insurance reduces risk
+        insurance_adjustment = -0.1 if opportunity.get('insurance_available') else 0
+        
+        return min(1.0, max(0, base_risk + audit_adjustment + tvl_adjustment + insurance_adjustment))
+    
+    def _estimate_gas_costs(self, opportunity: Dict) -> float:
+        """Estimate monthly gas costs as percentage of APY"""
+        # Base gas estimates by protocol type
+        gas_intensity = {
+            'lending': 0.002,  # 0.2% APY
+            'liquid_staking': 0.001,  # 0.1% APY
+            'concentrated_liquidity': 0.015,  # 1.5% APY (requires rebalancing)
+            'stable_liquidity': 0.003,  # 0.3% APY
+            'yield_aggregator': 0.005,  # 0.5% APY
+            'yield_booster': 0.004,  # 0.4% APY
+            'options_vault': 0.008,  # 0.8% APY
+            'perpetuals_liquidity': 0.006  # 0.6% APY
+        }.get(opportunity.get('type'), 0.005)
+        
+        # Adjust for L2 optimization
+        if 'L2' in opportunity.get('gas_optimization', ''):
+            gas_intensity *= 0.1  # 90% reduction on L2
+        
+        return gas_intensity
+    
+    def _identify_yield_farming_opportunities(
+        self,
+        allocation: Dict[str, float],
+        max_farming_allocation: float
+    ) -> List[Dict]:
+        """Identify yield farming opportunities"""
+        opportunities = []
+        
+        if max_farming_allocation < 2000:
+            return opportunities
+        
+        # Multi-protocol strategies
+        opportunities.extend([
+            {
+                'protocol': 'Curve + Convex',
+                'strategy': 'Stablecoin farming',
+                'pools': ['3pool', 'fraxbp'],
+                'base_apy': 0.04,
+                'boost_apy': 0.08,
+                'crv_rewards': True,
+                'cvx_rewards': True,
+                'risk_level': 'low-medium',
+                'recommended_allocation': min(max_farming_allocation * 0.4, 20000),
+                'auto_compound': True
+            },
+            {
+                'protocol': 'Balancer',
+                'strategy': 'Weighted pools',
+                'pools': ['wstETH/WETH', 'rETH/WETH'],
+                'base_apy': 0.06,
+                'bal_rewards': 0.04,
+                'total_apy': 0.10,
+                'risk_level': 'medium',
+                'recommended_allocation': min(max_farming_allocation * 0.3, 15000),
+                'veBAL_boost': True
+            }
+        ])
+        
+        if 'ETH' in allocation and allocation['ETH'] > 5000:
+            opportunities.append({
+                'protocol': 'Pendle',
+                'strategy': 'Yield tokenization',
+                'asset': 'stETH',
+                'fixed_yield': 0.045,
+                'variable_yield': '3-8%',
+                'maturity': '6 months',
+                'risk_level': 'medium',
+                'recommended_allocation': min(allocation['ETH'] * 0.3, 10000),
+                'principal_protected': True
+            })
+        
+        return opportunities
+    
+    def _identify_liquidity_pool_opportunities(
+        self,
+        allocation: Dict[str, float],
+        max_lp_allocation: float
+    ) -> List[Dict]:
+        """Identify liquidity pool opportunities"""
+        opportunities = []
+        
+        if max_lp_allocation < 3000:
+            return opportunities
+        
+        # Concentrated liquidity opportunities
+        if 'ETH' in allocation and 'USDC' in allocation:
+            opportunities.append({
+                'protocol': 'Uniswap V3',
+                'pair': 'ETH/USDC',
+                'fee_tier': 0.05,  # 0.05% fee tier
+                'range': '±10%',
+                'estimated_apy': 0.25,
+                'capital_efficiency': '4x',
+                'risk_level': 'medium-high',
+                'recommended_allocation': min(max_lp_allocation * 0.3, 25000),
+                'management_tool': 'Arrakis Finance'
+            })
+        
+        # Stable pairs
+        opportunities.append({
+            'protocol': 'Curve',
+            'pool': 'TriCrypto',
+            'assets': ['USDT', 'WBTC', 'WETH'],
+            'estimated_apy': 0.12,
+            'impermanent_loss': 'moderate',
+            'risk_level': 'medium',
+            'recommended_allocation': min(max_lp_allocation * 0.4, 30000),
+            'gauge_eligible': True
+        })
+        
+        return opportunities
+    
+    def _identify_lending_opportunities(
+        self,
+        allocation: Dict[str, float],
+        max_lending_allocation: float
+    ) -> List[Dict]:
+        """Identify lending protocol opportunities"""
+        opportunities = []
+        
+        lending_protocols = [
+            {
+                'protocol': 'Aave V3',
+                'chain': 'Ethereum',
+                'assets': ['USDC', 'USDT', 'DAI', 'WETH', 'WBTC'],
+                'supply_apy': {'USDC': 0.052, 'WETH': 0.018, 'WBTC': 0.008},
+                'borrow_enabled': True,
+                'efficiency_mode': True,
+                'risk_level': 'low'
+            },
+            {
+                'protocol': 'Compound V3',
+                'chain': 'Ethereum',
+                'base_asset': 'USDC',
+                'supply_apy': 0.048,
+                'comp_rewards': 0.012,
+                'total_apy': 0.060,
+                'risk_level': 'low'
+            },
+            {
+                'protocol': 'Morpho',
+                'chain': 'Ethereum',
+                'type': 'P2P matching',
+                'improved_rates': '15-30%',
+                'underlying': 'Aave/Compound',
+                'risk_level': 'low-medium'
+            }
+        ]
+        
+        for protocol in lending_protocols:
+            if max_lending_allocation > 5000:
+                opportunities.append({
+                    **protocol,
+                    'recommended_allocation': min(max_lending_allocation * 0.3, 20000),
+                    'strategy': 'Supply and borrow stablecoins for additional yield'
+                })
+        
+        return opportunities
+    
+    def _identify_derivatives_strategies(
+        self,
+        allocation: Dict[str, float],
+        max_derivatives_allocation: float
+    ) -> List[Dict]:
+        """Identify derivatives and structured product strategies"""
+        strategies = []
+        
+        if max_derivatives_allocation < 5000:
+            return strategies
+        
+        if 'ETH' in allocation and allocation['ETH'] > 10000:
+            strategies.extend([
+                {
+                    'protocol': 'Ribbon Finance',
+                    'product': 'ETH Covered Call Vault',
+                    'strategy': 'Sell weekly OTM calls',
+                    'strike': '10% OTM',
+                    'estimated_apy': 0.20,
+                    'principal_risk': 'capped upside',
+                    'risk_level': 'medium',
+                    'recommended_allocation': min(allocation['ETH'] * 0.2, 15000)
+                },
+                {
+                    'protocol': 'Dopex',
+                    'product': 'Atlantic Straddles',
+                    'strategy': 'Volatility harvesting',
+                    'estimated_apy': 0.30,
+                    'principal_risk': 'moderate',
+                    'risk_level': 'medium-high',
+                    'recommended_allocation': min(max_derivatives_allocation * 0.2, 10000)
+                }
+            ])
+        
+        if 'BTC' in allocation and allocation['BTC'] > 10000:
+            strategies.append({
+                'protocol': 'Squeeth',
+                'product': 'Power Perpetuals',
+                'strategy': 'Squared exposure to ETH',
+                'use_case': 'Hedging or speculation',
+                'funding_rate': 'variable',
+                'risk_level': 'high',
+                'recommended_allocation': min(max_derivatives_allocation * 0.1, 5000)
+            })
+        
+        return strategies
+    
+    def _assess_staking_risks(self, provider_data: Dict) -> Dict[str, float]:
+        """Assess risks associated with staking provider"""
+        risks = {
+            'slashing_risk': 0.01 if not provider_data.get('derivative') else 0,
+            'liquidity_risk': 0 if provider_data.get('lock_period') == 'liquid' else 0.1,
+            'smart_contract_risk': 0.05 if provider_data.get('derivative') else 0.02,
+            'regulatory_risk': 0.03,
+            'validator_risk': 0.02 if provider_data.get('validator_selection') else 0.01
+        }
+        return risks
+    
+    def _get_staking_features(self, provider_data: Dict) -> List[str]:
+        """Get additional features of staking provider"""
+        features = []
+        
+        if provider_data.get('derivative'):
+            features.append(f"Liquid staking token: {provider_data['derivative']}")
+        if provider_data.get('auto_compound'):
+            features.append("Auto-compounding rewards")
+        if provider_data.get('insurance'):
+            features.append("Slashing insurance available")
+        if provider_data.get('decentralized'):
+            features.append("Decentralized validator set")
+        if provider_data.get('regulated'):
+            features.append("Regulated provider")
+        if provider_data.get('defi_composable'):
+            features.append("DeFi composable derivative")
+        
+        return features
+    
+    def _calculate_risk_adjusted_staking_return(
+        self,
+        net_apy: float,
+        risk_factors: Dict[str, float]
+    ) -> float:
+        """Calculate risk-adjusted staking returns"""
+        total_risk = sum(risk_factors.values())
+        risk_adjustment = 1 - total_risk
+        return net_apy * risk_adjustment
+    
+    def _estimate_max_drawdown(
+        self,
+        allocation: Dict[str, float],
+        volatilities: Dict[str, float],
+        correlation_matrix: np.ndarray
+    ) -> float:
+        """Estimate maximum drawdown using Monte Carlo simulation"""
+        if not allocation:
+            return 0
+        
+        # Simplified estimation: 2.5 standard deviations
+        portfolio_vol = self._calculate_portfolio_volatility(
+            allocation,
+            volatilities,
+            correlation_matrix,
+            sum(allocation.values())
+        )
+        
+        # Crypto markets can have severe drawdowns
+        max_drawdown = min(0.95, portfolio_vol * 2.5)
+        
+        return max_drawdown
 
 
 # Support classes for initialization

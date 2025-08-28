@@ -1,0 +1,304 @@
+---
+# Horizontal Pod Autoscaler for API Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: financial-planning-api-hpa
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: autoscaling
+    environment: production
+  annotations:
+    autoscaling.alpha.kubernetes.io/conditions: |
+      [
+        {
+          "type": "AbleToScale",
+          "status": "True",
+          "reason": "ReadyForNewScale"
+        }
+      ]
+    autoscaling.alpha.kubernetes.io/current-metrics: "[]"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning-api
+  
+  # Replica configuration
+  minReplicas: 5      # Minimum replicas for production availability
+  maxReplicas: 20     # Maximum replicas to prevent resource exhaustion
+  
+  # Scaling behavior configuration
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 180    # Wait 3 minutes before scaling up again
+      policies:
+      - type: Percent
+        value: 100                       # Allow doubling of pods
+        periodSeconds: 60                # Within 1 minute
+      - type: Pods
+        value: 3                         # Or add max 3 pods
+        periodSeconds: 60                # Within 1 minute
+      selectPolicy: Max                  # Use the policy that allows more scaling
+      
+    scaleDown:
+      stabilizationWindowSeconds: 300    # Wait 5 minutes before scaling down
+      policies:
+      - type: Percent
+        value: 25                        # Remove at most 25% of pods
+        periodSeconds: 60                # Within 1 minute
+      - type: Pods
+        value: 2                         # Or remove at most 2 pods
+        periodSeconds: 60                # Within 1 minute
+      selectPolicy: Min                  # Use the more conservative policy
+  
+  # Metrics for scaling decisions
+  metrics:
+  # CPU utilization target
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70           # Scale when CPU > 70%
+  
+  # Memory utilization target
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80           # Scale when Memory > 80%
+  
+  # Custom metric: HTTP requests per second
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"              # Scale when > 100 RPS per pod
+  
+  # Custom metric: Response time
+  - type: Object
+    object:
+      metric:
+        name: http_request_duration_seconds
+        selector:
+          matchLabels:
+            app: financial-planning-api
+      target:
+        type: Value
+        value: "0.5"                     # Scale when response time > 500ms
+  
+  # External metric: Load balancer queue depth
+  - type: External
+    external:
+      metric:
+        name: load_balancer_queue_depth
+        selector:
+          matchLabels:
+            service: financial-planning-api
+      target:
+        type: AverageValue
+        averageValue: "10"               # Scale when queue depth > 10
+---
+# Vertical Pod Autoscaler (VPA) - Recommendation mode only
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: financial-planning-api-vpa
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: autoscaling
+    environment: production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning-api
+  
+  # Update mode - only provide recommendations, don't auto-update
+  updatePolicy:
+    updateMode: "Off"                    # Don't automatically apply recommendations
+  
+  # Resource policy
+  resourcePolicy:
+    containerPolicies:
+    - containerName: financial-planning-api
+      maxAllowed:
+        cpu: 4000m                       # Max 4 CPU cores
+        memory: 8Gi                      # Max 8GB RAM
+      minAllowed:
+        cpu: 200m                        # Min 0.2 CPU cores
+        memory: 512Mi                    # Min 512MB RAM
+      controlledResources:
+      - cpu
+      - memory
+    - containerName: log-shipper
+      maxAllowed:
+        cpu: 200m
+        memory: 256Mi
+      minAllowed:
+        cpu: 50m
+        memory: 64Mi
+---
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: financial-planning-api-pdb
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: availability
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  
+  # Ensure at least 3 pods are always available during disruptions
+  minAvailable: 3
+  
+  # Alternative: Allow maximum 2 pods to be unavailable
+  # maxUnavailable: 2
+---
+# ServiceMonitor for Prometheus metrics collection
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: financial-planning-api-metrics
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: monitoring
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod_name
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node_name
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: kubernetes_namespace
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: "go_.*"
+      action: drop              # Drop Go runtime metrics to reduce cardinality
+  namespaceSelector:
+    matchNames:
+    - financial-planning-prod
+---
+# PrometheusRule for alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: financial-planning-api-alerts
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: monitoring
+    environment: production
+spec:
+  groups:
+  - name: financial-planning-api.rules
+    interval: 30s
+    rules:
+    
+    # High CPU usage alert
+    - alert: FinancialPlanningAPICpuHigh
+      expr: |
+        (
+          sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"}[5m]))
+          /
+          sum by (pod) (container_spec_cpu_quota{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"} / container_spec_cpu_period{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"})
+        ) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        service: financial-planning-api
+      annotations:
+        summary: "High CPU usage detected"
+        description: "Pod {{ $labels.pod }} has been using more than 80% CPU for more than 5 minutes"
+    
+    # High memory usage alert
+    - alert: FinancialPlanningAPIMemoryHigh
+      expr: |
+        (
+          container_memory_working_set_bytes{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"}
+          /
+          container_spec_memory_limit_bytes{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"}
+        ) * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+        service: financial-planning-api
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} has been using more than 85% of allocated memory for more than 5 minutes"
+    
+    # Pod restart alert
+    - alert: FinancialPlanningAPIPodRestarting
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="financial-planning-prod",pod=~"financial-planning-api-.*"}[15m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+        service: financial-planning-api
+      annotations:
+        summary: "Pod restarting frequently"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+    
+    # Low replica count alert
+    - alert: FinancialPlanningAPIReplicasLow
+      expr: |
+        kube_deployment_status_replicas_available{namespace="financial-planning-prod",deployment="financial-planning-api"} < 3
+      for: 5m
+      labels:
+        severity: critical
+        service: financial-planning-api
+      annotations:
+        summary: "Low number of available replicas"
+        description: "Only {{ $value }} replicas of financial-planning-api are available, minimum should be 3"
+    
+    # High response time alert
+    - alert: FinancialPlanningAPIResponseTimeSlow
+      expr: |
+        histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="financial-planning-api"}[5m])) by (le)) > 2
+      for: 10m
+      labels:
+        severity: warning
+        service: financial-planning-api
+      annotations:
+        summary: "High response time detected"
+        description: "95th percentile response time has been above 2 seconds for more than 10 minutes"
+    
+    # High error rate alert
+    - alert: FinancialPlanningAPIErrorRateHigh
+      expr: |
+        (
+          sum(rate(http_requests_total{service="financial-planning-api",code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{service="financial-planning-api"}[5m]))
+        ) * 100 > 5
+      for: 5m
+      labels:
+        severity: critical
+        service: financial-planning-api
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate has been above 5% for more than 5 minutes (current: {{ $value }}%)"
