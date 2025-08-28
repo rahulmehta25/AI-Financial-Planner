@@ -6,12 +6,16 @@ Configuration management using Pydantic settings with environment variable suppo
 
 import os
 from typing import List, Optional, Union, Dict, Any
-from pydantic import BaseSettings, Field, validator
-from pydantic.types import SecretStr
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
     # Application
     APP_NAME: str = "AI Financial Planner"
     APP_VERSION: str = "2.0.0"
@@ -68,10 +72,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_REGION: str = "us-east-1"
     AWS_S3_BUCKET: Optional[str] = None
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+
 
 # Global settings instance
 settings = Settings()
@@ -86,3 +87,7 @@ FEATURE_FLAGS = {
     "options_trading": False,
     "cryptocurrency": False,
 }
+
+
+def get_settings() -> Settings:
+    return settings

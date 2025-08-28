@@ -137,20 +137,12 @@ services:
 
   # Frontend (Next.js)
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: nginxdemos/hello
     container_name: financial_planner_frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NODE_ENV=development
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - api
+      - "3002:80"
     networks:
       - financial_network
 
@@ -275,4 +267,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.30.0.0/16
