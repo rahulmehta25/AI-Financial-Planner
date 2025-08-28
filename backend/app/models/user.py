@@ -25,6 +25,13 @@ class User(Base):
     phone_number = Column(String(20), nullable=True)
     profile_picture_url = Column(Text, nullable=True)
     
+    # Advanced authentication fields
+    mfa_enabled = Column(Boolean, default=False)
+    enforce_device_trust = Column(Boolean, default=False)
+    role = Column(String(50), default='user')  # user, premium, advisor, admin
+    organization_id = Column(UUID(as_uuid=True), nullable=True)
+    custom_permissions = Column(Text, nullable=True)  # JSON array of permissions
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

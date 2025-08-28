@@ -8,6 +8,16 @@ from .goal import Goal
 from .investment import Investment
 from .simulation_result import SimulationResult
 from .market_data import MarketData
+from .auth import (
+    TokenBlacklist,
+    UserSession, 
+    LoginAttempt,
+    PasswordResetToken,
+    TwoFactorAuth,
+    SecurityEvent,
+    TrustedDevice,
+    MFASecret
+)
 
 __all__ = [
     "User",
@@ -15,5 +25,13 @@ __all__ = [
     "Goal",
     "Investment",
     "SimulationResult",
-    "MarketData"
+    "MarketData",
+    "TokenBlacklist",
+    "UserSession",
+    "LoginAttempt",
+    "PasswordResetToken",
+    "TwoFactorAuth",
+    "SecurityEvent",
+    "TrustedDevice",
+    "MFASecret"
 ]

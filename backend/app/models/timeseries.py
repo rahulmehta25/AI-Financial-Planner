@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB, NUMERIC, TIMESTAMP
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 
-from app.core.infrastructure.database import Base
+from app.database.base import Base
 
 
 class MarketData(Base):
@@ -25,7 +25,7 @@ class MarketData(Base):
     Time-series market data optimized for TimescaleDB
     This table will be converted to a hypertable for efficient time-series operations
     """
-    __tablename__ = 'market_data'
+    __tablename__ = 'market_data_legacy'  # Legacy table, use enhanced_market_data for new implementations
     
     # Composite primary key for time-series data
     time = Column(TIMESTAMP(timezone=True), primary_key=True)
@@ -83,12 +83,12 @@ class MarketData(Base):
         return f"<MarketData(symbol={self.symbol}, time={self.time}, close={self.close})>"
 
 
-class PortfolioPerformance(Base):
+class PortfolioPerformanceTimeseries(Base):
     """
     Time-series portfolio performance tracking
     Hypertable optimized for portfolio value and performance metrics over time
     """
-    __tablename__ = 'portfolio_performance'
+    __tablename__ = 'portfolio_performance_timeseries'
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
@@ -135,12 +135,12 @@ class PortfolioPerformance(Base):
         return f"<PortfolioPerformance(portfolio_id={self.portfolio_id}, timestamp={self.timestamp}, value=${self.total_value})>"
 
 
-class SimulationResult(Base):
+class SimulationResultTimeseries(Base):
     """
     Time-series storage for Monte Carlo simulation results
     Optimized for storing large volumes of simulation data
     """
-    __tablename__ = 'simulation_results'
+    __tablename__ = 'simulation_results_timeseries'
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
@@ -192,12 +192,12 @@ class SimulationResult(Base):
         return f"<SimulationResult(plan_id={self.plan_id}, year={self.year}, value=${self.portfolio_value})>"
 
 
-class EconomicIndicator(Base):
+class EconomicIndicatorTimeseries(Base):
     """
     Time-series economic indicators and market conditions
     Used for scenario generation and market regime detection
     """
-    __tablename__ = 'economic_indicators'
+    __tablename__ = 'economic_indicators_timeseries'
     
     time = Column(TIMESTAMP(timezone=True), primary_key=True)
     indicator_name = Column(String(100), primary_key=True)
@@ -234,12 +234,12 @@ class EconomicIndicator(Base):
         return f"<EconomicIndicator(name={self.indicator_name}, time={self.time}, value={self.value})>"
 
 
-class MarketRegime(Base):
+class MarketRegimeTimeseries(Base):
     """
     Market regime classification over time
     Used for regime-aware modeling and analysis
     """
-    __tablename__ = 'market_regimes'
+    __tablename__ = 'market_regimes_timeseries'
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     start_date = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
@@ -277,12 +277,12 @@ class MarketRegime(Base):
 
 
 # Continuous aggregate views for TimescaleDB (created via SQL)
-class HourlyMarketSummary(Base):
+class HourlyMarketSummaryView(Base):
     """
     Materialized view for hourly market data aggregates
     This will be created as a TimescaleDB continuous aggregate
     """
-    __tablename__ = 'hourly_market_summary'
+    __tablename__ = 'hourly_market_summary_view'
     
     bucket = Column(TIMESTAMP(timezone=True), primary_key=True)
     symbol = Column(String(20), primary_key=True)
@@ -304,11 +304,11 @@ class HourlyMarketSummary(Base):
     )
 
 
-class DailyPortfolioSummary(Base):
+class DailyPortfolioSummaryView(Base):
     """
     Materialized view for daily portfolio performance aggregates
     """
-    __tablename__ = 'daily_portfolio_summary'
+    __tablename__ = 'daily_portfolio_summary_view'
     
     bucket = Column(TIMESTAMP(timezone=True), primary_key=True)
     portfolio_id = Column(UUID(as_uuid=True), primary_key=True)

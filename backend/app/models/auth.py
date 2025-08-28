@@ -202,6 +202,70 @@ class TwoFactorAuth(Base):
         return f"<TwoFactorAuth(user_id={self.user_id}, enabled={self.is_enabled})>"
 
 
+class TrustedDevice(Base):
+    """
+    Model for tracking trusted devices for users
+    """
+    __tablename__ = "trusted_devices"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    
+    # Device identification
+    fingerprint = Column(String(500), nullable=False, index=True)
+    device_name = Column(String(255), nullable=True)
+    device_type = Column(String(100), nullable=True)  # mobile, desktop, tablet
+    
+    # Trust metadata
+    trusted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    trust_expires_at = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_ip = Column(String(45), nullable=True)
+    
+    # Status
+    is_active = Column(Boolean, default=True, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    revocation_reason = Column(String(255), nullable=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_trusted_devices_user_active', 'user_id', 'is_active'),
+        Index('idx_trusted_devices_fingerprint', 'fingerprint'),
+    )
+    
+    def __repr__(self):
+        return f"<TrustedDevice(user_id={self.user_id}, device_name={self.device_name})>"
+
+
+class MFASecret(Base):
+    """
+    Model for storing MFA/TOTP secrets
+    """
+    __tablename__ = "mfa_secrets"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True)
+    
+    # TOTP secret (encrypted)
+    secret = Column(String(255), nullable=False)
+    
+    # Backup codes (encrypted JSON array)
+    backup_codes = Column(Text, nullable=True)
+    
+    # Status and tracking
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_used = Column(DateTime, nullable=True)
+    use_count = Column(Integer, default=0, nullable=False)
+    
+    # Recovery
+    recovery_email = Column(String(255), nullable=True)
+    recovery_phone = Column(String(50), nullable=True)
+    
+    def __repr__(self):
+        return f"<MFASecret(user_id={self.user_id}, active={self.is_active})>"
+
+
 class SecurityEvent(Base):
     """
     Model for tracking security-related events
