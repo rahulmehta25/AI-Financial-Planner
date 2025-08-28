@@ -789,6 +789,570 @@ class AdvancedAuthenticationService:
             }
         )
     
+    async def setup_mfa(self, user_id: str, backup_codes: List[str] = None) -> Dict[str, Any]:
+        """
+        Set up MFA for user
+        
+        Args:
+            user_id: User identifier
+            backup_codes: Optional list of backup codes
+            
+        Returns:
+            MFA setup information including QR code data
+        """
+        try:
+            # Generate TOTP secret
+            secret = pyotp.random_base32()
+            
+            # Create TOTP object
+            totp = pyotp.TOTP(secret)
+            
+            # Generate backup codes if not provided
+            if not backup_codes:
+                backup_codes = [secrets.token_hex(4) for _ in range(10)]
+            
+            # Store MFA secret in database
+            if self.db:
+                mfa_secret = MFASecret(
+                    user_id=user_id,
+                    secret=secret,
+                    backup_codes=json.dumps(backup_codes),
+                    is_active=False  # Not active until verified
+                )
+                self.db.add(mfa_secret)
+                await self.db.commit()
+            
+            # Generate QR code data
+            user = await self._get_user_by_id(user_id)
+            qr_code_uri = totp.provisioning_uri(
+                name=user.email if user else user_id,
+                issuer_name=self.mfa_issuer
+            )
+            
+            return {
+                "secret": secret,
+                "qr_code_uri": qr_code_uri,
+                "backup_codes": backup_codes,
+                "manual_entry_key": secret
+            }
+            
+        except Exception as e:
+            logger.error(f"MFA setup failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to setup MFA"
+            )
+    
+    async def verify_mfa_setup(self, user_id: str, totp_code: str) -> bool:
+        """
+        Verify MFA setup by confirming TOTP code
+        
+        Args:
+            user_id: User identifier
+            totp_code: TOTP code from authenticator app
+            
+        Returns:
+            True if verification successful, False otherwise
+        """
+        try:
+            if self.db:
+                # Get pending MFA secret
+                query = select(MFASecret).where(
+                    and_(
+                        MFASecret.user_id == user_id,
+                        MFASecret.is_active == False
+                    )
+                )
+                result = await self.db.execute(query)
+                mfa_secret = result.scalar_one_or_none()
+                
+                if not mfa_secret:
+                    return False
+                
+                # Verify TOTP code
+                totp = pyotp.TOTP(mfa_secret.secret)
+                if totp.verify(totp_code, valid_window=self.mfa_window):
+                    # Activate MFA
+                    mfa_secret.is_active = True
+                    mfa_secret.verified_at = datetime.utcnow()
+                    
+                    # Update user to enable MFA
+                    user_query = select(User).where(User.id == user_id)
+                    user_result = await self.db.execute(user_query)
+                    user = user_result.scalar_one_or_none()
+                    if user:
+                        user.mfa_enabled = True
+                    
+                    await self.db.commit()
+                    
+                    await self._log_security_event(
+                        event_type="mfa_enabled",
+                        severity="medium",
+                        user_id=user_id,
+                        details={"method": "TOTP"}
+                    )
+                    
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"MFA verification failed: {str(e)}")
+            return False
+    
+    async def disable_mfa(self, user_id: str, password: str) -> bool:
+        """
+        Disable MFA for user after password verification
+        
+        Args:
+            user_id: User identifier
+            password: User's current password
+            
+        Returns:
+            True if MFA disabled successfully, False otherwise
+        """
+        try:
+            # Verify password
+            user = await self._get_user_by_id(user_id)
+            if not user or not await self._verify_password_secure(password, user.hashed_password):
+                return False
+            
+            if self.db:
+                # Deactivate MFA secrets
+                query = update(MFASecret).where(
+                    MFASecret.user_id == user_id
+                ).values(is_active=False, disabled_at=datetime.utcnow())
+                await self.db.execute(query)
+                
+                # Update user
+                user.mfa_enabled = False
+                await self.db.commit()
+                
+                await self._log_security_event(
+                    event_type="mfa_disabled",
+                    severity="high",
+                    user_id=user_id,
+                    details={"method": "password_verification"}
+                )
+                
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"MFA disable failed: {str(e)}")
+            return False
+    
+    async def send_sms_code(self, user_id: str, phone_number: str) -> bool:
+        """
+        Send SMS verification code for MFA
+        
+        Args:
+            user_id: User identifier
+            phone_number: Phone number to send SMS to
+            
+        Returns:
+            True if SMS sent successfully, False otherwise
+        """
+        try:
+            # Generate 6-digit code
+            sms_code = secrets.randbelow(900000) + 100000  # 6-digit code
+            
+            # Store SMS code in Redis with 5-minute expiry
+            if self.redis:
+                await self.redis.setex(
+                    f"sms_code:{user_id}",
+                    300,  # 5 minutes
+                    str(sms_code)
+                )
+            
+            # In production, integrate with SMS service (Twilio, AWS SNS, etc.)
+            # For demo purposes, just log the code
+            logger.info(f"SMS Code for {phone_number}: {sms_code}")
+            
+            await self._log_security_event(
+                event_type="sms_code_sent",
+                severity="low",
+                user_id=user_id,
+                details={"phone_number": phone_number[-4:]  # Log only last 4 digits}
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"SMS code sending failed: {str(e)}")
+            return False
+    
+    async def verify_sms_code(self, user_id: str, sms_code: str) -> bool:
+        """
+        Verify SMS MFA code
+        
+        Args:
+            user_id: User identifier
+            sms_code: SMS code to verify
+            
+        Returns:
+            True if code is valid, False otherwise
+        """
+        try:
+            if self.redis:
+                stored_code = await self.redis.get(f"sms_code:{user_id}")
+                if stored_code and stored_code.decode() == sms_code:
+                    # Delete used code
+                    await self.redis.delete(f"sms_code:{user_id}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"SMS code verification failed: {str(e)}")
+            return False
+    
+    async def send_email_code(self, user_id: str, email: str) -> bool:
+        """
+        Send email verification code for MFA
+        
+        Args:
+            user_id: User identifier
+            email: Email address to send code to
+            
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        try:
+            # Generate 6-digit code
+            email_code = secrets.randbelow(900000) + 100000
+            
+            # Store email code in Redis with 10-minute expiry
+            if self.redis:
+                await self.redis.setex(
+                    f"email_code:{user_id}",
+                    600,  # 10 minutes
+                    str(email_code)
+                )
+            
+            # In production, send actual email
+            # For demo purposes, just log the code
+            logger.info(f"Email Code for {email}: {email_code}")
+            
+            await self._log_security_event(
+                event_type="email_code_sent",
+                severity="low",
+                user_id=user_id,
+                email=email
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Email code sending failed: {str(e)}")
+            return False
+    
+    async def verify_email_code(self, user_id: str, email_code: str) -> bool:
+        """
+        Verify email MFA code
+        
+        Args:
+            user_id: User identifier
+            email_code: Email code to verify
+            
+        Returns:
+            True if code is valid, False otherwise
+        """
+        try:
+            if self.redis:
+                stored_code = await self.redis.get(f"email_code:{user_id}")
+                if stored_code and stored_code.decode() == email_code:
+                    # Delete used code
+                    await self.redis.delete(f"email_code:{user_id}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Email code verification failed: {str(e)}")
+            return False
+    
+    async def initiate_password_reset(self, email: str, ip_address: Optional[str] = None) -> str:
+        """
+        Initiate password reset process
+        
+        Args:
+            email: User email address
+            ip_address: Client IP address
+            
+        Returns:
+            Reset token or empty string if user not found
+        """
+        try:
+            user = await self._get_user_by_email(email)
+            if not user:
+                # Don't reveal if user exists
+                await self._log_security_event(
+                    event_type="password_reset_attempt_invalid_email",
+                    severity="low",
+                    email=email,
+                    ip_address=ip_address
+                )
+                return ""
+            
+            # Generate reset token
+            reset_token = secrets.token_urlsafe(32)
+            
+            # Store reset token in database
+            if self.db:
+                from app.models.auth import PasswordResetToken
+                
+                # Invalidate existing tokens for this user
+                existing_query = select(PasswordResetToken).where(
+                    and_(
+                        PasswordResetToken.user_id == str(user.id),
+                        PasswordResetToken.is_used == False,
+                        PasswordResetToken.expires_at > datetime.utcnow()
+                    )
+                )
+                existing_result = await self.db.execute(existing_query)
+                existing_tokens = existing_result.scalars().all()
+                
+                for token in existing_tokens:
+                    token.is_used = True
+                    token.used_at = datetime.utcnow()
+                
+                # Create new reset token
+                reset_token_record = PasswordResetToken(
+                    user_id=str(user.id),
+                    token=reset_token,
+                    expires_at=datetime.utcnow() + timedelta(hours=1),  # 1 hour expiry
+                    created_ip=ip_address
+                )
+                self.db.add(reset_token_record)
+                await self.db.commit()
+            
+            # Log password reset request
+            await self._log_security_event(
+                event_type="password_reset_requested",
+                severity="medium",
+                user_id=str(user.id),
+                email=email,
+                ip_address=ip_address
+            )
+            
+            # In production, send email with reset link
+            logger.info(f"Password reset token for {email}: {reset_token}")
+            
+            return reset_token
+            
+        except Exception as e:
+            logger.error(f"Password reset initiation failed: {str(e)}")
+            return ""
+    
+    async def reset_password(self, reset_token: str, new_password: str, ip_address: Optional[str] = None) -> bool:
+        """
+        Reset user password using reset token
+        
+        Args:
+            reset_token: Password reset token
+            new_password: New password
+            ip_address: Client IP address
+            
+        Returns:
+            True if password reset successfully, False otherwise
+        """
+        try:
+            if self.db:
+                from app.models.auth import PasswordResetToken
+                
+                # Find valid reset token
+                query = select(PasswordResetToken).where(
+                    and_(
+                        PasswordResetToken.token == reset_token,
+                        PasswordResetToken.is_used == False,
+                        PasswordResetToken.expires_at > datetime.utcnow()
+                    )
+                )
+                result = await self.db.execute(query)
+                token_record = result.scalar_one_or_none()
+                
+                if not token_record:
+                    await self._log_security_event(
+                        event_type="password_reset_invalid_token",
+                        severity="medium",
+                        ip_address=ip_address,
+                        details={"token_prefix": reset_token[:8] + "..."}
+                    )
+                    return False
+                
+                # Get user
+                user = await self._get_user_by_id(token_record.user_id)
+                if not user:
+                    return False
+                
+                # Hash new password
+                hashed_password = self.pwd_context.hash(new_password)
+                
+                # Update user password
+                user.hashed_password = hashed_password
+                user.password_changed_at = datetime.utcnow()
+                
+                # Mark token as used
+                token_record.is_used = True
+                token_record.used_at = datetime.utcnow()
+                token_record.used_ip = ip_address
+                
+                await self.db.commit()
+                
+                # Invalidate all user sessions (force re-login)
+                await self._invalidate_all_user_sessions(str(user.id))
+                
+                # Log password reset
+                await self._log_security_event(
+                    event_type="password_reset_completed",
+                    severity="high",
+                    user_id=str(user.id),
+                    email=user.email,
+                    ip_address=ip_address
+                )
+                
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Password reset failed: {str(e)}")
+            return False
+    
+    async def send_email_verification(self, user_id: str) -> str:
+        """
+        Send email verification link
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Verification token
+        """
+        try:
+            user = await self._get_user_by_id(user_id)
+            if not user:
+                return ""
+            
+            # Generate verification token
+            verification_token = secrets.token_urlsafe(32)
+            
+            # Store in Redis with 24-hour expiry
+            if self.redis:
+                await self.redis.setex(
+                    f"email_verification:{user_id}",
+                    86400,  # 24 hours
+                    verification_token
+                )
+            
+            # In production, send actual verification email
+            logger.info(f"Email verification token for {user.email}: {verification_token}")
+            
+            await self._log_security_event(
+                event_type="email_verification_sent",
+                severity="low",
+                user_id=user_id,
+                email=user.email
+            )
+            
+            return verification_token
+            
+        except Exception as e:
+            logger.error(f"Email verification sending failed: {str(e)}")
+            return ""
+    
+    async def verify_email(self, user_id: str, verification_token: str) -> bool:
+        """
+        Verify user email using verification token
+        
+        Args:
+            user_id: User identifier
+            verification_token: Email verification token
+            
+        Returns:
+            True if email verified successfully, False otherwise
+        """
+        try:
+            if self.redis:
+                stored_token = await self.redis.get(f"email_verification:{user_id}")
+                if stored_token and stored_token.decode() == verification_token:
+                    # Update user as verified
+                    if self.db:
+                        user = await self._get_user_by_id(user_id)
+                        if user:
+                            user.email_verified = True
+                            user.email_verified_at = datetime.utcnow()
+                            await self.db.commit()
+                    
+                    # Delete verification token
+                    await self.redis.delete(f"email_verification:{user_id}")
+                    
+                    await self._log_security_event(
+                        event_type="email_verified",
+                        severity="low",
+                        user_id=user_id
+                    )
+                    
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Email verification failed: {str(e)}")
+            return False
+    
+    async def _invalidate_all_user_sessions(self, user_id: str):
+        """
+        Invalidate all user sessions and tokens
+        
+        Args:
+            user_id: User identifier
+        """
+        try:
+            if self.db:
+                # Update all active sessions
+                session_query = update(UserSession).where(
+                    and_(
+                        UserSession.user_id == user_id,
+                        UserSession.is_active == True
+                    )
+                ).values(
+                    is_active=False,
+                    terminated_at=datetime.utcnow(),
+                    termination_reason="password_reset"
+                )
+                await self.db.execute(session_query)
+                
+                # Blacklist all active tokens
+                # In a real implementation, you'd need to track active tokens
+                # For now, just log the event
+                await self._log_security_event(
+                    event_type="all_sessions_invalidated",
+                    severity="high",
+                    user_id=user_id,
+                    details={"reason": "password_reset"}
+                )
+                
+                await self.db.commit()
+                
+        except Exception as e:
+            logger.error(f"Session invalidation failed: {str(e)}")
+    
+    async def _get_user_by_id(self, user_id: str) -> Optional[User]:
+        """Get user by ID"""
+        if not self.db:
+            return None
+        
+        try:
+            query = select(User).where(User.id == user_id)
+            result = await self.db.execute(query)
+            return result.scalar_one_or_none()
+        except Exception as e:
+            logger.error(f"Failed to get user by ID: {str(e)}")
+            return None
+    
     async def _log_security_event(
         self,
         event_type: str,
