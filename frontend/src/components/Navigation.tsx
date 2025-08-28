@@ -14,7 +14,10 @@ export const Navigation = () => {
   const navItems = [
     { name: "Dashboard", href: "/dashboard" },
     { name: "Portfolio", href: "/portfolio" },
+    { name: "Optimizer", href: "/portfolio-optimizer" },
     { name: "Goals", href: "/goals" },
+    { name: "Monte Carlo", href: "/monte-carlo" },
+    { name: "Tax Optimization", href: "/tax-optimization" },
     { name: "AI Chat", href: "/chat" },
     { name: "Analytics", href: "/analytics" }
   ];

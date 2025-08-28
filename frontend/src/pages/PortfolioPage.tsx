@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus, RefreshCw, Zap } from "lucide-react";
 import { ParticleBackground } from "@/components/ParticleBackground";
 import { portfolioService, PortfolioOverview, Holding } from "@/services/portfolio";
 import { useToast } from "@/hooks/use-toast";
@@ -179,6 +180,12 @@ const PortfolioPage = () => {
                 <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
+              <Link to="/portfolio-optimizer">
+                <Button variant="outline" className="glass border-white/20 text-purple-400 hover:text-purple-300">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Optimize
+                </Button>
+              </Link>
               <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Investment
