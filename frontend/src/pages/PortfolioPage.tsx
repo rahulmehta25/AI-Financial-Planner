@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus, RefreshCw, Zap } from "lucide-react";
-import { ParticleBackground } from "@/components/ParticleBackground";
 import { portfolioService, PortfolioOverview, Holding } from "@/services/portfolio";
 import { useToast } from "@/hooks/use-toast";
 
@@ -88,11 +86,9 @@ const PortfolioPage = () => {
 
   if (isLoading) {
     return (
-      <div id="portfolio-loading" className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div id="portfolio-loading" className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -125,11 +121,9 @@ const PortfolioPage = () => {
 
   if (error && !portfolioOverview) {
     return (
-      <div id="portfolio-error" className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div id="portfolio-error" className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <Alert variant="destructive" className="mb-6">
             <AlertDescription className="flex items-center justify-between">
               <span>{error}</span>
@@ -153,11 +147,9 @@ const PortfolioPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <ParticleBackground />
-      <Navigation />
+    <div className="">
       
-      <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in">
           <div className="flex items-center justify-between mb-6">

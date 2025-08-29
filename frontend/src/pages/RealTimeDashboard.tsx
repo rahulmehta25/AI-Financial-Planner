@@ -11,8 +11,6 @@ import { LivePortfolioCard } from '@/components/portfolio/LivePortfolioCard'
 import { AlertsPanel } from '@/components/alerts/AlertsPanel'
 import { usePortfolioWebSocket } from '@/hooks/useWebSocket'
 import { portfolioService, Holding } from '@/services/portfolio'
-import { Navigation } from '@/components/Navigation'
-import { ParticleBackground } from '@/components/ParticleBackground'
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
@@ -286,11 +284,9 @@ export const RealTimeDashboard = () => {
   ]
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-      <ParticleBackground />
-      <Navigation />
+    <div className="">
       
-      <div className="pt-20 px-6">
+      <div className="pt-0 px-6">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8 animate-slide-in-bottom">

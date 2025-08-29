@@ -1,8 +1,6 @@
-import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Target, Calendar, DollarSign, BarChart3, PieChart, Activity } from "lucide-react";
-import { ParticleBackground } from "@/components/ParticleBackground";
 
 const AnalyticsPage = () => {
   const performanceData = {
@@ -39,11 +37,9 @@ const AnalyticsPage = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <ParticleBackground />
-      <Navigation />
+    <div className="">
       
-      <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in">
           <div className="flex items-center justify-between mb-6">

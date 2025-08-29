@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Bot, User, Sparkles, MessageSquare, TrendingUp, Loader2, AlertCircle } from "lucide-react";
-import { ParticleBackground } from "@/components/ParticleBackground";
 import { chatService, ChatMessage, ChatSession } from "@/services/chat";
 import { userService } from "@/services/user";
 import { portfolioService } from "@/services/portfolio";
@@ -158,11 +156,9 @@ const ChatPage = () => {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="mb-8">
             <Skeleton className="h-10 w-64 mb-2" />
             <Skeleton className="h-6 w-80 mb-8" />
@@ -191,11 +187,9 @@ const ChatPage = () => {
   // Show authentication required state
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="max-w-2xl mx-auto text-center py-20">
             <Alert className="mb-6">
               <AlertCircle className="h-4 w-4" />
@@ -222,11 +216,9 @@ const ChatPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <ParticleBackground />
-      <Navigation />
+    <div className="">
       
-      <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in">
           <div className="flex items-center justify-between mb-6">

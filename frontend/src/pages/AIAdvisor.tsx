@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Navigation } from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +25,6 @@ import {
   Target,
   Shield
 } from 'lucide-react';
-import { ParticleBackground } from '@/components/ParticleBackground';
 
 // Import chat components
 import ChatInterface from '@/components/chat/ChatInterface';
@@ -204,11 +202,9 @@ I can also export our conversation as a detailed PDF report for your records. Ho
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="mb-8">
             <Skeleton className="h-12 w-96 mb-4" />
             <Skeleton className="h-6 w-[500px] mb-8" />
@@ -237,11 +233,9 @@ I can also export our conversation as a detailed PDF report for your records. Ho
   // Show authentication required state
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="max-w-4xl mx-auto text-center py-20">
             <div className="mb-8">
               <Bot className="w-24 h-24 text-primary mx-auto mb-6" />
@@ -318,11 +312,9 @@ I can also export our conversation as a detailed PDF report for your records. Ho
   }
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <ParticleBackground />
-      <Navigation />
+    <div className="">
       
-      <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in">
           <div className="flex items-center justify-between mb-6">
@@ -427,7 +419,7 @@ I can also export our conversation as a detailed PDF report for your records. Ho
         )}
 
         {/* Main Interface */}
-        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 pt-20' : ''}`}>
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 pt-0' : ''}`}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
             <TabsList className="grid w-full grid-cols-3 glass border-white/20 mb-6">
               <TabsTrigger value="chat" className="flex items-center gap-2">

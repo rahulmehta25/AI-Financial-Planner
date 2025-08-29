@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Navigation } from '@/components/Navigation';
-import { ParticleBackground } from '@/components/ParticleBackground';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -272,11 +270,9 @@ const PortfolioOptimizer = () => {
 
   if (optimizationState.isLoading) {
     return (
-      <div id="optimizer-loading" className="min-h-screen bg-background relative overflow-hidden">
-        <ParticleBackground />
-        <Navigation />
+      <div id="optimizer-loading" className="">
         
-        <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
           <div className="space-y-6">
             <Skeleton className="h-10 w-64" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -290,11 +286,9 @@ const PortfolioOptimizer = () => {
   }
 
   return (
-    <div id="portfolio-optimizer-page" className="min-h-screen bg-background relative overflow-hidden">
-      <ParticleBackground />
-      <Navigation />
+    <div id="portfolio-optimizer-page" className="">
       
-      <main className="relative z-10 pt-20 px-6 max-w-7xl mx-auto">
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div id="optimizer-header" className="mb-8 animate-fade-in">
           <div className="flex items-center justify-between mb-6">

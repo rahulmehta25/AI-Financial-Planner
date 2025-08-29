@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
 import { Toaster } from './components/ui/sonner'
 import ProtectedRoute from './components/ProtectedRoute'
+import AuthenticatedLayout from './components/AuthenticatedLayout'
 
 // Pages
 import Index from './pages/Index'
@@ -70,87 +71,21 @@ function App() {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               
-              {/* Protected Routes */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/realtime"
-                element={
-                  <ProtectedRoute>
-                    <RealTimeDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/portfolio"
-                element={
-                  <ProtectedRoute>
-                    <PortfolioPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/goals"
-                element={
-                  <ProtectedRoute>
-                    <GoalsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/analytics"
-                element={
-                  <ProtectedRoute>
-                    <AnalyticsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/chat"
-                element={
-                  <ProtectedRoute>
-                    <AIAdvisor />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <ProfilePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tax-optimization"
-                element={
-                  <ProtectedRoute>
-                    <TaxOptimization />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/monte-carlo"
-                element={
-                  <ProtectedRoute>
-                    <MonteCarloSimulation />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/portfolio-optimizer"
-                element={
-                  <ProtectedRoute>
-                    <PortfolioOptimizer />
-                  </ProtectedRoute>
-                }
-              />
+              {/* Protected Routes with Authenticated Layout */}
+              <Route element={<ProtectedRoute><AuthenticatedLayout /></ProtectedRoute>}>
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/realtime" element={<RealTimeDashboard />} />
+                <Route path="/portfolio" element={<PortfolioPage />} />
+                <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/ai-advisor" element={<AIAdvisor />} />
+                <Route path="/chat" element={<AIAdvisor />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/tax-optimization" element={<TaxOptimization />} />
+                <Route path="/monte-carlo" element={<MonteCarloSimulation />} />
+                <Route path="/portfolio-optimizer" element={<PortfolioOptimizer />} />
+                <Route path="/settings" element={<ProfilePage />} />
+              </Route>
               
               {/* Redirect /app to /dashboard for backward compatibility */}
               <Route path="/app" element={<Navigate to="/dashboard" replace />} />

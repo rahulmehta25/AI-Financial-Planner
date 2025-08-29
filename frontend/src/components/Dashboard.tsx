@@ -77,8 +77,8 @@ export const Dashboard = () => {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
-        <div className="max-w-7xl mx-auto">
+      <div>
+        <div>
           <div className="mb-8">
             <Skeleton className="h-10 w-64 mb-2" />
             <Skeleton className="h-6 w-80" />
@@ -105,8 +105,8 @@ export const Dashboard = () => {
   // Show error state
   if (error && !dashboardData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
-        <div className="max-w-7xl mx-auto">
+      <div>
+        <div>
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="flex items-center justify-between">
@@ -131,8 +131,8 @@ export const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 pt-20 px-6">
-      <div className="max-w-7xl mx-auto">
+    <div>
+      <div>
         {/* Header */}
         <div className="mb-8 animate-slide-in-bottom">
           <div className="flex items-center justify-between">
