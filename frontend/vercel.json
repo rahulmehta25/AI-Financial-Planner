@@ -4,6 +4,9 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "vite",
+  "github": {
+    "silent": true
+  },
   "build": {
     "env": {
       "NODE_OPTIONS": "--max-old-space-size=4096"
