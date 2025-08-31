@@ -1,0 +1,38 @@
+{
+  "positions": [
+    {
+      "symbol": "AAPL",
+      "quantity": 25.0,
+      "avgCost": 185.2,
+      "currentPrice": 232.14,
+      "marketValue": 5803.5,
+      "unrealizedPL": 1173.5,
+      "gainPercent": 25.35
+    },
+    {
+      "symbol": "MSFT",
+      "quantity": 12.0,
+      "avgCost": 385.1,
+      "currentPrice": 506.69,
+      "marketValue": 6080.28,
+      "unrealizedPL": 1459.079999999999,
+      "gainPercent": 31.57
+    },
+    {
+      "symbol": "SPY",
+      "quantity": 5.0,
+      "avgCost": 512.0,
+      "currentPrice": 645.05,
+      "marketValue": 3225.25,
+      "unrealizedPL": 665.25,
+      "gainPercent": 25.99
+    }
+  ],
+  "summary": {
+    "totalCostBasis": 11811.2,
+    "totalMarketValue": 15109.029999999999,
+    "totalUnrealizedPL": 3297.829999999999,
+    "totalGainPercent": 27.92
+  },
+  "lastUpdated": "2025-08-31T00:41:26.738897"
+}

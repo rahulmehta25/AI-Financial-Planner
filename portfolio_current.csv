@@ -1,0 +1,5 @@
+Symbol,Quantity,Avg Cost (open),Current Price,Cost Basis (open),Market Value,Unrealized P&L,Realized P&L,Gain %,Last Updated (UTC),Price Source,Notes,Last Updated,Cost Basis
+AAPL,25,185.2,232.14,4630.0,5803.5,1173.5,320.5,25.35,2025-08-31T16:04:45Z,yfinance (delayed),Example row,2025-08-31 00:41:26,4630.0
+MSFT,12,385.1,506.69,4621.2,6080.28,1459.079999999999,0.0,31.57,2025-08-31T16:04:45Z,yfinance (delayed),Example row,2025-08-31 00:41:26,4621.200000000001
+SPY,5,512.0,645.05,2560.0,3225.25,665.25,-45.2,25.99,2025-08-31T16:04:45Z,yfinance (delayed),Example row,2025-08-31 00:41:26,2560.0
+TOTAL,42,,,,15109.029999999999,3297.829999999999,,27.92,,,,2025-08-31 00:41:26,11811.2
