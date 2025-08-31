@@ -1,93 +1,131 @@
 """
-Core Configuration for the AI Financial Planning System
-
-Configuration management using Pydantic settings with environment variable support.
+Application configuration using Pydantic Settings
 """
-
-import os
-from typing import List, Optional, Union, Dict, Any
-from pydantic import Field
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+import os
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=True,
-        extra="ignore",
-    )
-    # Application
-    APP_NAME: str = "AI Financial Planner"
-    APP_VERSION: str = "2.0.0"
-    DEBUG: bool = False
-    ENVIRONMENT: str = "development"
+    """Application settings with environment variable support"""
     
-    # Server
-    HOST: str = "0.0.0.0"
-    PORT: int = 8000
-    WORKERS: int = 4
+    model_config = SettingsConfigDict(
+        env_file=".env.development" if os.getenv("ENV", "development") == "development" else ".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+    
+    # Application
+    app_name: str = "Financial Portfolio Tracker"
+    app_version: str = "1.0.0"
+    debug: bool = Field(default=False)
+    environment: str = Field(default="development", alias="ENV")
     
     # Database
-    DATABASE_URL: str = "postgresql://user:pass@localhost/financial_planner"
-    DATABASE_POOL_SIZE: int = 20
-    DATABASE_MAX_OVERFLOW: int = 30
+    database_url: str = Field(
+        default="postgresql://portfolio_user:development_password_123@localhost:6432/portfolio_db",
+        alias="DATABASE_URL"
+    )
+    db_echo: bool = Field(default=False)
+    db_pool_size: int = Field(default=10)
+    db_max_overflow: int = Field(default=20)
+    db_pool_timeout: int = Field(default=30)
     
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
-    REDIS_POOL_SIZE: int = 10
-    
-    # JWT
-    JWT_SECRET: str = "your-secret-key"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
-    
-    # Market Data APIs
-    POLYGON_API_KEY: str = ""
-    DATABENTO_API_KEY: str = ""
-    ALPHA_VANTAGE_API_KEY: str = ""
-    TWELVE_DATA_API_KEY: str = ""
-    
-    # AI/ML APIs
-    OPENAI_API_KEY: str = ""
-    ANTHROPIC_API_KEY: str = ""
-    
-    # External Services
-    PLAID_CLIENT_ID: str = ""
-    PLAID_SECRET: str = ""
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL"
+    )
+    redis_max_connections: int = Field(default=50)
     
     # Security
-    SECRET_KEY: str = "your-secret-key-here"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    secret_key: str = Field(
+        default="development_secret_key_change_in_production",
+        alias="SECRET_KEY"
+    )
+    jwt_secret_key: str = Field(
+        default="development_jwt_secret_change_in_production",
+        alias="JWT_SECRET_KEY"
+    )
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_expiration_hours: int = Field(default=24)
+    refresh_token_expiration_days: int = Field(default=30)
     
-    # Monitoring
-    SENTRY_DSN: Optional[str] = None
-    DATADOG_API_KEY: Optional[str] = None
+    # CORS
+    cors_origins: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:5173"]
+    )
+    cors_allow_credentials: bool = Field(default=True)
+    cors_allow_methods: List[str] = Field(default=["*"])
+    cors_allow_headers: List[str] = Field(default=["*"])
     
-    # AWS (if using)
-    AWS_ACCESS_KEY_ID: Optional[str] = None
-    AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    AWS_REGION: str = "us-east-1"
-    AWS_S3_BUCKET: Optional[str] = None
+    # API
+    api_v1_prefix: str = Field(default="/api/v1")
+    rate_limit_per_minute: int = Field(default=100)
+    
+    # Market Data
+    yfinance_cache_ttl_seconds: int = Field(default=60)
+    yfinance_max_retries: int = Field(default=3)
+    yfinance_retry_delay_seconds: int = Field(default=1)
+    yfinance_cache_dir: str = Field(default="/tmp/yfinance_cache")
+    
+    # Circuit Breaker
+    circuit_breaker_failure_threshold: int = Field(default=3)
+    circuit_breaker_recovery_timeout: int = Field(default=60)
+    circuit_breaker_expected_exception: Optional[str] = Field(default=None)
+    
+    # Background Jobs
+    job_queue_high: str = Field(default="high")
+    job_queue_default: str = Field(default="default")
+    job_queue_low: str = Field(default="low")
+    job_max_retries: int = Field(default=3)
+    job_retry_delay_seconds: int = Field(default=60)
+    
+    # Logging
+    log_level: str = Field(default="INFO")
+    log_format: str = Field(default="json")
+    
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """Ensure database URL is properly formatted"""
+        if not v.startswith(("postgresql://", "postgresql+asyncpg://")):
+            raise ValueError("Database URL must be a PostgreSQL connection string")
+        return v
+    
+    @field_validator("redis_url")
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """Ensure Redis URL is properly formatted"""
+        if not v.startswith("redis://"):
+            raise ValueError("Redis URL must start with redis://")
+        return v
+    
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v: str) -> str:
+        """Validate environment name"""
+        allowed = ["development", "staging", "production", "testing"]
+        if v not in allowed:
+            raise ValueError(f"Environment must be one of: {allowed}")
+        return v
+    
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode"""
+        return self.environment == "development"
+    
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode"""
+        return self.environment == "production"
+    
+    @property
+    def is_testing(self) -> bool:
+        """Check if running in test mode"""
+        return self.environment == "testing"
 
 
-# Global settings instance
+# Create global settings instance
 settings = Settings()
-
-# Feature flags
-FEATURE_FLAGS = {
-    "advanced_monte_carlo": True,
-    "ai_recommendations": True,
-    "real_time_monitoring": True,
-    "tax_optimization": True,
-    "alternative_investments": False,
-    "options_trading": False,
-    "cryptocurrency": False,
-}
-
-
-def get_settings() -> Settings:
-    return settings

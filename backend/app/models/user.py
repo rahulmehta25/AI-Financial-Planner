@@ -1,50 +1,46 @@
 """
-User model for authentication and profile management
+User model
 """
-
-import uuid
-from datetime import datetime
-from sqlalchemy import Boolean, Column, DateTime, String, Text
+from typing import Optional, List, TYPE_CHECKING
+from sqlalchemy import Column, String, Boolean, DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
+import uuid
 
-from app.database.base import Base
+from app.core.database import Base
+from app.models.base import TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.account import Account
 
 
-class User(Base):
+class User(Base, TimestampMixin):
+    """User model for authentication and profile"""
+    
     __tablename__ = "users"
-
+    __allow_unmapped__ = True
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, index=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    email_verified = Column(Boolean, default=False)
-    phone_number = Column(String(20), nullable=True)
-    profile_picture_url = Column(Text, nullable=True)
-    
-    # Advanced authentication fields
-    mfa_enabled = Column(Boolean, default=False)
-    enforce_device_trust = Column(Boolean, default=False)
-    role = Column(String(50), default='user')  # user, premium, advisor, admin
-    organization_id = Column(UUID(as_uuid=True), nullable=True)
-    custom_permissions = Column(Text, nullable=True)  # JSON array of permissions
-    
-    # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_login = Column(DateTime, nullable=True)
+    full_name = Column(String(255))
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    last_login = Column(DateTime(timezone=True))
+    preferences = Column(JSON, default=dict, nullable=False)
     
     # Relationships
-    financial_profile = relationship("FinancialProfile", back_populates="user", uselist=False)
-    goals = relationship("Goal", back_populates="user")
-    investments = relationship("Investment", back_populates="user")
-    simulation_results = relationship("SimulationResult", back_populates="user")
-    ml_recommendations = relationship("MLRecommendation", back_populates="user")
-    ml_interactions = relationship("UserMLInteraction", back_populates="user")
-
+    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+    
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, email={self.email})>"
+    
     @property
-    def full_name(self) -> str:
-        return f"{self.first_name} {self.last_name}"
+    def is_authenticated(self) -> bool:
+        """Check if user is authenticated"""
+        return self.is_active
+    
+    def update_last_login(self) -> None:
+        """Update last login timestamp"""
+        from datetime import datetime
+        self.last_login = datetime.utcnow()
