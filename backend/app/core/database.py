@@ -56,6 +56,60 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+
+class Database:
+    """Database connection manager"""
+    
+    def __init__(self):
+        self.engine = engine
+        self.session_factory = AsyncSessionLocal
+        self._connected = False
+    
+    async def connect(self):
+        """Initialize database connection"""
+        try:
+            async with self.engine.begin() as conn:
+                await conn.execute("SELECT 1")
+            self._connected = True
+            logger.info("Database connected successfully")
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
+    
+    async def disconnect(self):
+        """Close database connection"""
+        await self.engine.dispose()
+        self._connected = False
+        logger.info("Database disconnected")
+    
+    @asynccontextmanager
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
+        """Get database session context manager"""
+        async with self.session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+    
+    async def execute(self, query: str):
+        """Execute raw SQL query"""
+        async with self.session() as session:
+            return await session.execute(query)
+    
+    async def health_check(self) -> bool:
+        """Check database health"""
+        try:
+            async with self.engine.begin() as conn:
+                await conn.execute("SELECT 1")
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False
+
 # Session dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """

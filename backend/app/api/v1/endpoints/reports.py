@@ -1,4 +1,4 @@
-"""market_data endpoints"""
+"""reports endpoints"""
 from fastapi import APIRouter
 
 router = APIRouter()

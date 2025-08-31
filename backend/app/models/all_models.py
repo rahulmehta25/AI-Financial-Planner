@@ -16,6 +16,7 @@ import uuid
 from app.core.database import Base
 from app.models.base import TimestampMixin, TransactionSide, AssetClass, AccountType
 
+# Note: User model is defined in user.py to avoid circular imports
 
 # Account Model
 class Account(Base, TimestampMixin):
