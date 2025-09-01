@@ -23,6 +23,7 @@ import { TaxOptimization } from './pages/TaxOptimization'
 import MonteCarloSimulation from './pages/MonteCarloSimulation'
 import PortfolioOptimizer from './pages/PortfolioOptimizer'
 import NotFound from './pages/NotFound'
+import SupabaseTestPage from './pages/SupabaseTestPage'
 
 import './App.css'
 
@@ -70,6 +71,7 @@ function App() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/supabase-test" element={<SupabaseTestPage />} />
               
               {/* Protected Routes with Authenticated Layout */}
               <Route element={<ProtectedRoute><AuthenticatedLayout /></ProtectedRoute>}>
