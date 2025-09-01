@@ -10,6 +10,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  define: {
+    global: 'globalThis',
+  },
   server: {
     port: 5173,
     host: true,
@@ -18,7 +21,12 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom'],
-    exclude: ['playwright', 'three', 'plotly.js', 'react-plotly.js', 'd3']
+    exclude: ['playwright'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   },
   build: {
     outDir: 'dist',

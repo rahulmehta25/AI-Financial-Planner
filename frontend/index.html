@@ -19,6 +19,12 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@financeai" />
     <meta name="twitter:image" content="/og-image.png" />
+    <!-- Add polyfills for Node.js modules -->
+    <script>
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+    </script>
   </head>
 
   <body>
