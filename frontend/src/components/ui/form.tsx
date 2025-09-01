@@ -1,3 +1,10 @@
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
 import * as React from "react"
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { Slot } from "@radix-ui/react-slot"
@@ -10,7 +17,6 @@ import {
   useFormContext,
 } from "react-hook-form"
 
-import { cn } from '../../lib/utils'
 import { Label } from "@/components/ui/label"
 
 const Form = FormProvider
