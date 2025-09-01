@@ -1,0 +1,107 @@
+{
+  "summary": {
+    "total_tests": 7,
+    "passed_tests": 4,
+    "total_errors": 1,
+    "total_console_logs": 1
+  },
+  "test_results": [
+    {
+      "page": "Homepage",
+      "url": "https://ai-financial-planner-zeta.vercel.app/",
+      "status": "\u2705 Loaded",
+      "elements": {
+        "page_loaded": true,
+        "title_present": true,
+        "navigation_present": true,
+        "main_content": false,
+        "buttons_clickable": true
+      },
+      "errors": [],
+      "screenshot": "01_homepage_desktop.png"
+    },
+    {
+      "page": "Dashboard",
+      "url": "https://ai-financial-planner-zeta.vercel.app/login",
+      "status": "\u2705 Loaded",
+      "elements": {
+        "page_title": false,
+        "content_area": false,
+        "interactive_elements": true,
+        "no_404_error": true
+      },
+      "errors": [],
+      "screenshot": "02_dashboard_page.png"
+    },
+    {
+      "page": "Portfolio",
+      "url": "N/A",
+      "status": "\u274c Not found",
+      "elements": {},
+      "errors": [
+        "Could not find Portfolio page link"
+      ],
+      "screenshot": null
+    },
+    {
+      "page": "Goals",
+      "url": "N/A",
+      "status": "\u274c Not found",
+      "elements": {},
+      "errors": [
+        "Could not find Goals page link"
+      ],
+      "screenshot": null
+    },
+    {
+      "page": "AI Chat",
+      "url": "https://ai-financial-planner-zeta.vercel.app/login",
+      "status": "\u2705 Loaded",
+      "elements": {
+        "page_title": false,
+        "content_area": false,
+        "interactive_elements": true,
+        "no_404_error": true
+      },
+      "errors": [],
+      "screenshot": "05_ai chat_page.png"
+    },
+    {
+      "page": "Analytics",
+      "url": "N/A",
+      "status": "\u274c Not found",
+      "elements": {},
+      "errors": [
+        "Could not find Analytics page link"
+      ],
+      "screenshot": null
+    },
+    {
+      "page": "Login",
+      "url": "https://ai-financial-planner-zeta.vercel.app/login",
+      "status": "\u2705 Loaded",
+      "elements": {
+        "page_title": false,
+        "content_area": false,
+        "interactive_elements": true,
+        "no_404_error": true
+      },
+      "errors": [],
+      "screenshot": "07_login_page.png"
+    }
+  ],
+  "console_logs": [
+    {
+      "type": "verbose",
+      "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+      "location": {
+        "url": "https://ai-financial-planner-zeta.vercel.app/login",
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "errors": [
+    "CRITICAL ERROR: 'NoneType' object is not subscriptable"
+  ]
+}

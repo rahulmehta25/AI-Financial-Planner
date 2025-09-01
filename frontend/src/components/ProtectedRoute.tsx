@@ -1,6 +1,7 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDemo } from '@/contexts/DemoContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -35,6 +36,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   redirectTo = '/login' 
 }) => {
   const { isAuthenticated, isLoading, user } = useAuth()
+  const { isDemoMode } = useDemo()
   const location = useLocation()
 
   // Show loading state while checking authentication
@@ -42,8 +44,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <LoadingSkeleton />
   }
 
-  // If not authenticated, redirect to login with return url
-  if (!isAuthenticated || !user) {
+  // Allow access if authenticated OR in demo mode
+  if (!isAuthenticated && !isDemoMode && !user) {
     return (
       <Navigate 
         to={redirectTo} 
@@ -56,7 +58,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     )
   }
 
-  // User is authenticated, render the protected content
+  // User is authenticated or in demo mode, render the protected content
   return <>{children}</>
 }
 

@@ -2,9 +2,11 @@ import { Button } from "@/components/ui/button";
 import { TypewriterText } from "./TypewriterText";
 import { ArrowRight, TrendingUp, Shield, Brain } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useDemo } from "@/contexts/DemoContext";
 
 export const HeroSection = () => {
   const navigate = useNavigate();
+  const { enableDemoMode } = useDemo();
 
   return (
     <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
@@ -68,7 +70,10 @@ export const HeroSection = () => {
             variant="outline" 
             size="lg"
             className="glass hover:bg-white/10 border-white/20 px-8 py-6 text-lg"
-            onClick={() => navigate('/demo')}
+            onClick={() => {
+              enableDemoMode();
+              navigate('/dashboard');
+            }}
           >
             View Demo
           </Button>

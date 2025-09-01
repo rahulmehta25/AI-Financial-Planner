@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './contexts/AuthContext'
+import { DemoProvider } from './contexts/DemoContext'
 import { Toaster } from './components/ui/sonner'
 import ProtectedRoute from './components/ProtectedRoute'
 import AuthenticatedLayout from './components/AuthenticatedLayout'
@@ -61,9 +62,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router>
-          <div className="App">
-            <Routes>
+        <DemoProvider>
+          <Router>
+            <div className="App">
+              <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
@@ -114,6 +116,7 @@ function App() {
             />
           </div>
         </Router>
+        </DemoProvider>
       </AuthProvider>
     </QueryClientProvider>
   )
