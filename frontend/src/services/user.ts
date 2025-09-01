@@ -152,7 +152,9 @@ class UserService {
 
   async getDashboardData(): Promise<DashboardData> {
     try {
-      return await apiService.get<DashboardData>('/api/v1/dashboard')
+      // Since we're not using external APIs, return mock dashboard data
+      // In production, this would integrate with Supabase
+      return this.getMockDashboardData()
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
       throw error

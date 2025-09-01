@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// For Vite, use import.meta.env instead of process.env
+// Also support NEXT_PUBLIC_ prefix for compatibility
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 
+                   import.meta.env.NEXT_PUBLIC_SUPABASE_URL || 
+                   'https://tqxhvrsdroafvigbgaxx.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 
+                       import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxeGh2cnNkcm9hZnZpZ2JnYXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTE4OTMsImV4cCI6MjA3MjI2Nzg5M30.Q-eHrZbjQXXJoN0Ry5JICZRkWJ6A_KcaiDlhzzamekU'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

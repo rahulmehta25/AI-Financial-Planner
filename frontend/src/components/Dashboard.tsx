@@ -166,12 +166,18 @@ export const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold gradient-primary bg-clip-text text-transparent">
-                ${portfolioData.totalValue.toLocaleString()}
+                ${dashboardData?.portfolioSummary?.totalValue?.toLocaleString() || '0'}
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <TrendingUp className="h-4 w-4 text-success" />
-                <span className="text-success font-medium">
-                  +${portfolioData.todayChange.toLocaleString()} ({portfolioData.todayPercentage}%)
+                {dashboardData?.portfolioSummary?.dayChange !== undefined && dashboardData.portfolioSummary.dayChange >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-success" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-error" />
+                )}
+                <span className={dashboardData?.portfolioSummary?.dayChange !== undefined && dashboardData.portfolioSummary.dayChange >= 0 ? "text-success font-medium" : "text-error font-medium"}>
+                  {dashboardData?.portfolioSummary?.dayChange !== undefined ? 
+                    `${dashboardData.portfolioSummary.dayChange >= 0 ? '+' : ''}$${Math.abs(dashboardData.portfolioSummary.dayChange).toLocaleString()} (${dashboardData.portfolioSummary.dayChangePercentage >= 0 ? '+' : ''}${dashboardData.portfolioSummary.dayChangePercentage.toFixed(2)}%)` : 
+                    '$0 (0.00%)'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">Today's performance</p>
@@ -184,9 +190,12 @@ export const Dashboard = () => {
               <Target className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-success">{portfolioData.goals.length}</div>
+              <div className="text-3xl font-bold text-success">{dashboardData?.goals?.length || 0}</div>
               <p className="text-xs text-muted-foreground mt-2">
-                {Math.round(portfolioData.goals.reduce((acc, goal) => acc + goal.progress, 0) / portfolioData.goals.length)}% average progress
+                {dashboardData?.goals?.length ? 
+                  `${Math.round(dashboardData.goals.reduce((acc, goal) => acc + goal.progress, 0) / dashboardData.goals.length)}% average progress` :
+                  '0% average progress'
+                }
               </p>
             </CardContent>
           </Card>
@@ -227,18 +236,18 @@ export const Dashboard = () => {
               </Button>
             </CardHeader>
             <CardContent className="space-y-6">
-              {portfolioData.goals.map((goal, index) => (
+              {dashboardData?.goals?.map((goal, index) => (
                 <div key={goal.name} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <h4 className="font-medium">{goal.name}</h4>
                     <span className="text-sm text-muted-foreground">
-                      ${goal.current.toLocaleString()} / ${goal.target.toLocaleString()}
+                      ${goal.currentAmount?.toLocaleString() || '0'} / ${goal.targetAmount?.toLocaleString() || '0'}
                     </span>
                   </div>
                   <Progress value={goal.progress} className="h-2" />
                   <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span>{goal.progress}% complete</span>
-                    <span>${(goal.target - goal.current).toLocaleString()} remaining</span>
+                    <span>${((goal.targetAmount || 0) - (goal.currentAmount || 0)).toLocaleString()} remaining</span>
                   </div>
                 </div>
               ))}
@@ -277,26 +286,26 @@ export const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {portfolioData.recentTransactions.map((transaction, index) => (
+              {dashboardData?.recentTransactions?.map((transaction, index) => (
                 <div key={index} className="flex items-center justify-between p-4 rounded-lg bg-card/50 hover:bg-card/80 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      transaction.type === 'income' ? 'bg-success/20' : 'bg-error/20'
+                      transaction.type === 'buy' || transaction.type === 'dividend' ? 'bg-success/20' : 'bg-error/20'
                     }`}>
-                      {transaction.type === 'income' ? 
+                      {transaction.type === 'buy' || transaction.type === 'dividend' ? 
                         <TrendingUp className="h-5 w-5 text-success" /> : 
                         <TrendingDown className="h-5 w-5 text-error" />
                       }
                     </div>
                     <div>
-                      <p className="font-medium">{transaction.name}</p>
-                      <p className="text-sm text-muted-foreground">{transaction.date}</p>
+                      <p className="font-medium">{transaction.symbol || transaction.type}</p>
+                      <p className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
                     </div>
                   </div>
                   <div className={`font-semibold ${
-                    transaction.type === 'income' ? 'text-success' : 'text-error'
+                    transaction.type === 'buy' || transaction.type === 'dividend' ? 'text-success' : 'text-error'
                   }`}>
-                    {transaction.type === 'income' ? '+' : ''}${Math.abs(transaction.amount).toLocaleString()}
+                    {transaction.type === 'sell' || transaction.type === 'fee' ? '-' : '+'}${Math.abs(transaction.amount).toLocaleString()}
                   </div>
                 </div>
               ))}

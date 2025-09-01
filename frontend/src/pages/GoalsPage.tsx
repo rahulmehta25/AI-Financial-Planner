@@ -1,51 +1,67 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Target, TrendingUp, Calendar, DollarSign } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Target, TrendingUp, Calendar, DollarSign, RefreshCw, AlertCircle } from "lucide-react";
+import { goalsService, Goal } from "@/services/goals";
+import { useToast } from "@/hooks/use-toast";
 
 const GoalsPage = () => {
-  const goals = [
-    {
-      id: 1,
-      name: "Emergency Fund",
-      targetAmount: 50000,
-      currentAmount: 32000,
-      targetDate: "2024-12-31",
-      priority: "high",
-      category: "Security",
-      progress: 64
-    },
-    {
-      id: 2,
-      name: "House Down Payment",
-      targetAmount: 100000,
-      currentAmount: 45000,
-      targetDate: "2025-06-30",
-      priority: "high", 
-      category: "Real Estate",
-      progress: 45
-    },
-    {
-      id: 3,
-      name: "Vacation Fund",
-      targetAmount: 15000,
-      currentAmount: 8500,
-      targetDate: "2024-08-15",
-      priority: "medium",
-      category: "Lifestyle",
-      progress: 57
-    },
-    {
-      id: 4,
-      name: "Retirement Fund",
-      targetAmount: 1000000,
-      currentAmount: 125000,
-      targetDate: "2045-01-01",
-      priority: "high",
-      category: "Retirement",
-      progress: 13
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [statistics, setStatistics] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchGoals = async (showToast = false) => {
+    try {
+      setIsLoading(!goals.length);
+      setIsRefreshing(showToast);
+      setError(null);
+
+      const [goalsData, statsData] = await Promise.all([
+        goalsService.getGoals(),
+        goalsService.getGoalStatistics()
+      ]);
+
+      setGoals(goalsData);
+      setStatistics(statsData);
+
+      if (showToast) {
+        toast({
+          title: "Goals refreshed",
+          description: "Your goals have been updated successfully.",
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch goals:', err);
+      const errorMessage = err.message || 'Failed to load goals. Please try again.';
+      setError(errorMessage);
+      
+      if (showToast) {
+        toast({
+          title: "Refresh failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchGoals();
+  }, []);
+
+  const handleRefresh = () => {
+    fetchGoals(true);
+  };
+
 
   const getPriorityColor = (priority: string) => {
     switch(priority) {
@@ -55,6 +71,66 @@ const GoalsPage = () => {
       default: return 'text-foreground';
     }
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+          <div className="mb-8">
+            <Skeleton className="h-10 w-64 mb-2" />
+            <Skeleton className="h-6 w-80" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="glass border-white/10">
+                <CardContent className="p-6">
+                  <Skeleton className="h-12 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="glass border-white/10">
+                <CardContent className="p-6">
+                  <Skeleton className="h-32 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && !goals.length) {
+    return (
+      <div className="">
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Retry"
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="">
@@ -71,10 +147,22 @@ const GoalsPage = () => {
                 Track your progress and achieve your financial dreams
               </p>
             </div>
-            <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Goal
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="glass border-white/20"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Goal
+              </Button>
+            </div>
           </div>
 
           {/* Summary Cards */}
@@ -87,7 +175,7 @@ const GoalsPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Goals</p>
-                    <p className="text-2xl font-bold">{goals.length}</p>
+                    <p className="text-2xl font-bold">{statistics?.totalGoals || goals.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -101,7 +189,13 @@ const GoalsPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Target</p>
-                    <p className="text-2xl font-bold">$1.17M</p>
+                    <p className="text-2xl font-bold">
+                      ${statistics?.totalTargetAmount ? 
+                        (statistics.totalTargetAmount >= 1000000 ? 
+                          `${(statistics.totalTargetAmount / 1000000).toFixed(2)}M` : 
+                          `${(statistics.totalTargetAmount / 1000).toFixed(0)}K`) : 
+                        '0'}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -115,7 +209,13 @@ const GoalsPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Saved</p>
-                    <p className="text-2xl font-bold">$210.5K</p>
+                    <p className="text-2xl font-bold">
+                      ${statistics?.totalCurrentAmount ? 
+                        (statistics.totalCurrentAmount >= 1000000 ? 
+                          `${(statistics.totalCurrentAmount / 1000000).toFixed(2)}M` : 
+                          `${(statistics.totalCurrentAmount / 1000).toFixed(1)}K`) : 
+                        '0'}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -129,7 +229,7 @@ const GoalsPage = () => {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Avg Progress</p>
-                    <p className="text-2xl font-bold">45%</p>
+                    <p className="text-2xl font-bold">{statistics?.averageProgress || 0}%</p>
                   </div>
                 </div>
               </CardContent>
