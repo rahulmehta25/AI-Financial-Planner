@@ -9,14 +9,6 @@
   "outputDirectory": "frontend/dist",
   "public": false,
   "regions": ["iad1"],
-  "functions": {
-    "api/portfolio.py": {
-      "runtime": "python3.9"
-    },
-    "api/advisor.py": {
-      "runtime": "python3.9"
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
