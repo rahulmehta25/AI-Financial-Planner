@@ -23,7 +23,7 @@ import {
   DollarSign, Percent, Calendar, Globe, Bookmark,
   Settings, Bell
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 
 // Mock data generators

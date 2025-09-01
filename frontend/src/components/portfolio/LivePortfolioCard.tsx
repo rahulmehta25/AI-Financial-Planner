@@ -12,7 +12,7 @@ import {
   WifiOff,
   RefreshCw
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 
 interface LivePortfolioCardProps {
   value?: number

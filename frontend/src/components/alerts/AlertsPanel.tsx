@@ -20,7 +20,7 @@ import {
   Filter,
   Settings
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 
 export interface Alert {
