@@ -12,7 +12,13 @@ import {
   WifiOff,
   RefreshCw
 } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+// Inline cn function to avoid import issues
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
 interface LivePortfolioCardProps {
   value?: number

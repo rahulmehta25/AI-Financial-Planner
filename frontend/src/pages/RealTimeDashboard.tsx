@@ -23,8 +23,14 @@ import {
   DollarSign, Percent, Calendar, Globe, Bookmark,
   Settings, Bell
 } from 'lucide-react'
-import { cn } from '../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+// Inline cn function to avoid import issues
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
 // Mock data generators
 const generatePerformanceData = (days: number) => {

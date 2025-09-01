@@ -20,8 +20,14 @@ import {
   Filter,
   Settings
 } from 'lucide-react'
-import { cn } from '../../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+// Inline cn function to avoid import issues
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
 export interface Alert {
   id: string
