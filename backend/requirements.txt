@@ -36,15 +36,17 @@ aiohttp==3.9.1
 python-dateutil==2.8.2
 pendulum==3.0.0
 
-# Decimal Operations (for financial calculations)
-decimal==1.0.0
+# Decimal Operations (built-in to Python, no package needed)
 
 # Security
 cryptography==41.0.7
+bcrypt==4.1.1
+
+# SQLite support for development
+aiosqlite==0.19.0
 
 # Logging
 structlog==23.2.0
 
-# Circuit Breaker Pattern
-circuit-breaker-py==0.0.1
+# Retry and resilience patterns
 tenacity==8.2.3
