@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = Field(
-        default="postgresql://portfolio_user:development_password_123@localhost:6432/portfolio_db",
+        default="sqlite+aiosqlite:///./test_portfolio.db",
         alias="DATABASE_URL"
     )
     db_echo: bool = Field(default=False)
@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     cors_allow_methods: List[str] = Field(default=["*"])
     cors_allow_headers: List[str] = Field(default=["*"])
     
+    # Security
+    allowed_hosts: List[str] = Field(default=["*"])
+    
     # API
     api_v1_prefix: str = Field(default="/api/v1")
     rate_limit_per_minute: int = Field(default=100)
@@ -90,8 +93,8 @@ class Settings(BaseSettings):
     @classmethod
     def validate_database_url(cls, v: str) -> str:
         """Ensure database URL is properly formatted"""
-        if not v.startswith(("postgresql://", "postgresql+asyncpg://")):
-            raise ValueError("Database URL must be a PostgreSQL connection string")
+        if not v.startswith(("postgresql://", "postgresql+asyncpg://", "sqlite", "sqlite+aiosqlite://")):
+            raise ValueError("Database URL must be a PostgreSQL or SQLite connection string")
         return v
     
     @field_validator("redis_url")

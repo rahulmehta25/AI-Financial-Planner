@@ -1,11 +1,6 @@
 """
-Authentication Services Module
-
-Advanced authentication and authorization services for the AI Financial Planning System.
+Auth service module
 """
+from .jwt_handler import jwt_handler
 
-from .advanced_auth import AdvancedAuthenticationService
-
-__all__ = [
-    "AdvancedAuthenticationService",
-]
+__all__ = ["jwt_handler"]

@@ -44,14 +44,19 @@ async def lifespan(app: FastAPI):
         db = Database()
         await db.connect()
         
-        # Initialize Redis
+        # Initialize Redis (optional for testing)
         logger.info("Connecting to Redis...")
-        redis_client = redis.from_url(
-            settings.redis_url,
-            decode_responses=False,
-            max_connections=settings.redis_max_connections
-        )
-        await redis_client.ping()
+        try:
+            redis_client = redis.from_url(
+                settings.redis_url,
+                decode_responses=False,
+                max_connections=settings.redis_max_connections
+            )
+            await redis_client.ping()
+            logger.info("Redis connected successfully")
+        except Exception as e:
+            logger.warning(f"Redis connection failed (will work without caching): {e}")
+            redis_client = None
         
         # Initialize data provider with caching
         logger.info("Initializing market data provider...")
@@ -149,7 +154,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "detail": exc.errors(),
-            "body": exc.body,
+            "body": str(exc.body) if exc.body else None,
             "request_id": getattr(request.state, "request_id", None)
         }
     )

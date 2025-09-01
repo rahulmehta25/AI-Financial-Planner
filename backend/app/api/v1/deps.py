@@ -81,7 +81,9 @@ async def get_current_user(
         )
     
     # Get user from database
-    query = select(User).where(User.id == user_id)
+    import uuid
+    user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    query = select(User).where(User.id == user_uuid)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
     

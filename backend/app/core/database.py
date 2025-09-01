@@ -30,10 +30,12 @@ Base = declarative_base(metadata=metadata)
 
 # Convert sync database URL to async
 def get_async_database_url() -> str:
-    """Convert postgresql:// to postgresql+asyncpg://"""
+    """Convert database URL to async version"""
     db_url = settings.database_url
     if db_url.startswith("postgresql://"):
         return db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif db_url.startswith("sqlite:///"):
+        return db_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
     return db_url
 
 # Create async engine
@@ -69,7 +71,8 @@ class Database:
         """Initialize database connection"""
         try:
             async with self.engine.begin() as conn:
-                await conn.execute("SELECT 1")
+                from sqlalchemy import text
+                await conn.execute(text("SELECT 1"))
             self._connected = True
             logger.info("Database connected successfully")
         except Exception as e:
@@ -104,7 +107,8 @@ class Database:
         """Check database health"""
         try:
             async with self.engine.begin() as conn:
-                await conn.execute("SELECT 1")
+                from sqlalchemy import text
+                await conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
