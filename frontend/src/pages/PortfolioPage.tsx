@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Plus, RefreshCw, Zap } from "lucide-react";
 import { portfolioService, PortfolioOverview, Holding } from "@/services/portfolio";
 import { useToast } from "@/hooks/use-toast";
+import { AddHoldingModal } from "@/components/portfolio/AddHoldingModal";
 
 interface SectorData {
   name: string
@@ -22,6 +23,7 @@ const PortfolioPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -163,6 +165,13 @@ const PortfolioPage = () => {
             </div>
             <div className="flex gap-2">
               <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-gradient-to-r from-primary to-success hover:opacity-90"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Holding
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handleRefresh}
@@ -178,10 +187,6 @@ const PortfolioPage = () => {
                   Optimize
                 </Button>
               </Link>
-              <Button className="bg-gradient-to-r from-primary to-success hover:shadow-glow transition-all duration-300">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Investment
-              </Button>
             </div>
           </div>
 
@@ -373,6 +378,16 @@ const PortfolioPage = () => {
 
         <div className="pb-20"></div>
       </main>
+      
+      {/* Add Holding Modal */}
+      <AddHoldingModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={() => {
+          setShowAddModal(false)
+          fetchPortfolioData(true)
+        }}
+      />
     </div>
   );
 };
