@@ -2,10 +2,18 @@
 
 # Environment variables
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.railway
+
+# NEVER commit database credentials
+**/test_*_db.py
+**/init_*_db.py
+**/*database_url*
+**/*DATABASE_URL*
 
 # Logs
 logs
