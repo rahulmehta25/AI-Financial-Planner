@@ -1,8 +1,7 @@
 services:
   - type: web
     name: ai-financial-planner-backend
-    env: python
-    repo: # Updated Wed Aug 27 00:46:15 EDT 2025
+    runtime: python
     buildCommand: pip install -r requirements_simple.txt
     startCommand: python simple_backend.py
     region: oregon
