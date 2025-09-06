@@ -7,7 +7,6 @@
   "devCommand": "cd frontend && npm run dev",
   "installCommand": "cd frontend && npm install",
   "outputDirectory": "frontend/dist",
-  "public": false,
   "regions": ["iad1"],
   "headers": [
     {
