@@ -27,7 +27,8 @@ const SignupPage: React.FC = () => {
     special: false
   })
   
-  const { signup, isAuthenticated, isLoading, error, clearError } = useAuth()
+  const { signUp, isAuthenticated, isLoading } = useAuth()
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -43,8 +44,8 @@ const SignupPage: React.FC = () => {
 
   // Clear error when component mounts or form changes
   useEffect(() => {
-    clearError()
-  }, [clearError])
+    setError(null)
+  }, [formData])
 
   // Validate password
   useEffect(() => {
@@ -79,15 +80,20 @@ const SignupPage: React.FC = () => {
     setIsSubmitting(true)
     
     try {
-      await signup({
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password
-      })
-      // Navigation will be handled by useEffect above
-    } catch (error) {
-      // Error handling is done in the auth context
+      const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
+      const result = await signUp(
+        formData.email.trim().toLowerCase(),
+        formData.password,
+        fullName
+      )
+      
+      if (result.error) {
+        setError(result.error.message || 'Failed to create account')
+      } else {
+        // Navigation will be handled by useEffect above
+      }
+    } catch (error: any) {
+      setError(error.message || 'An unexpected error occurred')
     } finally {
       setIsSubmitting(false)
     }

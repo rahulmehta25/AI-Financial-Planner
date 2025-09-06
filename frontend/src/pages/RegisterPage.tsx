@@ -32,7 +32,7 @@ const RegisterPage = () => {
     general?: string;
   }>({});
 
-  const { register } = useAuth();
+  const { signUp } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -126,12 +126,8 @@ const RegisterPage = () => {
     setIsLoading(true);
 
     try {
-      await register({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-      });
+      const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
+      await signUp(formData.email, formData.password, fullName);
 
       toast({
         title: "Account created successfully!",
