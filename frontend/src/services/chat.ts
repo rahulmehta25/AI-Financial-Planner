@@ -2,6 +2,11 @@ import { API_CONFIG } from '@/config/api'
 import { apiService } from './api'
 import { supabase } from '@/lib/supabase'
 
+// Utility function for generating IDs that works in all browsers
+function generateId(): string {
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9)
+}
+
 export interface ChatMessage {
   id: string
   content: string
@@ -96,7 +101,7 @@ class ChatService {
       if (!edgeError && edgeResponse) {
         return {
           message: {
-            id: crypto.randomUUID(),
+            id: generateId(),
             content: edgeResponse.message || edgeResponse.response || 'I can help you with your financial planning needs.',
             role: 'assistant',
             timestamp: new Date().toISOString(),
@@ -104,7 +109,7 @@ class ChatService {
               suggestions: edgeResponse.suggestions
             }
           },
-          sessionId: request.sessionId || crypto.randomUUID(),
+          sessionId: request.sessionId || generateId(),
           suggestions: edgeResponse.suggestions
         }
       }
@@ -129,7 +134,7 @@ class ChatService {
 
       return {
         message: {
-          id: crypto.randomUUID(),
+          id: generateId(),
           content: randomResponse,
           role: 'assistant',
           timestamp: new Date().toISOString(),
@@ -138,7 +143,7 @@ class ChatService {
             suggestions
           }
         },
-        sessionId: request.sessionId || crypto.randomUUID(),
+        sessionId: request.sessionId || generateId(),
         suggestions
       }
     } catch (error) {
@@ -146,12 +151,12 @@ class ChatService {
       // Return a helpful fallback message
       return {
         message: {
-          id: crypto.randomUUID(),
+          id: generateId(),
           content: 'I can help you with portfolio analysis, investment strategies, and financial planning. What would you like to know?',
           role: 'assistant',
           timestamp: new Date().toISOString()
         },
-        sessionId: request.sessionId || crypto.randomUUID()
+        sessionId: request.sessionId || generateId()
       }
     }
   }
