@@ -8,10 +8,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Provide empty modules for Node.js built-ins
+      buffer: path.resolve(__dirname, "./src/polyfills/buffer.js"),
+      process: path.resolve(__dirname, "./src/polyfills/process.js"),
     },
   },
   define: {
     global: 'globalThis',
+    'process.env': {},
   },
   server: {
     port: 5173,

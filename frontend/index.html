@@ -24,6 +24,18 @@
       if (typeof global === 'undefined') {
         window.global = window;
       }
+      // Add empty Buffer polyfill to prevent errors
+      if (typeof window.Buffer === 'undefined') {
+        window.Buffer = {
+          from: function() { return []; },
+          alloc: function() { return []; },
+          isBuffer: function() { return false; }
+        };
+      }
+      // Add process polyfill
+      if (typeof window.process === 'undefined') {
+        window.process = { env: {}, browser: true };
+      }
     </script>
   </head>
 
