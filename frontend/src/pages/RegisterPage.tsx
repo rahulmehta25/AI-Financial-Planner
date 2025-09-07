@@ -127,14 +127,36 @@ const RegisterPage = () => {
 
     try {
       const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
-      await signUp(formData.email, formData.password, fullName);
+      const result = await signUp(formData.email, formData.password, fullName);
 
-      toast({
-        title: "Account created successfully!",
-        description: "Welcome to FinanceAI. You can now access your dashboard.",
-      });
+      if (result.error) {
+        throw result.error;
+      }
 
-      navigate("/dashboard");
+      if (result.data?.user) {
+        // Check if email confirmation is required
+        if (result.data.user.confirmed_at === null) {
+          toast({
+            title: "Check your email!",
+            description: "We've sent you a confirmation email. Please verify your account before signing in.",
+          });
+          navigate("/login");
+        } else {
+          // User is confirmed and can sign in
+          toast({
+            title: "Account created successfully!",
+            description: "Welcome to FinanceAI. You can now access your dashboard.",
+          });
+          navigate("/dashboard");
+        }
+      } else {
+        // Account created but need email confirmation
+        toast({
+          title: "Account created!",
+          description: "Please check your email to confirm your account.",
+        });
+        navigate("/login");
+      }
     } catch (error: any) {
       const errorMessage = error.message || "Registration failed. Please try again.";
       setErrors({ general: errorMessage });

@@ -89,8 +89,15 @@ const SignupPage: React.FC = () => {
       
       if (result.error) {
         setError(result.error.message || 'Failed to create account')
+      } else if (result.data?.user) {
+        // Check if email confirmation is required
+        if (result.data.user.confirmed_at === null) {
+          setError('Please check your email to confirm your account before signing in.')
+        } else {
+          // User is confirmed, navigation will be handled by useEffect above
+        }
       } else {
-        // Navigation will be handled by useEffect above
+        setError('Account created! Please check your email to confirm before signing in.')
       }
     } catch (error: any) {
       setError(error.message || 'An unexpected error occurred')
