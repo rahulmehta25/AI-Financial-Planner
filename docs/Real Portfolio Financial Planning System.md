@@ -653,6 +653,7 @@ The following are explicitly out of scope:
 
 ### 11.3. V2 - Future Enhancements
 
+
 *   **Specific-ID Lot Selection**
 *   **Tax Reports (Form 8949)**
 *   **Goal Tracking vs. Targets**

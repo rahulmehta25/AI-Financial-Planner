@@ -72,6 +72,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return result
   }
 
+  const updateProfile = async (updates: any) => {
+    // Placeholder for profile updates
+    // In production, this would update the user profile in Supabase
+    if (user) {
+      setUser({ ...user, ...updates })
+    }
+    return { error: null }
+  }
+
   const value = {
     user,
     loading,
@@ -79,7 +88,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: !!user,
     signUp,
     signIn,
-    signOut
+    signOut,
+    logout: signOut,  // Alias for compatibility
+    login: signIn,    // Alias for compatibility
+    register: signUp, // Alias for compatibility
+    signup: signUp,   // Alias for compatibility
+    updateProfile,
+    token: null,      // Placeholder for token (Supabase handles this internally)
+    error: null,      // Placeholder for error state
+    clearError: () => {} // Placeholder for clearError function
   }
 
   return (
