@@ -67,16 +67,17 @@ function App() {
             <div className="App">
               <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<Index />} />
+              <Route path="/landing" element={<Index />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/supabase-test" element={<SupabaseTestPage />} />
-              
+
               {/* Protected Routes with Authenticated Layout */}
               <Route element={<ProtectedRoute><AuthenticatedLayout /></ProtectedRoute>}>
+                <Route path="/" element={<DashboardPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/realtime" element={<RealTimeDashboard />} />
                 <Route path="/portfolio" element={<PortfolioPage />} />
