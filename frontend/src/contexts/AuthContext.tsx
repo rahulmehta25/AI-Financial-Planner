@@ -47,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false)
     })
 
-    return () => subscription.data.subscription.unsubscribe()
+    return () => subscription.data?.subscription?.unsubscribe()
   }, [])
 
   const signUp = async (email: string, password: string, fullName?: string) => {

@@ -122,7 +122,7 @@ export const HSAPlanner: React.FC<HSAPlannerProps> = ({ accounts }) => {
     const projections: HSAProjection[] = [];
     let balance = inputs.currentBalance;
     const annualContribution = (inputs.monthlyContribution * 12) + inputs.employerContribution;
-    let medicalExpenses = inputs.currentHealthSpending;
+    const medicalExpenses = inputs.currentHealthSpending;
     const limits = getContributionLimits();
     
     for (let year = 0; year <= inputs.retirementAge - inputs.currentAge + 20; year++) {

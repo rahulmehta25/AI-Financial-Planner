@@ -115,27 +115,29 @@ export const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <RechartsPie>
-                <Pie
-                  data={SECTOR_ALLOCATION}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={95}
-                  paddingAngle={2}
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, value }) => `${name} ${value}%`}
-                  labelLine={false}
-                >
-                  {SECTOR_ALLOCATION.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => `${v}%`} />
-              </RechartsPie>
-            </ResponsiveContainer>
+            <div style={{ width: '100%', minHeight: 240 }}>
+              <ResponsiveContainer width="100%" height={240} minWidth={200}>
+                <RechartsPie>
+                  <Pie
+                    data={SECTOR_ALLOCATION}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={95}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, value }) => `${name} ${value}%`}
+                    labelLine={false}
+                  >
+                    {SECTOR_ALLOCATION.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => `${v}%`} />
+                </RechartsPie>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>

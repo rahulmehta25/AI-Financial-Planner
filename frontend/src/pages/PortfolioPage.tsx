@@ -117,14 +117,16 @@ const PortfolioPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <RechartsPie>
-                  <Pie data={SECTOR_ALLOCATION} cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={2} dataKey="value">
-                    {SECTOR_ALLOCATION.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => `${v}%`} />
-                </RechartsPie>
-              </ResponsiveContainer>
+              <div style={{ width: '100%', minHeight: 200 }}>
+                <ResponsiveContainer width="100%" height={200} minWidth={200}>
+                  <RechartsPie>
+                    <Pie data={SECTOR_ALLOCATION} cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={2} dataKey="value" nameKey="name">
+                      {SECTOR_ALLOCATION.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => `${v}%`} />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
               <div className="space-y-2 mt-2">
                 {SECTOR_ALLOCATION.map((s) => (
                   <div key={s.name} className="flex items-center justify-between text-sm">
