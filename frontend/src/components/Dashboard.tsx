@@ -1,256 +1,318 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, AlertCircle, BrainCircuit, LineChart, BarChart3, Sparkles, ArrowRight } from "lucide-react";
-
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Target, 
+  PieChart,
+  MessageCircle,
+  Bell,
+  Plus,
+  RefreshCw,
+  AlertCircle
+} from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { FinancialSimulation } from "./FinancialSimulation";
 import { userService, DashboardData } from "@/services/user";
+import { portfolioService } from "@/services/portfolio";
 
-// Premium dashboard sub-components
-import NetWorthCard from "./dashboard/NetWorthCard";
-import AssetAllocationDonut from "./dashboard/AssetAllocationDonut";
-import GoalProgressRings from "./dashboard/GoalProgressRings";
-import FinancialHealthScore from "./dashboard/FinancialHealthScore";
-import SavingsRateGauge from "./dashboard/SavingsRateGauge";
-import QuickAIInsight from "./dashboard/QuickAIInsight";
-import RecentActivity from "./dashboard/RecentActivity";
-
-/* ─── Skeleton Loader ─── */
-const DashboardSkeleton = () => (
-  <div id="dashboard-skeleton" className="space-y-6 animate-fade-in">
-    <div id="skeleton-header" className="flex items-center justify-between pt-6">
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-56 rounded-xl bg-navy-800" />
-        <Skeleton className="h-4 w-40 rounded-lg bg-navy-800" />
-      </div>
-      <Skeleton className="h-8 w-24 rounded-xl bg-navy-800" />
-    </div>
-    <div id="skeleton-top-row" className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <Skeleton className="h-56 rounded-2xl bg-navy-800 lg:col-span-2" />
-      <Skeleton className="h-56 rounded-2xl bg-navy-800" />
-    </div>
-    <div id="skeleton-mid-row" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-      {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-48 rounded-2xl bg-navy-800" />)}
-    </div>
-    <div id="skeleton-bottom-row" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <Skeleton className="h-64 rounded-2xl bg-navy-800" />
-      <Skeleton className="h-64 rounded-2xl bg-navy-800" />
-    </div>
-  </div>
-);
-
-/* ─── Quick Nav Cards ─── */
-const QUICK_LINKS = [
-  { label: "Monte Carlo",   desc: "Simulate outcomes",    icon: LineChart,    path: "/monte-carlo",         color: "blue"   },
-  { label: "AI Advisor",    desc: "Get personalized tips", icon: BrainCircuit, path: "/ai-advisor",          color: "violet" },
-  { label: "Analytics",     desc: "Deep dive reports",    icon: BarChart3,    path: "/analytics",           color: "emerald"},
-];
-
-const colorMap: Record<string, { bg: string; border: string; text: string }> = {
-  blue:   { bg: "bg-blue-500/8",   border: "border-blue-500/20",   text: "text-blue-400"   },
-  violet: { bg: "bg-violet-500/8", border: "border-violet-500/20", text: "text-violet-400" },
-  emerald:{ bg: "bg-emerald-500/8",border: "border-emerald-500/20",text: "text-emerald-400"},
-};
-
-/* ─── Main Dashboard ─── */
 export const Dashboard = () => {
   const { user, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
   const { toast } = useToast();
-
+  
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [isRefreshing, setIsRefreshing]   = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async (refresh = false) => {
+  const fetchDashboardData = async (showToast = false) => {
     try {
-      if (!dashboardData) setIsLoading(true);
-      setIsRefreshing(refresh);
+      setIsLoading(!dashboardData); // Only show loading on first load
+      setIsRefreshing(showToast);
       setError(null);
+
       const data = await userService.getDashboardData();
       setDashboardData(data);
-      if (refresh) toast({ title: "Dashboard refreshed", description: "All data is up to date." });
+
+      if (showToast) {
+        toast({
+          title: "Dashboard updated",
+          description: "Your dashboard data has been refreshed successfully.",
+        });
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to load dashboard data.");
-      if (refresh) toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+      console.error('Failed to fetch dashboard data:', err);
+      const errorMessage = err.message || 'Failed to load dashboard data. Please try again.';
+      setError(errorMessage);
+      
+      if (showToast) {
+        toast({
+          title: "Refresh failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   };
 
-  useEffect(() => { if (isAuthenticated) fetchData(); }, [isAuthenticated]);
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDashboardData();
+    }
+  }, [isAuthenticated]);
 
-  if (isLoading) return <DashboardSkeleton />;
+  const handleRefresh = () => {
+    fetchDashboardData(true);
+  };
 
-  if (error && !dashboardData) {
+  // Show loading state
+  if (isLoading) {
     return (
-      <div id="dashboard-error" className="pt-6">
-        <Alert variant="destructive" className="glass border-red-500/30 bg-red-500/5">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isRefreshing}
-              className="ml-4 border-red-500/30 hover:bg-red-500/10">
-              {isRefreshing ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Retry"}
-            </Button>
-          </AlertDescription>
-        </Alert>
+      <div>
+        <div>
+          <div className="mb-8">
+            <Skeleton className="h-10 w-64 mb-2" />
+            <Skeleton className="h-6 w-80" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="glass">
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-24 mb-2" />
+                  <Skeleton className="h-4 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
-  const portfolio = dashboardData?.portfolioSummary;
-  const firstName = dashboardData?.user?.firstName || user?.firstName || "there";
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  // Show error state
+  if (error && !dashboardData) {
+    return (
+      <div>
+        <div>
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Retry"
+                )}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div id="dashboard-root" className="space-y-6 pt-5 pb-10 page-enter">
-
-      {/* ─── Header ─── */}
-      <div id="dashboard-header" className="flex items-start justify-between">
-        <div id="dashboard-greeting">
-          <h1 id="dashboard-title" className="text-2xl font-bold text-foreground tracking-tight">
-            {greeting}, <span className="text-gradient-primary">{firstName}</span>
-          </h1>
-          <p id="dashboard-subtitle" className="text-sm text-muted-foreground mt-0.5">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          </p>
-        </div>
-
-        <div id="dashboard-header-actions" className="flex items-center gap-2">
-          <Button
-            id="dashboard-refresh-btn"
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchData(true)}
-            disabled={isRefreshing}
-            className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.06] border border-white/10 gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button
-            id="dashboard-ai-btn"
-            size="sm"
-            onClick={() => navigate("/ai-advisor")}
-            className="h-8 px-3 text-xs gap-1.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-0 shadow-glow-blue"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Ask AI
-          </Button>
-        </div>
-      </div>
-
-      {/* ─── ROW 1: Net Worth (wide) + Asset Allocation ─── */}
-      <div id="dashboard-row-1" className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Net Worth spans 2 cols */}
-        <div id="dashboard-net-worth-wrapper" className="lg:col-span-2 animate-slide-in-bottom">
-          <NetWorthCard
-            totalValue={portfolio?.totalValue ?? 485320}
-            dayChange={portfolio?.dayChange ?? 2840}
-            dayChangePercent={portfolio?.dayChangePercentage ?? 0.59}
-            totalGain={portfolio?.totalGain ?? 85320}
-            totalGainPercent={portfolio?.totalGainPercentage ?? 21.4}
-          />
-        </div>
-
-        {/* Asset Allocation donut */}
-        <div id="dashboard-allocation-wrapper" className="animate-slide-in-bottom stagger-2">
-          <AssetAllocationDonut />
-        </div>
-      </div>
-
-      {/* ─── ROW 2: Goals | Health Score | Savings | AI Insight ─── */}
-      <div id="dashboard-row-2" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        <div id="dashboard-goals-wrapper" className="animate-scale-in stagger-1">
-          <GoalProgressRings />
-        </div>
-        <div id="dashboard-health-wrapper" className="animate-scale-in stagger-2">
-          <FinancialHealthScore score={82} />
-        </div>
-        <div id="dashboard-savings-wrapper" className="animate-scale-in stagger-3">
-          <SavingsRateGauge savingsRate={22} monthlySavings={2300} monthlyIncome={9200} />
-        </div>
-        <div id="dashboard-ai-insight-wrapper" className="animate-scale-in stagger-4 flex flex-col gap-4">
-          <QuickAIInsight />
-
-          {/* Quick links */}
-          <div id="dashboard-quick-links" className="space-y-2">
-            {QUICK_LINKS.map((link) => {
-              const Icon = link.icon;
-              const c = colorMap[link.color];
-              return (
-                <button
-                  key={link.path}
-                  id={`quick-link-${link.label.toLowerCase().replace(/\s/g, "-")}`}
-                  onClick={() => navigate(link.path)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border ${c.bg} ${c.border} hover:opacity-90 transition-all text-left group`}
-                >
-                  <div className={`w-7 h-7 rounded-lg ${c.bg} ${c.border} border flex items-center justify-center flex-shrink-0`}>
-                    <Icon className={`w-3.5 h-3.5 ${c.text}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-xs font-semibold ${c.text}`}>{link.label}</div>
-                    <div className="text-[10px] text-muted-foreground">{link.desc}</div>
-                  </div>
-                  <ArrowRight className={`w-3 h-3 ${c.text} opacity-0 group-hover:opacity-100 transition-opacity`} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── ROW 3: Recent Activity ─── */}
-      <div id="dashboard-row-3" className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div id="dashboard-activity-wrapper" className="animate-slide-in-bottom stagger-1">
-          <RecentActivity transactions={dashboardData?.recentTransactions} />
-        </div>
-
-        {/* Portfolio performance mini card */}
-        <div id="dashboard-performance-wrapper" className="animate-slide-in-bottom stagger-2">
-          <div id="dashboard-performance-card" className="metric-card h-full">
-            <div id="performance-header" className="mb-5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-1">Performance</p>
-              <h3 className="text-lg font-bold text-foreground">Portfolio Summary</h3>
+    <div>
+      <div>
+        {/* Header */}
+        <div className="mb-8 animate-slide-in-bottom">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">
+                Welcome back, {dashboardData?.user.firstName || user?.firstName || 'there'}!
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                Here's what's happening with your finances today.
+              </p>
             </div>
-
-            <div id="performance-stats" className="space-y-4">
-              {[
-                { label: "Total Portfolio Value", value: `$${(portfolio?.totalValue ?? 485320).toLocaleString()}`,     color: "text-foreground"   },
-                { label: "Total Gain / Loss",     value: `+$${(portfolio?.totalGain ?? 85320).toLocaleString()}`,      color: "text-positive"    },
-                { label: "Day Change",            value: `+$${(portfolio?.dayChange ?? 2840).toLocaleString()} (+0.59%)`, color: "text-positive" },
-                { label: "Annualized Return",     value: "9.4%",                                                        color: "text-blue-300"    },
-                { label: "Sharpe Ratio",          value: "1.42",                                                        color: "text-gold-light"  },
-                { label: "Beta",                  value: "0.87",                                                        color: "text-muted-foreground" },
-              ].map((stat, i) => (
-                <div key={stat.label} id={`perf-stat-${i}`} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
-                  <span className="text-sm text-muted-foreground">{stat.label}</span>
-                  <span className={`text-sm font-bold financial-number ${stat.color}`}>{stat.value}</span>
-                </div>
-              ))}
-            </div>
-
             <Button
-              id="view-portfolio-btn"
               variant="outline"
               size="sm"
-              onClick={() => navigate("/portfolio")}
-              className="w-full mt-5 h-8 text-xs border-white/10 hover:bg-white/[0.04] hover:border-white/20 gap-1.5"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="glass border-white/20"
             >
-              View Full Portfolio <ArrowRight className="w-3 h-3" />
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
           </div>
         </div>
+
+        {/* Portfolio Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="glass hover-lift card-3d animate-scale-in">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Portfolio</CardTitle>
+              <DollarSign className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold gradient-primary bg-clip-text text-transparent">
+                ${dashboardData?.portfolioSummary?.totalValue?.toLocaleString() || '0'}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                {dashboardData?.portfolioSummary?.dayChange !== undefined && dashboardData.portfolioSummary.dayChange >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-success" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-error" />
+                )}
+                <span className={dashboardData?.portfolioSummary?.dayChange !== undefined && dashboardData.portfolioSummary.dayChange >= 0 ? "text-success font-medium" : "text-error font-medium"}>
+                  {dashboardData?.portfolioSummary?.dayChange !== undefined ? 
+                    `${dashboardData.portfolioSummary.dayChange >= 0 ? '+' : ''}$${Math.abs(dashboardData.portfolioSummary.dayChange).toLocaleString()} (${dashboardData.portfolioSummary.dayChangePercentage >= 0 ? '+' : ''}${dashboardData.portfolioSummary.dayChangePercentage.toFixed(2)}%)` : 
+                    '$0 (0.00%)'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Today's performance</p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass hover-lift card-3d animate-scale-in" style={{ animationDelay: '0.1s' }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Goals</CardTitle>
+              <Target className="h-4 w-4 text-success" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-success">{dashboardData?.goals?.length || 0}</div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {dashboardData?.goals?.length ? 
+                  `${Math.round(dashboardData.goals.reduce((acc, goal) => acc + goal.progress, 0) / dashboardData.goals.length)}% average progress` :
+                  '0% average progress'
+                }
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass hover-lift card-3d animate-scale-in" style={{ animationDelay: '0.2s' }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">AI Insights</CardTitle>
+              <MessageCircle className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-muted-foreground">
+                "Consider increasing your emergency fund allocation by 5% this month."
+              </div>
+              <Button variant="link" className="px-0 mt-2 text-primary">
+                View all insights →
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Financial Simulation */}
+        <div className="mb-8">
+          <FinancialSimulation />
+        </div>
+
+        {/* Goals and Chart Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Financial Goals */}
+          <Card className="glass hover-lift animate-slide-in-right">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-success" />
+                Financial Goals
+              </CardTitle>
+              <Button variant="outline" size="sm" className="glass border-white/20">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Goal
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {dashboardData?.goals?.map((goal, index) => (
+                <div key={goal.name} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h4 className="font-medium">{goal.name}</h4>
+                    <span className="text-sm text-muted-foreground">
+                      ${goal.currentAmount?.toLocaleString() || '0'} / ${goal.targetAmount?.toLocaleString() || '0'}
+                    </span>
+                  </div>
+                  <Progress value={goal.progress} className="h-2" />
+                  <div className="flex justify-between items-center text-xs text-muted-foreground">
+                    <span>{goal.progress}% complete</span>
+                    <span>${((goal.targetAmount || 0) - (goal.currentAmount || 0)).toLocaleString()} remaining</span>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Portfolio Chart Placeholder */}
+          <Card className="glass hover-lift animate-slide-in-right" style={{ animationDelay: '0.1s' }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChart className="h-5 w-5 text-primary" />
+                Asset Allocation
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 bg-gradient-to-br from-primary/10 to-success/10 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <PieChart className="h-12 w-12 text-primary mx-auto mb-4" />
+                  <p className="text-muted-foreground">Interactive chart coming soon</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Stocks: 60% • Bonds: 25% • Cash: 15%
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Activity */}
+        <Card className="glass hover-lift animate-slide-in-bottom">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-warning" />
+              Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {dashboardData?.recentTransactions?.map((transaction, index) => (
+                <div key={index} className="flex items-center justify-between p-4 rounded-lg bg-card/50 hover:bg-card/80 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      transaction.type === 'buy' || transaction.type === 'dividend' ? 'bg-success/20' : 'bg-error/20'
+                    }`}>
+                      {transaction.type === 'buy' || transaction.type === 'dividend' ? 
+                        <TrendingUp className="h-5 w-5 text-success" /> : 
+                        <TrendingDown className="h-5 w-5 text-error" />
+                      }
+                    </div>
+                    <div>
+                      <p className="font-medium">{transaction.symbol || transaction.type}</p>
+                      <p className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className={`font-semibold ${
+                    transaction.type === 'buy' || transaction.type === 'dividend' ? 'text-success' : 'text-error'
+                  }`}>
+                    {transaction.type === 'sell' || transaction.type === 'fee' ? '-' : '+'}${Math.abs(transaction.amount).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 };
-
-export default Dashboard;

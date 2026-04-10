@@ -1,66 +1,40 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { toast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import {
-  Play,
-  Download,
-  GitCompare,
+import React, { useState, useCallback, useEffect } from 'react';
+import { toast } from '@/hooks/use-toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Play, 
+  StopCircle, 
+  Download, 
+  GitCompare, 
+  History,
   AlertTriangle,
   CheckCircle,
   Info,
   TrendingUp,
-  Calculator,
-  BarChart3,
-  Zap,
-  Target,
-  Shield,
-  Activity,
-} from "lucide-react";
+  Calculator
+} from 'lucide-react';
 
-import SimulationControls, { SimulationParameters } from "@/components/simulation/SimulationControls";
-import SimulationResults from "@/components/simulation/SimulationResults";
-import ProbabilityChart, { SimulationResult } from "@/components/simulation/ProbabilityChart";
-import { monteCarloService, MonteCarloRequest, MonteCarloResponse, ScenarioComparison } from "@/services/monteCarlo";
+// Import our components
+import SimulationControls, { SimulationParameters } from '@/components/simulation/SimulationControls';
+import SimulationResults from '@/components/simulation/SimulationResults';
+import ProbabilityChart, { SimulationResult } from '@/components/simulation/ProbabilityChart';
 
-/* ─── Formatters ─── */
-const fmt = (v: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
-const fmtK = (v: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(v);
+// Import service
+import { 
+  monteCarloService, 
+  MonteCarloRequest, 
+  MonteCarloResponse,
+  ScenarioComparison 
+} from '@/services/monteCarlo';
 
-/* ─── Metric card for results ─── */
-const ResultMetric: React.FC<{ label: string; value: string; sub?: string; color?: string; icon?: React.ElementType }> = ({
-  label, value, sub, color = "text-foreground", icon: Icon,
-}) => (
-  <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-1">
-    {Icon && <Icon className={`w-4 h-4 mb-1 ${color}`} />}
-    <div className={`text-lg font-bold financial-number ${color}`}>{value}</div>
-    <div className="text-xs text-muted-foreground">{label}</div>
-    {sub && <div className="text-[10px] text-muted-foreground/60">{sub}</div>}
-  </div>
-);
-
-/* ─── Preset buttons ─── */
-const PRESETS = [
-  { key: "stocks",     label: "Stocks",     desc: "High growth",      color: "blue"   },
-  { key: "bonds",      label: "Bonds",      desc: "Stable income",    color: "emerald"},
-  { key: "mixed",      label: "Balanced",   desc: "60/40 mix",        color: "gold"   },
-  { key: "aggressive", label: "Aggressive", desc: "Max growth",       color: "violet" },
-];
-
-const PRESET_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  blue:   { bg: "bg-blue-500/8",   border: "border-blue-500/20",   text: "text-blue-300"   },
-  emerald:{ bg: "bg-emerald-500/8",border: "border-emerald-500/20",text: "text-emerald-300"},
-  gold:   { bg: "bg-amber-500/8",  border: "border-amber-500/20",  text: "text-amber-300"  },
-  violet: { bg: "bg-violet-500/8", border: "border-violet-500/20", text: "text-violet-300" },
-};
-
-/* ─── Main ─── */
 const MonteCarloSimulation: React.FC = () => {
+  // Simulation state
   const [parameters, setParameters] = useState<SimulationParameters>({
     timeHorizon: 30,
     initialInvestment: 100000,
@@ -75,360 +49,438 @@ const MonteCarloSimulation: React.FC = () => {
     enableRegimeSwitching: false,
     regimeDetection: false,
     targetAmount: undefined,
-    successThreshold: 0.95,
+    successThreshold: 0.95
   });
 
-  const [isRunning, setIsRunning]           = useState(false);
-  const [simulationId, setSimulationId]     = useState<string | null>(null);
-  const [progress, setProgress]             = useState(0);
-  const [results, setResults]               = useState<SimulationResult | null>(null);
-  const [error, setError]                   = useState<string | null>(null);
-  const [warnings, setWarnings]             = useState<string[]>([]);
-  const [scenarios, setScenarios]           = useState<Array<{ name: string; parameters: SimulationParameters; results?: SimulationResult }>>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState<SimulationResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
+  // Scenario comparison state
+  const [scenarios, setScenarios] = useState<Array<{
+    name: string;
+    parameters: SimulationParameters;
+    results?: SimulationResult;
+  }>>([]);
+  const [comparisonResults, setComparisonResults] = useState<ScenarioComparison | null>(null);
+
+  // Validate parameters when they change
   useEffect(() => {
-    const v = monteCarloService.validateParameters(parameters);
-    setWarnings(v.warnings);
-    setError(v.isValid ? null : v.errors.join(", "));
+    const validation = monteCarloService.validateParameters(parameters);
+    setWarnings(validation.warnings);
+    if (!validation.isValid) {
+      setError(validation.errors.join(', '));
+    } else {
+      setError(null);
+    }
   }, [parameters]);
 
-  const transformResults = useCallback((r: MonteCarloResponse): SimulationResult => ({
-    finalValues: r.final_values,
-    paths: r.paths,
-    timestamps: r.timestamps,
-    riskMetrics: r.risk_metrics,
-    successRate: parameters.targetAmount
-      ? r.final_values.filter(v => v >= parameters.targetAmount!).length / r.final_values.length
-      : undefined,
-    confidenceIntervals: r.confidence_intervals,
-  }), [parameters.targetAmount]);
+  // Transform backend response to frontend format
+  const transformResults = useCallback((response: MonteCarloResponse): SimulationResult => {
+    const successRate = parameters.targetAmount 
+      ? response.final_values.filter(value => value >= parameters.targetAmount!).length / response.final_values.length
+      : undefined;
 
-  const handleRun = useCallback(async () => {
+    return {
+      finalValues: response.final_values,
+      paths: response.paths,
+      timestamps: response.timestamps,
+      riskMetrics: response.risk_metrics,
+      successRate,
+      confidenceIntervals: response.confidence_intervals
+    };
+  }, [parameters.targetAmount]);
+
+  // Run simulation
+  const handleRunSimulation = useCallback(async () => {
     try {
-      setIsRunning(true); setError(null); setProgress(0);
-      const v = monteCarloService.validateParameters(parameters);
-      if (!v.isValid) throw new Error(v.errors.join(", "));
+      setIsRunning(true);
+      setError(null);
+      setProgress(0);
 
+      // Validate parameters
+      const validation = monteCarloService.validateParameters(parameters);
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      // Show warnings
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => {
+          toast({
+            title: "Parameter Warning",
+            description: warning,
+            variant: "default"
+          });
+        });
+      }
+
+      // Simulate progress for long-running simulations
       const progressInterval = setInterval(() => {
-        setProgress(prev => (prev >= 90 ? prev : prev + Math.random() * 12));
-      }, 400);
+        setProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 10;
+        });
+      }, 500);
 
-      toast({ title: "Simulation Started", description: `Running ${parameters.numSimulations.toLocaleString()} paths…` });
+      toast({
+        title: "Simulation Started",
+        description: `Running ${parameters.numSimulations.toLocaleString()} Monte Carlo simulations...`
+      });
 
-      const response = await monteCarloService.runSimulation(parameters as MonteCarloRequest);
+      const request: MonteCarloRequest = parameters;
+      const response = await monteCarloService.runSimulation(request);
+      
       clearInterval(progressInterval);
       setProgress(100);
-      setResults(transformResults(response));
+      
+      const transformedResults = transformResults(response);
+      setResults(transformedResults);
       setSimulationId(response.simulation_id);
-      toast({ title: "Complete", description: `Finished in ${response.metadata.computation_time.toFixed(2)}s` });
+
+      toast({
+        title: "Simulation Complete",
+        description: `Analysis completed in ${response.metadata.computation_time.toFixed(2)} seconds`
+      });
+
     } catch (err: any) {
       setError(err.message);
-      toast({ title: "Simulation Failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Simulation Failed",
+        description: err.message,
+        variant: "destructive"
+      });
     } finally {
       setIsRunning(false);
     }
   }, [parameters, transformResults]);
 
-  const handleExport = useCallback(async () => {
+  // Export results
+  const handleExportResults = useCallback(async () => {
     if (!simulationId) return;
+
     try {
-      const blob = await monteCarloService.exportResults(simulationId, "csv");
+      const blob = await monteCarloService.exportResults(simulationId, 'csv');
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `mc-${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
-      toast({ title: "Exported", description: "Results downloaded as CSV." });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `monte-carlo-results-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export Complete",
+        description: "Simulation results exported successfully"
+      });
     } catch (err: any) {
-      toast({ title: "Export Failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Export Failed",
+        description: err.message,
+        variant: "destructive"
+      });
     }
   }, [simulationId]);
 
-  const handlePreset = useCallback((key: string) => {
-    const suggested = monteCarloService.getSuggestedParameters(key as any);
+  // Add to scenario comparison
+  const handleAddToComparison = useCallback(() => {
+    if (!results) return;
+
+    const scenarioName = `Scenario ${scenarios.length + 1}`;
+    setScenarios(prev => [...prev, {
+      name: scenarioName,
+      parameters: { ...parameters },
+      results
+    }]);
+
+    toast({
+      title: "Scenario Added",
+      description: `Added ${scenarioName} to comparison`
+    });
+  }, [parameters, results, scenarios.length]);
+
+  // Load preset parameters
+  const handleLoadPreset = useCallback((assetClass: 'stocks' | 'bonds' | 'mixed' | 'aggressive') => {
+    const suggested = monteCarloService.getSuggestedParameters(assetClass);
     setParameters(prev => ({ ...prev, ...suggested }));
-    toast({ title: "Preset Loaded", description: `Loaded ${key} parameters.` });
+    
+    toast({
+      title: "Preset Loaded",
+      description: `Loaded ${assetClass} asset class parameters`
+    });
   }, []);
 
-  const handleAddScenario = useCallback(() => {
-    if (!results) return;
-    setScenarios(prev => [...prev, { name: `Scenario ${prev.length + 1}`, parameters: { ...parameters }, results }]);
-    toast({ title: "Scenario Added", description: `Scenario ${scenarios.length + 1} added to comparison.` });
-  }, [results, parameters, scenarios.length]);
-
-  /* Derived summary stats */
-  const meanValue    = results ? results.finalValues.reduce((a, b) => a + b, 0) / results.finalValues.length : 0;
-  const medianValue  = results ? results.finalValues.sort((a, b) => a - b)[Math.floor(results.finalValues.length * 0.5)] : 0;
-  const worstCase    = results ? results.finalValues[Math.floor(results.finalValues.length * 0.05)] : 0;
-  const bestCase     = results ? results.finalValues[Math.floor(results.finalValues.length * 0.95)] : 0;
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
 
   return (
-    <div id="monte-carlo-page" className="page-enter pt-4 space-y-5 pb-10">
-
-      {/* ─── Header ─── */}
-      <div id="mc-header" className="flex items-start justify-between">
-        <div id="mc-title-group">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
-              <Calculator className="w-4 h-4 text-blue-400" />
-            </div>
-            <h1 id="mc-title" className="text-xl font-bold text-foreground">Monte Carlo Simulation</h1>
-            <Badge variant="outline" className="bg-blue-500/10 border-blue-500/25 text-blue-300 text-[10px]">
-              Browser-Native
-            </Badge>
-          </div>
-          <p id="mc-subtitle" className="text-sm text-muted-foreground">
-            Statistical portfolio simulation with geometric Brownian motion & jump-diffusion modeling
+    <div className="container mx-auto p-6 space-y-6" id="monte-carlo-simulation-page">
+      {/* Header */}
+      <div className="flex items-center justify-between" id="page-header">
+        <div id="page-title-section">
+          <h1 className="text-3xl font-bold flex items-center gap-3" id="page-title">
+            <Calculator className="h-8 w-8 text-blue-600" />
+            Monte Carlo Simulation
+          </h1>
+          <p className="text-muted-foreground mt-2" id="page-description">
+            Advanced portfolio simulation with statistical analysis and risk modeling
           </p>
         </div>
 
-        <div id="mc-header-actions" className="flex items-center gap-2">
-          {/* Presets */}
-          <div id="mc-presets" className="flex gap-1.5">
-            {PRESETS.map(p => {
-              const c = PRESET_COLORS[p.color];
-              return (
-                <button
-                  key={p.key}
-                  id={`preset-${p.key}`}
-                  onClick={() => handlePreset(p.key)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all hover:opacity-90 ${c.bg} ${c.border} ${c.text}`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-
+        <div className="flex gap-2" id="page-actions">
+          <Button 
+            variant="outline" 
+            onClick={() => handleLoadPreset('mixed')}
+            id="load-preset-button"
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Load Preset
+          </Button>
           {results && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleAddScenario}
-                className="h-8 px-3 text-xs border-white/10 hover:bg-white/[0.04] gap-1.5">
-                <GitCompare className="w-3.5 h-3.5" /> Save Scenario
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExport}
-                className="h-8 px-3 text-xs border-white/10 hover:bg-white/[0.04] gap-1.5">
-                <Download className="w-3.5 h-3.5" /> Export CSV
-              </Button>
-            </>
+            <Button 
+              variant="outline" 
+              onClick={handleAddToComparison}
+              id="add-to-comparison-button"
+            >
+              <GitCompare className="h-4 w-4 mr-2" />
+              Add to Comparison
+            </Button>
           )}
         </div>
       </div>
 
-      {/* ─── Alerts ─── */}
-      {(error || warnings.length > 0) && (
-        <div id="mc-alerts" className="space-y-2">
+      {/* Status and Warnings */}
+      {(error || warnings.length > 0 || isRunning) && (
+        <div className="space-y-2" id="status-section">
           {error && (
-            <Alert variant="destructive" id="mc-error" className="glass border-red-500/30 bg-red-500/5">
+            <Alert variant="destructive" id="error-alert">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          {warnings.map((w, i) => (
-            <Alert key={i} id={`mc-warning-${i}`} className="glass border-amber-500/30 bg-amber-500/5">
-              <Info className="h-4 w-4 text-amber-400" />
-              <AlertDescription className="text-amber-300">{w}</AlertDescription>
+          
+          {warnings.map((warning, index) => (
+            <Alert key={index} id={`warning-alert-${index}`}>
+              <Info className="h-4 w-4" />
+              <AlertDescription>{warning}</AlertDescription>
             </Alert>
           ))}
+          
+          {isRunning && (
+            <Alert id="running-alert">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="flex items-center justify-between" id="progress-content">
+                  <span>Running simulation...</span>
+                  <Badge variant="outline" id="progress-badge">{progress.toFixed(0)}%</Badge>
+                </div>
+                <Progress value={progress} className="mt-2" id="simulation-progress" />
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
 
-      {/* ─── Progress ─── */}
-      {isRunning && (
-        <div id="mc-progress-bar" className="glass-card rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-blue-400 animate-pulse" />
-              <span className="text-sm font-medium text-foreground">Running {parameters.numSimulations.toLocaleString()} simulations…</span>
-            </div>
-            <Badge variant="outline" className="bg-blue-500/10 border-blue-500/25 text-blue-300 text-xs">
-              {progress.toFixed(0)}%
-            </Badge>
-          </div>
-          <Progress value={progress} className="h-1.5" />
-        </div>
-      )}
-
-      {/* ─── Main two-column layout ─── */}
-      <div id="mc-main-layout" className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-5">
-
-        {/* Controls */}
-        <div id="mc-controls-col">
-          <div className="glass-card rounded-2xl overflow-hidden sticky top-5">
-            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span className="text-sm font-semibold text-foreground">Parameters</span>
-              </div>
-              <Button
-                id="mc-run-btn"
-                size="sm"
-                onClick={handleRun}
-                disabled={isRunning || !!error}
-                className="h-8 px-4 text-xs gap-1.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-0 shadow-glow-blue disabled:opacity-50"
-              >
-                {isRunning ? (
-                  <><Activity className="w-3.5 h-3.5 animate-spin" /> Running…</>
-                ) : (
-                  <><Play className="w-3.5 h-3.5" /> Run Simulation</>
-                )}
-              </Button>
-            </div>
-            <div className="p-4">
-              <SimulationControls
-                parameters={parameters}
-                onParametersChange={setParameters}
-                onRunSimulation={handleRun}
-                isRunning={isRunning}
-              />
-            </div>
-          </div>
+      {/* Main Content */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" id="main-content-grid">
+        {/* Controls Panel */}
+        <div className="xl:col-span-1" id="controls-panel">
+          <SimulationControls
+            parameters={parameters}
+            onParametersChange={setParameters}
+            onRunSimulation={handleRunSimulation}
+            isRunning={isRunning}
+            className="sticky top-6"
+          />
         </div>
 
-        {/* Results */}
-        <div id="mc-results-col" className="space-y-5">
-
-          {/* Summary metrics */}
-          {results ? (
-            <>
-              <div id="mc-summary-metrics" className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <ResultMetric label="Expected Value"    value={fmtK(meanValue)}   icon={TrendingUp} color="text-blue-300"   />
-                <ResultMetric label="Median Outcome"    value={fmtK(medianValue)} icon={BarChart3}  color="text-foreground"  />
-                <ResultMetric label="5th Percentile"    value={fmtK(worstCase)}   icon={Shield}     color="text-red-400"     sub="Bear case" />
-                <ResultMetric
-                  label={results.successRate != null ? "Success Rate" : "95th Pctile"}
-                  value={results.successRate != null ? `${(results.successRate * 100).toFixed(1)}%` : fmtK(bestCase)}
-                  icon={Target}
-                  color={results.successRate != null && results.successRate >= 0.7 ? "text-positive" : "text-amber-300"}
-                />
-              </div>
-
-              {/* Risk metrics row */}
-              <div id="mc-risk-metrics" className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {Object.entries(results.riskMetrics).slice(0, 6).map(([key, val], i) => (
-                  <div key={key} id={`risk-metric-${i}`} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <div className="text-xs text-muted-foreground mb-1">{key}</div>
-                    <div className="text-sm font-bold financial-number text-foreground">
-                      {typeof val === "number"
-                        ? key.toLowerCase().includes("ratio") || key.toLowerCase().includes("beta") || key.toLowerCase().includes("skew") || key.toLowerCase().includes("kurt")
-                          ? val.toFixed(2)
-                          : fmt(val)
-                        : val}
+        {/* Results Panel */}
+        <div className="xl:col-span-2 space-y-6" id="results-panel">
+          {/* Quick Stats */}
+          {results && (
+            <Card id="quick-stats-card">
+              <CardHeader id="quick-stats-header">
+                <CardTitle className="flex items-center gap-2" id="quick-stats-title">
+                  <TrendingUp className="h-5 w-5" />
+                  Simulation Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent id="quick-stats-content">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="quick-stats-grid">
+                  <div className="text-center" id="mean-outcome">
+                    <div className="text-sm text-muted-foreground">Expected Value</div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(results.finalValues.reduce((a, b) => a + b, 0) / results.finalValues.length)}
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            /* Empty state */
-            <div id="mc-empty-state" className="glass-card rounded-2xl p-12 flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
-                <Calculator className="w-8 h-8 text-blue-400" />
-              </div>
-              <h3 className="text-base font-semibold text-foreground mb-2">Ready to Simulate</h3>
-              <p className="text-sm text-muted-foreground max-w-sm mb-5">
-                Configure your parameters in the left panel, choose a preset, then click Run Simulation to generate your Monte Carlo analysis.
-              </p>
-              <div id="mc-empty-presets" className="flex gap-2 flex-wrap justify-center">
-                {PRESETS.map(p => {
-                  const c = PRESET_COLORS[p.color];
-                  return (
-                    <button key={p.key} id={`empty-preset-${p.key}`} onClick={() => handlePreset(p.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${c.bg} ${c.border} ${c.text} transition-all hover:opacity-90`}>
-                      {p.label} — {p.desc}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Confidence band chart */}
-          {results && (
-            <div id="mc-confidence-chart" className="glass-card rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">Percentile Fan Chart</h3>
-                  <p className="text-xs text-muted-foreground">Distribution of outcomes across all simulations</p>
-                </div>
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                  {[
-                    { label: "90th pct", color: "hsl(214 100% 57% / 0.15)" },
-                    { label: "Median",   color: "hsl(43 96% 54%)" },
-                    { label: "10th pct", color: "hsl(214 100% 57% / 0.45)" },
-                  ].map(l => (
-                    <div key={l.label} className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-sm" style={{ background: l.color }} />
-                      {l.label}
+                  <div className="text-center" id="success-rate">
+                    <div className="text-sm text-muted-foreground">Success Rate</div>
+                    <div className="text-lg font-semibold">
+                      {results.successRate ? `${(results.successRate * 100).toFixed(1)}%` : 'N/A'}
                     </div>
-                  ))}
+                  </div>
+                  <div className="text-center" id="var-metric">
+                    <div className="text-sm text-muted-foreground">VaR (95%)</div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(results.riskMetrics['Value at Risk (95%)'])}
+                    </div>
+                  </div>
+                  <div className="text-center" id="sharpe-ratio">
+                    <div className="text-sm text-muted-foreground">Sharpe Ratio</div>
+                    <div className="text-lg font-semibold">
+                      {results.riskMetrics['Sharpe Ratio'].toFixed(2)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <SimulationResults
-                results={results}
-                targetAmount={parameters.targetAmount}
-                onExportResults={simulationId ? handleExport : undefined}
-              />
-            </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Probability chart */}
-          {results && (
-            <div id="mc-probability-chart" className="glass-card rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">Outcome Probability Distribution</h3>
-              <ProbabilityChart results={results} targetAmount={parameters.targetAmount} />
-            </div>
-          )}
+          {/* Simulation Results */}
+          <SimulationResults 
+            results={results}
+            targetAmount={parameters.targetAmount}
+            onExportResults={simulationId ? handleExportResults : undefined}
+          />
+
+          {/* Probability Analysis */}
+          <ProbabilityChart 
+            results={results}
+            targetAmount={parameters.targetAmount}
+          />
         </div>
       </div>
 
-      {/* ─── Scenario comparison ─── */}
+      {/* Scenario Comparison */}
       {scenarios.length > 0 && (
         <>
-          <Separator className="border-white/[0.06]" />
-          <div id="mc-scenarios" className="glass-card rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <GitCompare className="w-4 h-4 text-blue-400" />
-              <h3 className="text-sm font-semibold text-foreground">Scenario Comparison</h3>
-              <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-300 text-[10px] ml-auto">
-                {scenarios.length} saved
-              </Badge>
-            </div>
-            <div id="scenarios-grid" className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {scenarios.map((sc, i) => (
-                <div key={i} id={`scenario-${i}`} className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-foreground">{sc.name}</span>
-                    <button
-                      id={`remove-scenario-${i}`}
-                      onClick={() => setScenarios(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-[10px] text-muted-foreground hover:text-red-400 transition-colors"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Initial</span><span className="font-medium financial-number">{fmt(sc.parameters.initialInvestment)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Return</span><span className="font-medium">{(sc.parameters.expectedReturn * 100).toFixed(1)}%</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Volatility</span><span className="font-medium">{(sc.parameters.volatility * 100).toFixed(1)}%</span></div>
-                    {sc.results && (
-                      <>
-                        <Separator className="border-white/[0.06] my-1.5" />
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Expected</span>
-                          <span className="font-bold text-positive financial-number">
-                            {fmtK(sc.results.finalValues.reduce((a, b) => a + b, 0) / sc.results.finalValues.length)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
+          <Separator id="scenario-separator" />
+          <Card id="scenario-comparison-card">
+            <CardHeader id="scenario-comparison-header">
+              <CardTitle className="flex items-center gap-2" id="scenario-comparison-title">
+                <GitCompare className="h-5 w-5" />
+                Scenario Comparison
+              </CardTitle>
+              <CardDescription id="scenario-comparison-description">
+                Compare different simulation scenarios side by side
+              </CardDescription>
+            </CardHeader>
+            <CardContent id="scenario-comparison-content">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="scenarios-grid">
+                {scenarios.map((scenario, index) => (
+                  <Card key={index} className="p-4" id={`scenario-card-${index}`}>
+                    <div className="flex items-center justify-between mb-2" id={`scenario-header-${index}`}>
+                      <h4 className="font-semibold">{scenario.name}</h4>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setScenarios(prev => prev.filter((_, i) => i !== index))}
+                        id={`remove-scenario-${index}`}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm" id={`scenario-details-${index}`}>
+                      <div className="flex justify-between" id={`scenario-investment-${index}`}>
+                        <span>Initial Investment:</span>
+                        <span>{formatCurrency(scenario.parameters.initialInvestment)}</span>
+                      </div>
+                      <div className="flex justify-between" id={`scenario-return-${index}`}>
+                        <span>Expected Return:</span>
+                        <span>{(scenario.parameters.expectedReturn * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between" id={`scenario-volatility-${index}`}>
+                        <span>Volatility:</span>
+                        <span>{(scenario.parameters.volatility * 100).toFixed(1)}%</span>
+                      </div>
+                      {scenario.results && (
+                        <>
+                          <Separator className="my-2" id={`scenario-separator-${index}`} />
+                          <div className="flex justify-between font-medium" id={`scenario-expected-${index}`}>
+                            <span>Expected Value:</span>
+                            <span>
+                              {formatCurrency(
+                                scenario.results.finalValues.reduce((a, b) => a + b, 0) / scenario.results.finalValues.length
+                              )}
+                            </span>
+                          </div>
+                          {scenario.results.successRate && (
+                            <div className="flex justify-between" id={`scenario-success-${index}`}>
+                              <span>Success Rate:</span>
+                              <span>{(scenario.results.successRate * 100).toFixed(1)}%</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+              
+              {scenarios.length >= 2 && (
+                <div className="mt-4" id="compare-scenarios-section">
+                  <Button 
+                    onClick={() => {
+                      // TODO: Implement scenario comparison analysis
+                      toast({
+                        title: "Feature Coming Soon",
+                        description: "Detailed scenario comparison will be available in the next update"
+                      });
+                    }}
+                    className="w-full"
+                    id="compare-scenarios-button"
+                  >
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    Run Detailed Comparison Analysis
+                  </Button>
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
+
+      {/* Asset Class Presets */}
+      <Card id="presets-card">
+        <CardHeader id="presets-header">
+          <CardTitle>Parameter Presets</CardTitle>
+          <CardDescription>
+            Quick start with pre-configured parameters for different asset classes
+          </CardDescription>
+        </CardHeader>
+        <CardContent id="presets-content">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="presets-grid">
+            {[
+              { key: 'stocks', name: 'Stocks', desc: 'High growth, high volatility' },
+              { key: 'bonds', name: 'Bonds', desc: 'Low risk, stable returns' },
+              { key: 'mixed', name: 'Balanced', desc: '60/40 stocks/bonds mix' },
+              { key: 'aggressive', name: 'Aggressive', desc: 'Maximum growth potential' }
+            ].map(preset => (
+              <Button
+                key={preset.key}
+                variant="outline"
+                className="h-auto p-4 flex flex-col items-start"
+                onClick={() => handleLoadPreset(preset.key as any)}
+                id={`preset-${preset.key}`}
+              >
+                <div className="font-medium">{preset.name}</div>
+                <div className="text-xs text-muted-foreground mt-1">{preset.desc}</div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

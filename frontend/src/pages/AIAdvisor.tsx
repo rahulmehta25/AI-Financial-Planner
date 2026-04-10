@@ -1,386 +1,494 @@
-import React, { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
-import {
-  Bot,
-  Sparkles,
-  MessageSquare,
-  TrendingUp,
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { 
+  Bot, 
+  Sparkles, 
+  MessageSquare, 
+  TrendingUp, 
+  Users, 
   AlertCircle,
+  Maximize2,
+  Minimize2,
   Download,
+  Settings,
   History,
+  Lightbulb,
   Brain,
   Zap,
   Target,
-  Shield,
-  Plus,
-  PieChart,
-  Calculator,
-  DollarSign,
-  BarChart3,
-  RefreshCw,
-} from "lucide-react";
+  Shield
+} from 'lucide-react';
 
-import ChatInterface from "@/components/chat/ChatInterface";
-import ConversationHistory from "@/components/chat/ConversationHistory";
-import SuggestedTopics from "@/components/chat/SuggestedTopics";
-import { ChatSession, ChatMessage, chatService } from "@/services/chat";
-import { userService } from "@/services/user";
-import { portfolioService } from "@/services/portfolio";
-import pdfExportService from "@/services/pdfExport";
+// Import chat components
+import ChatInterface from '@/components/chat/ChatInterface';
+import ConversationHistory from '@/components/chat/ConversationHistory';
+import SuggestedTopics from '@/components/chat/SuggestedTopics';
+import { ChatSession, ChatMessage, chatService } from '@/services/chat';
+import { userService } from '@/services/user';
+import { portfolioService } from '@/services/portfolio';
+import pdfExportService from '@/services/pdfExport';
 
-/* ─── Suggested prompts shown in the side panel ─── */
-const SUGGESTED_PROMPTS = [
-  { icon: TrendingUp,  label: "Analyze portfolio",     prompt: "Analyze my current portfolio and highlight any concentration risks or rebalancing opportunities.", color: "blue"   },
-  { icon: Target,      label: "Retirement plan",       prompt: "Based on my savings rate and investment mix, when can I realistically retire?",                   color: "violet" },
-  { icon: DollarSign,  label: "Tax optimization",      prompt: "What tax-loss harvesting opportunities do I have before year end?",                              color: "gold"   },
-  { icon: PieChart,    label: "Asset allocation",      prompt: "Review my asset allocation and suggest improvements for my risk tolerance and time horizon.",    color: "emerald"},
-  { icon: Calculator,  label: "Monte Carlo",           prompt: "Run a Monte Carlo simulation with my current parameters and explain the risk scenarios.",       color: "blue"   },
-  { icon: BarChart3,   label: "Expense breakdown",     prompt: "Help me identify areas where I can reduce expenses to increase my savings rate.",               color: "red"    },
-  { icon: Shield,      label: "Risk assessment",       prompt: "Assess my current financial risk profile — am I taking too much or too little risk?",            color: "violet" },
-  { icon: Zap,         label: "Quick wins",            prompt: "What are the top 3 things I can do this week to improve my financial health?",                 color: "gold"   },
-];
-
-const COLOR_MAP: Record<string, { bg: string; border: string; text: string; iconBg: string }> = {
-  blue:   { bg: "bg-blue-500/6",   border: "border-blue-500/20",   text: "text-blue-300",   iconBg: "bg-blue-500/15"   },
-  violet: { bg: "bg-violet-500/6", border: "border-violet-500/20", text: "text-violet-300", iconBg: "bg-violet-500/15" },
-  gold:   { bg: "bg-amber-500/6",  border: "border-amber-500/20",  text: "text-amber-300",  iconBg: "bg-amber-500/15"  },
-  emerald:{ bg: "bg-emerald-500/6",border: "border-emerald-500/20",text: "text-emerald-300",iconBg: "bg-emerald-500/15"},
-  red:    { bg: "bg-red-500/6",    border: "border-red-500/20",    text: "text-red-300",    iconBg: "bg-red-500/15"    },
-};
-
-/* ─── Stats ─── */
-const StatCard: React.FC<{ label: string; value: string | number; icon: React.ElementType; color: string }> = ({ label, value, icon: Icon, color }) => (
-  <div id={`ai-stat-${label.toLowerCase().replace(/\s/g, "-")}`} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${COLOR_MAP[color]?.iconBg || "bg-blue-500/15"}`}>
-      <Icon className={`w-4 h-4 ${COLOR_MAP[color]?.text || "text-blue-300"}`} />
-    </div>
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm font-bold text-foreground financial-number">{value}</div>
-    </div>
-  </div>
-);
-
-/* ─── Skeleton ─── */
-const AIAdvisorSkeleton = () => (
-  <div id="ai-advisor-skeleton" className="flex gap-6 h-[calc(100vh-9rem)] animate-fade-in">
-    <div className="flex-1 space-y-4">
-      <Skeleton className="h-16 w-full rounded-2xl bg-navy-800" />
-      <Skeleton className="flex-1 h-[calc(100%-8rem)] rounded-2xl bg-navy-800" />
-    </div>
-    <div className="w-72 space-y-4">
-      <Skeleton className="h-32 rounded-2xl bg-navy-800" />
-      <Skeleton className="h-64 rounded-2xl bg-navy-800" />
-    </div>
-  </div>
-);
-
-/* ─── Main Component ─── */
 const AIAdvisor: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userContext, setUserContext] = useState<any>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat');
+  const [stats, setStats] = useState({
+    totalSessions: 0,
+    totalMessages: 0,
+    recommendationsGiven: 0,
+  });
 
-  const [currentSession, setCurrentSession]  = useState<ChatSession | null>(null);
-  const [isLoading, setIsLoading]            = useState(true);
-  const [error, setError]                    = useState<string | null>(null);
-  const [userContext, setUserContext]         = useState<any>(null);
-  const [activePanel, setActivePanel]        = useState<"chat" | "history">("chat");
-  const [stats, setStats]                    = useState({ sessions: 0, messages: 0, recommendations: 0 });
-
+  // Load user context and initialize chat
   useEffect(() => {
-    if (!isAuthenticated) { setIsLoading(false); return; }
-    const init = async () => {
+    const initializeAIAdvisor = async () => {
+      if (!isAuthenticated) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
+        setError(null);
+
+        // Load user context (portfolio, profile, etc.)
         const [portfolioData, financialProfile] = await Promise.allSettled([
           portfolioService.getPortfolioOverview().catch(() => null),
-          userService.getFinancialProfile().catch(() => null),
+          userService.getFinancialProfile().catch(() => null)
         ]);
-        setUserContext({
-          portfolioData: portfolioData.status === "fulfilled" ? portfolioData.value : null,
-          financialProfile: financialProfile.status === "fulfilled" ? financialProfile.value : null,
-          user,
-        });
 
+        const context = {
+          portfolioData: portfolioData.status === 'fulfilled' ? portfolioData.value : null,
+          financialProfile: financialProfile.status === 'fulfilled' ? financialProfile.value : null,
+          user: user
+        };
+        setUserContext(context);
+
+        // Load or create chat session
         const sessions = await chatService.getChatSessions();
+        
         if (sessions.length > 0) {
-          setCurrentSession(sessions[0]);
+          const latestSession = sessions[0];
+          setCurrentSession(latestSession);
+          
+          // Update stats
           setStats({
-            sessions: sessions.length,
-            messages: sessions.reduce((t, s) => t + (s.messages?.length || 0), 0),
-            recommendations: sessions.reduce((t, s) => t + (s.messages?.filter(m => m.role === "assistant").length || 0), 0),
+            totalSessions: sessions.length,
+            totalMessages: sessions.reduce((total, session) => total + (session.messages?.length || 0), 0),
+            recommendationsGiven: sessions.reduce((total, session) =>
+              total + (session.messages?.filter(m =>
+                m.role === 'assistant' &&
+                (m.metadata?.suggestions || m.content.toLowerCase().includes('recommend'))
+              ).length || 0), 0),
           });
         } else {
+          // Create a new session with welcome message
           await createNewSession();
         }
       } catch (err: any) {
-        setError(err.message || "Failed to initialize AI Advisor.");
+        console.error('Failed to initialize AI Advisor:', err);
+        setError(err.message || 'Failed to initialize AI Advisor. Please try again.');
       } finally {
         setIsLoading(false);
       }
     };
-    init();
+
+    initializeAIAdvisor();
   }, [isAuthenticated, user]);
 
+  // Create new chat session
   const createNewSession = async () => {
     try {
-      const session = await chatService.createChatSession(`Chat — ${new Date().toLocaleDateString()}`);
-      const welcome: ChatMessage = {
+      const newSession = await chatService.createChatSession(
+        `Chat with AI Advisor - ${new Date().toLocaleDateString()}`
+      );
+      
+      // Add welcome message
+      const welcomeMessage: ChatMessage = {
         id: `welcome-${Date.now()}`,
-        content: `Hello${user?.firstName ? ` ${user.firstName}` : ""}! I'm your AI financial advisor powered by Claude. I can help you with:\n\n• **Portfolio Analysis** — Review holdings, risk, and performance\n• **Retirement Planning** — Project your path to financial independence\n• **Tax Optimization** — Legal strategies to minimize your tax burden\n• **Risk Assessment** — Evaluate and calibrate your investment risk\n• **Goal Tracking** — Monitor and accelerate your financial goals\n\nWhat would you like to explore today?`,
-        role: "assistant",
+        content: `Hello ${user?.firstName || 'there'}! I'm your AI financial advisor, enhanced with advanced capabilities including voice interaction, rich content analysis, and personalized recommendations. I can help you with:
+
+• **Portfolio Analysis** - Comprehensive investment review and optimization
+• **Retirement Planning** - Strategic planning for your future
+• **Tax Optimization** - Minimize your tax burden legally
+• **Risk Assessment** - Evaluate and manage financial risks  
+• **Goal Setting** - Create and track financial objectives
+• **Market Insights** - Stay informed about market trends
+
+I can also export our conversation as a detailed PDF report for your records. How can I assist you with your financial planning today?`,
+        role: 'assistant',
         timestamp: new Date().toISOString(),
-        metadata: { suggestions: ["Analyze my portfolio", "Help me plan for retirement", "Find tax savings opportunities"] },
+        metadata: {
+          suggestions: [
+            "Analyze my current portfolio performance",
+            "Help me plan for retirement",
+            "Review my financial goals and progress",
+            "Suggest tax optimization strategies",
+            "Assess my investment risk level"
+          ]
+        }
       };
-      session.messages = [welcome];
-      setCurrentSession(session);
-      toast({ title: "New conversation started", description: "Your AI advisor is ready." });
-    } catch {
-      setError("Failed to start conversation.");
+      
+      newSession.messages = [welcomeMessage];
+      setCurrentSession(newSession);
+      
+      toast({
+        title: "New conversation started",
+        description: "Your AI financial advisor is ready to help!",
+      });
+    } catch (error: any) {
+      console.error('Failed to create new session:', error);
+      setError('Failed to create new conversation');
     }
   };
 
-  const handleExport = async () => {
+  // Handle session selection from history
+  const handleSessionSelect = (session: ChatSession) => {
+    setCurrentSession(session);
+    setActiveTab('chat');
+  };
+
+  // Handle session updates
+  const handleSessionUpdate = (updatedSession: ChatSession) => {
+    setCurrentSession(updatedSession);
+  };
+
+  // Handle export conversation
+  const handleExportConversation = async () => {
     if (!currentSession) return;
+    
     try {
-      await pdfExportService.exportConversation(currentSession, { includeTimestamps: true, includeMetadata: true, includeRecommendations: true, template: "detailed_report" });
-      toast({ title: "Export started", description: "Preparing your PDF report." });
-    } catch (err: any) {
-      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+      await pdfExportService.exportConversation(currentSession, {
+        includeTimestamps: true,
+        includeMetadata: true,
+        includeRecommendations: true,
+        template: 'detailed_report'
+      });
+      
+      toast({
+        title: "Export started",
+        description: "Your conversation is being prepared as a PDF document.",
+      });
+    } catch (error: any) {
+      console.error('Failed to export conversation:', error);
+      toast({
+        title: "Export failed",
+        description: error.message || "Could not export conversation to PDF.",
+        variant: "destructive",
+      });
     }
   };
 
-  /* Unauthenticated gate */
-  if (!isLoading && !isAuthenticated) {
+  // Handle suggestion click
+  const handleSuggestionClick = (suggestion: string) => {
+    setActiveTab('chat');
+    // The suggestion will be automatically sent to the chat
+  };
+
+  // Show loading state
+  if (isLoading) {
     return (
-      <div id="ai-advisor-auth-gate" className="flex flex-col items-center justify-center min-h-[60vh] text-center py-16 page-enter">
-        <div className="w-20 h-20 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6 shadow-glow-blue">
-          <Bot className="w-10 h-10 text-blue-400" />
-        </div>
-        <h1 className="text-3xl font-bold text-foreground mb-3">AI Financial Advisor</h1>
-        <p className="text-muted-foreground max-w-md mb-8">
-          Sign in to access your personalized AI financial advisor with portfolio analysis, retirement planning, and tax optimization.
-        </p>
-        <div className="flex gap-3">
-          <Button onClick={() => window.location.href = "/login"} className="bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0">
-            Sign In to Start
-          </Button>
-          <Button variant="outline" onClick={() => window.location.href = "/signup"} className="border-white/10 hover:bg-white/[0.04]">
-            Create Account
-          </Button>
-        </div>
+      <div className="">
+        
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+          <div className="mb-8">
+            <Skeleton className="h-12 w-96 mb-4" />
+            <Skeleton className="h-6 w-[500px] mb-8" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {[1, 2, 3, 4].map((i) => (
+                <Card key={i} className="glass border-white/10">
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="w-12 h-12 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-6 w-16" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
 
-  if (isLoading) return <AIAdvisorSkeleton />;
+  // Show authentication required state
+  if (!isAuthenticated) {
+    return (
+      <div className="">
+        
+        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+          <div className="max-w-4xl mx-auto text-center py-20">
+            <div className="mb-8">
+              <Bot className="w-24 h-24 text-primary mx-auto mb-6" />
+              <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary-glow to-success">
+                AI Financial Advisor
+              </h1>
+              <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+                Experience the future of financial planning with our advanced AI advisor featuring voice interaction, 
+                real-time analysis, and personalized recommendations.
+              </p>
+            </div>
+
+            <Alert className="mb-8 max-w-2xl mx-auto">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please <a href="/login" className="text-primary hover:underline font-semibold">log in</a> to access your personalized AI financial advisor with advanced features.
+              </AlertDescription>
+            </Alert>
+
+            {/* Feature highlights */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <Card className="glass border-white/10">
+                <CardContent className="p-6 text-center">
+                  <Brain className="w-12 h-12 text-primary mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">Advanced AI</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Sophisticated financial analysis with personalized recommendations
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="glass border-white/10">
+                <CardContent className="p-6 text-center">
+                  <Zap className="w-12 h-12 text-success mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">Voice Interaction</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Speak your questions and hear responses with Web Speech API
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="glass border-white/10">
+                <CardContent className="p-6 text-center">
+                  <Download className="w-12 h-12 text-accent mx-auto mb-4" />
+                  <h3 className="font-semibold mb-2">PDF Export</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Export detailed financial advice reports in professional PDF format
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <div className="flex gap-4 justify-center">
+              <Button 
+                size="lg" 
+                className="bg-gradient-to-r from-primary to-success hover:shadow-glow"
+                onClick={() => window.location.href = '/login'}
+              >
+                Sign In to Start
+              </Button>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                className="glass border-white/20"
+                onClick={() => window.location.href = '/signup'}
+              >
+                Create Account
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div id="ai-advisor-root" className="page-enter pt-4">
-      {/* ─── Page header ─── */}
-      <div id="ai-advisor-header" className="flex items-start justify-between mb-5">
-        <div id="ai-advisor-title-group">
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center shadow-glow-blue">
-              <Brain className="w-4 h-4 text-blue-400" />
-            </div>
-            <h1 id="ai-advisor-title" className="text-xl font-bold text-foreground">AI Financial Advisor</h1>
-            <Badge variant="outline" className="bg-blue-500/10 border-blue-500/25 text-blue-300 text-[10px] gap-1 px-2">
-              <span className="status-dot-green scale-75" />
-              Claude AI
-            </Badge>
-          </div>
-          <p id="ai-advisor-subtitle" className="text-sm text-muted-foreground">
-            Personalized financial guidance powered by advanced AI
-          </p>
-        </div>
-
-        <div id="ai-advisor-header-actions" className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={handleExport}
-            className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.06] border border-white/10 gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Export PDF
-          </Button>
-          <Button size="sm" onClick={createNewSession}
-            className="h-8 px-3 text-xs gap-1.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border-0 shadow-glow-blue">
-            <Plus className="w-3.5 h-3.5" /> New Chat
-          </Button>
-        </div>
-      </div>
-
-      {/* ─── Stats row ─── */}
-      <div id="ai-advisor-stats" className="grid grid-cols-3 gap-3 mb-5">
-        <StatCard label="Conversations"   value={stats.sessions}         icon={MessageSquare} color="blue"   />
-        <StatCard label="Messages"        value={stats.messages}         icon={TrendingUp}    color="emerald"/>
-        <StatCard label="Recommendations" value={stats.recommendations}  icon={Sparkles}      color="gold"   />
-      </div>
-
-      {/* ─── Error ─── */}
-      {error && (
-        <Alert variant="destructive" className="mb-4 glass border-red-500/30 bg-red-500/5">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            {error}
-            <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-2 h-6 text-xs">Dismiss</Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* ─── Two-panel layout ─── */}
-      <div id="ai-advisor-panels" className="flex gap-5" style={{ height: "calc(100vh - 18rem)", minHeight: "500px" }}>
-
-        {/* LEFT: Chat panel (primary) */}
-        <div id="ai-advisor-chat-panel" className="flex-1 min-w-0 glass-card rounded-2xl overflow-hidden flex flex-col">
-          {/* Panel tabs */}
-          <div id="chat-panel-tabs" className="flex items-center gap-1 px-4 py-3 border-b border-white/[0.06] flex-shrink-0">
-            <button
-              id="tab-chat"
-              onClick={() => setActivePanel("chat")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activePanel === "chat"
-                  ? "bg-blue-500/15 text-blue-300 border border-blue-500/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" /> Chat
-            </button>
-            <button
-              id="tab-history"
-              onClick={() => setActivePanel("history")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activePanel === "history"
-                  ? "bg-blue-500/15 text-blue-300 border border-blue-500/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
-              }`}
-            >
-              <History className="w-3.5 h-3.5" /> History
-            </button>
-
-            <div className="ml-auto flex items-center gap-1">
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/8 border border-emerald-500/15">
-                <span className="status-dot-green" style={{ width: "6px", height: "6px" }} />
-                <span className="text-[10px] text-emerald-400 font-medium">Online</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Panel content */}
-          <div id="chat-panel-content" className="flex-1 overflow-hidden">
-            {activePanel === "chat" ? (
-              currentSession ? (
-                <ChatInterface
-                  session={currentSession}
-                  userContext={userContext}
-                  onSessionUpdate={setCurrentSession}
-                  onNewSession={createNewSession}
-                  onExportConversation={handleExport}
-                  isFullscreen={false}
-                />
-              ) : (
-                <div id="chat-empty-state" className="h-full flex flex-col items-center justify-center text-center p-8">
-                  <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
-                    <Bot className="w-8 h-8 text-blue-400" />
-                  </div>
-                  <h3 className="text-base font-semibold text-foreground mb-2">No Active Conversation</h3>
-                  <p className="text-sm text-muted-foreground mb-4 max-w-xs">Start a new conversation with your AI financial advisor.</p>
-                  <Button size="sm" onClick={createNewSession}
-                    className="gap-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white border-0">
-                    <Plus className="w-3.5 h-3.5" /> Start Conversation
-                  </Button>
-                </div>
-              )
-            ) : (
-              <div id="chat-history-content" className="h-full overflow-y-auto p-4">
-                <ConversationHistory
-                  currentSessionId={currentSession?.id}
-                  onSessionSelect={(session) => { setCurrentSession(session); setActivePanel("chat"); }}
-                  onExportConversation={handleExport}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT: Side panel — suggested prompts */}
-        <div id="ai-advisor-side-panel" className="w-72 flex-shrink-0 flex flex-col gap-4 overflow-y-auto">
-
-          {/* Capabilities card */}
-          <div id="ai-capabilities-card" className="glass-card rounded-2xl p-4 flex-shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-xs font-semibold text-foreground uppercase tracking-widest">AI Capabilities</span>
-            </div>
-            <div id="capabilities-list" className="space-y-2">
-              {[
-                { icon: TrendingUp,  label: "Real-time portfolio analysis",   color: "text-blue-400"   },
-                { icon: Target,      label: "Goal projection modeling",        color: "text-emerald-400"},
-                { icon: Shield,      label: "Risk profiling & rebalancing",    color: "text-violet-400" },
-                { icon: DollarSign,  label: "Tax-loss harvesting strategies",  color: "text-amber-400"  },
-                { icon: Brain,       label: "Behavioral finance coaching",     color: "text-blue-400"   },
-              ].map((cap, i) => {
-                const Icon = cap.icon;
-                return (
-                  <div key={i} id={`capability-${i}`} className="flex items-center gap-2">
-                    <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${cap.color}`} />
-                    <span className="text-xs text-muted-foreground">{cap.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Suggested prompts */}
-          <div id="suggested-prompts-card" className="glass-card rounded-2xl p-4 flex-1">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare className="w-4 h-4 text-blue-400" />
-              <span className="text-xs font-semibold text-foreground uppercase tracking-widest">Try Asking</span>
-            </div>
-            <div id="prompts-list" className="space-y-2">
-              {SUGGESTED_PROMPTS.map((prompt, i) => {
-                const Icon = prompt.icon;
-                const c = COLOR_MAP[prompt.color] || COLOR_MAP.blue;
-                return (
-                  <button
-                    key={i}
-                    id={`prompt-btn-${i}`}
-                    onClick={() => {
-                      setActivePanel("chat");
-                      // The ChatInterface will pick up the prompt via session update
-                    }}
-                    className={`w-full flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all hover:opacity-90 group ${c.bg} ${c.border}`}
-                  >
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
-                      <Icon className={`w-3 h-3 ${c.text}`} />
-                    </div>
-                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors line-clamp-2 leading-relaxed">
-                      {prompt.prompt}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Powered-by badge */}
-          <div id="powered-by-badge" className="glass-card rounded-2xl p-3 flex items-center gap-3 flex-shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
-              <Brain className="w-4 h-4 text-violet-400" />
-            </div>
+    <div className="">
+      
+      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8 animate-fade-in">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <div className="text-xs font-semibold text-foreground">Powered by Claude</div>
-              <div className="text-[10px] text-muted-foreground">Anthropic's AI model</div>
+              <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary-glow to-success mb-2">
+                AI Financial Advisor
+              </h1>
+              <p className="text-lg text-muted-foreground">
+                Advanced AI-powered financial guidance with voice interaction and detailed analysis
+              </p>
             </div>
-            <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20">
-              <span className="status-dot-green" style={{ width: "6px", height: "6px", background: "hsl(152 69% 48%)" }} />
-              <span className="text-[10px] text-violet-300">Active</span>
+            <div className="flex items-center gap-4">
+              <Badge variant="outline" className="glass border-primary/30 text-primary flex items-center gap-2">
+                <Brain className="w-4 h-4" />
+                Advanced AI
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
             </div>
           </div>
+
+          {/* AI Capabilities Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Card className="glass border-white/10 hover-scale">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Conversations</p>
+                    <p className="text-2xl font-bold">{stats.totalSessions}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass border-white/10 hover-scale">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-success to-success-dark flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Messages</p>
+                    <p className="text-2xl font-bold">{stats.totalMessages}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass border-white/10 hover-scale">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Recommendations</p>
+                    <p className="text-2xl font-bold">{stats.recommendationsGiven}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass border-white/10 hover-scale">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
+                    <Shield className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Powered By</p>
+                    <p className="text-2xl font-bold">Claude AI</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
+
+        {/* Error Display */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </Button>
+          </Alert>
+        )}
+
+        {/* Main Interface */}
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 pt-0' : ''}`}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
+            <TabsList className="grid w-full grid-cols-3 glass border-white/20 mb-6">
+              <TabsTrigger value="chat" className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Chat
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex items-center gap-2">
+                <History className="w-4 h-4" />
+                History
+              </TabsTrigger>
+              <TabsTrigger value="topics" className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4" />
+                Topics
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="chat" className="h-[700px]">
+              <Card className="glass border-white/10 h-full">
+                {currentSession ? (
+                  <ChatInterface
+                    session={currentSession}
+                    userContext={userContext}
+                    onSessionUpdate={handleSessionUpdate}
+                    onNewSession={createNewSession}
+                    onExportConversation={handleExportConversation}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                  />
+                ) : (
+                  <CardContent className="p-8 text-center">
+                    <Bot className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No Active Conversation</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Start a new conversation with your AI financial advisor
+                    </p>
+                    <Button onClick={createNewSession}>
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Start New Conversation
+                    </Button>
+                  </CardContent>
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="history" className="h-[700px]">
+              <Card className="glass border-white/10 h-full">
+                <CardContent className="p-6 h-full">
+                  <ConversationHistory
+                    currentSessionId={currentSession?.id}
+                    onSessionSelect={handleSessionSelect}
+                    onExportConversation={handleExportConversation}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="topics" className="h-[700px]">
+              <Card className="glass border-white/10 h-full">
+                <CardContent className="p-6 h-full">
+                  <SuggestedTopics
+                    onTopicSelect={handleSuggestionClick}
+                    userContext={userContext}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <div className="pb-20"></div>
+      </main>
     </div>
   );
 };
