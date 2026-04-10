@@ -285,42 +285,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <ErrorBoundary>
-      <div className={`chat-interface flex flex-col h-full ${className}`} role="main" aria-label="AI Chat Interface">
+      <div className={`chat-interface flex flex-col h-full ${className}`} role="region" aria-label="AI Chat Interface">
         {/* Header */}
-        <CardHeader className="border-b border-white/10 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" />
-            {session.title}
-            <Badge variant="outline" className="glass border-white/20">
+        <CardHeader className="border-b border-white/10 flex-shrink-0 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 min-w-0">
+            <Bot className="w-5 h-5 text-primary flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">{session.title}</span>
+            <Badge variant="outline" className="glass border-white/20 flex-shrink-0 tabular-nums">
               {messages.length} messages
             </Badge>
           </CardTitle>
-          
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1 flex-shrink-0">
             {/* Voice Toggle */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-              className={isVoiceEnabled ? 'text-primary' : 'text-muted-foreground'}
+              className={`transition-colors ${isVoiceEnabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              aria-label={isVoiceEnabled ? 'Disable voice input' : 'Enable voice input'}
+              aria-pressed={isVoiceEnabled}
             >
               {isVoiceEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
             </Button>
 
             {/* New Session */}
-            <Button variant="ghost" size="sm" onClick={onNewSession}>
+            <Button variant="ghost" size="sm" onClick={onNewSession} aria-label="Start new conversation" className="transition-colors hover:text-primary">
               <Plus className="w-4 h-4" />
             </Button>
 
             {/* Export */}
-            <Button variant="ghost" size="sm" onClick={onExportConversation}>
+            <Button variant="ghost" size="sm" onClick={onExportConversation} aria-label="Export conversation as PDF" className="transition-colors hover:text-primary">
               <Download className="w-4 h-4" />
             </Button>
 
             {/* Fullscreen Toggle */}
             {onToggleFullscreen && (
-              <Button variant="ghost" size="sm" onClick={onToggleFullscreen}>
+              <Button variant="ghost" size="sm" onClick={onToggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className="transition-colors hover:text-primary">
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </Button>
             )}
@@ -330,22 +332,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Error Display */}
       {error && (
-        <Alert variant="destructive" className="m-4 flex-shrink-0">
+        <Alert variant="destructive" className="m-4 flex-shrink-0 animate-fade-in" role="alert">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => setError(null)}
-          >
-            Dismiss
-          </Button>
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{error}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0"
+              onClick={() => setError(null)}
+              aria-label="Dismiss error"
+            >
+              Dismiss
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" aria-live="polite" aria-atomic="false">
         <div className="space-y-4">
           {messages.map((message) => (
             <MessageBubble
@@ -360,21 +365,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           
           {/* Typing Indicator */}
           {typingState.isTyping && (
-            <div className="flex gap-3 animate-fade-in">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center flex-shrink-0">
+            <div className="flex gap-3 animate-fade-in" role="status" aria-label="AI is generating a response">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center flex-shrink-0" aria-hidden="true">
                 <Bot className="w-4 h-4 text-white" />
               </div>
               <div className="max-w-[75%]">
                 <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
                   <div className="flex items-center gap-2 mb-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" aria-hidden="true" />
                     <span className="text-sm text-muted-foreground">AI is thinking...</span>
                   </div>
                   {typingState.progress > 0 && (
-                    <Progress value={typingState.progress} className="h-2 mb-2" />
+                    <Progress value={typingState.progress} className="h-1.5 mb-2" aria-label={`Response progress: ${Math.round(typingState.progress)}%`} />
                   )}
                   {typingState.message && (
-                    <p className="text-sm">{typingState.message}</p>
+                    <p className="text-sm leading-relaxed">{typingState.message}</p>
                   )}
                 </div>
               </div>

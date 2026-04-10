@@ -171,24 +171,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
 
       {/* Message Content */}
-      <div className={`max-w-[75%] ${isAssistant ? '' : 'text-right'}`}>
+      <div className={`max-w-[80%] sm:max-w-[75%] ${isAssistant ? '' : 'text-right'}`}>
         {/* Message Bubble */}
-        <div className={`p-4 rounded-2xl ${
+        <div className={`p-4 rounded-2xl transition-colors ${
           isAssistant
-            ? 'bg-white/5 border border-white/10'
-            : 'bg-gradient-to-br from-primary/20 to-success/20 border border-primary/20'
+            ? 'bg-white/5 border border-white/10 hover:bg-white/[0.07]'
+            : 'bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20'
         }`}>
           {/* Main Text Content */}
           {messageData.text && (
-            <div className="prose prose-sm prose-invert max-w-none">
+            <div className="prose prose-sm prose-invert max-w-none leading-relaxed">
               <ReactMarkdown
                 components={{
-                  // Custom components for better styling
-                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                  strong: ({ children }) => <strong className="text-primary">{children}</strong>,
-                  code: ({ children }) => <code className="bg-white/10 px-2 py-1 rounded text-xs">{children}</code>,
+                  p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1.5">{children}</ol>,
+                  strong: ({ children }) => <strong className="text-primary font-semibold">{children}</strong>,
+                  code: ({ children }) => <code className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>,
+                  a: ({ children, href }) => <a href={href} className="text-primary underline underline-offset-2 hover:text-primary-glow transition-colors" target="_blank" rel="noopener noreferrer">{children}</a>,
                 }}
               >
                 {messageData.text}
@@ -290,15 +290,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
           {/* Suggestions */}
           {message.metadata?.suggestions && (
-            <div className="mt-4 space-y-2">
-              <div className="text-sm text-muted-foreground">Suggested follow-ups:</div>
+            <div className="mt-4 space-y-2 pt-3 border-t border-white/5">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Suggested follow-ups</div>
               <div className="flex flex-wrap gap-2">
                 {message.metadata.suggestions.map((suggestion, index) => (
                   <Button
                     key={index}
                     variant="outline"
                     size="sm"
-                    className="h-auto p-2 text-xs glass border-white/20 hover:bg-white/10"
+                    className="h-auto p-2 text-xs glass border-white/20 hover:bg-white/10 hover:border-primary/30 transition-all text-left"
                     onClick={() => onSuggestionClick?.(suggestion)}
                   >
                     {suggestion}

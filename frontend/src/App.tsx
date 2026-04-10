@@ -36,15 +36,16 @@ const PortfolioOptimizer = lazy(() => import('./pages/PortfolioOptimizer'))
 // Full-page loading fallback
 function PageLoader() {
   return (
-    <div className="flex flex-col gap-4 p-8 min-h-screen bg-background">
-      <Skeleton className="h-8 w-48 rounded" />
-      <Skeleton className="h-4 w-full rounded" />
-      <Skeleton className="h-4 w-3/4 rounded" />
+    <div className="flex flex-col gap-4 p-8 min-h-screen bg-background" role="status" aria-label="Loading page" aria-busy="true">
+      <Skeleton className="h-8 w-48 rounded skeleton-shimmer" />
+      <Skeleton className="h-4 w-full rounded skeleton-shimmer" />
+      <Skeleton className="h-4 w-3/4 rounded skeleton-shimmer" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <Skeleton className="h-40 rounded-xl" />
-        <Skeleton className="h-40 rounded-xl" />
-        <Skeleton className="h-40 rounded-xl" />
+        <Skeleton className="h-40 rounded-xl skeleton-shimmer" />
+        <Skeleton className="h-40 rounded-xl skeleton-shimmer" />
+        <Skeleton className="h-40 rounded-xl skeleton-shimmer" />
       </div>
+      <span className="sr-only">Loading...</span>
     </div>
   )
 }

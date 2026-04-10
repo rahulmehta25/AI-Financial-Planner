@@ -77,27 +77,35 @@ export const Dashboard = () => {
   // Show loading state
   if (isLoading) {
     return (
-      <div>
+      <div role="status" aria-label="Loading dashboard" aria-busy="true">
         <div>
           <div className="mb-8">
-            <Skeleton className="h-10 w-64 mb-2" />
-            <Skeleton className="h-6 w-80" />
+            <Skeleton className="h-10 w-64 mb-2 skeleton-shimmer" />
+            <Skeleton className="h-6 w-80 skeleton-shimmer" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {[1, 2, 3].map((i) => (
               <Card key={i} className="glass">
                 <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-32 skeleton-shimmer" />
                 </CardHeader>
                 <CardContent>
-                  <Skeleton className="h-8 w-24 mb-2" />
-                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-8 w-24 mb-2 skeleton-shimmer" />
+                  <Skeleton className="h-4 w-16 skeleton-shimmer" />
                 </CardContent>
               </Card>
             ))}
           </div>
+
+          <Skeleton className="h-64 w-full rounded-xl skeleton-shimmer mb-8" />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-48 rounded-xl skeleton-shimmer" />
+            <Skeleton className="h-48 rounded-xl skeleton-shimmer" />
+          </div>
         </div>
+        <span className="sr-only">Loading your financial dashboard...</span>
       </div>
     );
   }
@@ -105,26 +113,25 @@ export const Dashboard = () => {
   // Show error state
   if (error && !dashboardData) {
     return (
-      <div>
-        <div>
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-              >
-                {isRefreshing ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Retry"
-                )}
-              </Button>
-            </AlertDescription>
-          </Alert>
+      <div role="alert" aria-live="assertive">
+        <div className="max-w-lg mx-auto mt-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-error/10 flex items-center justify-center">
+            <AlertCircle className="h-8 w-8 text-error" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Unable to load dashboard</h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="bg-gradient-to-r from-primary to-success hover:shadow-glow"
+          >
+            {isRefreshing ? (
+              <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Try again
+          </Button>
         </div>
       </div>
     );
@@ -135,12 +142,12 @@ export const Dashboard = () => {
       <div>
         {/* Header */}
         <div className="mb-8 animate-slide-in-bottom">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-4xl font-bold mb-2">
+              <h1 className="text-3xl sm:text-4xl font-bold mb-1 tracking-tight">
                 Welcome back, {dashboardData?.user.firstName || user?.firstName || 'there'}!
               </h1>
-              <p className="text-muted-foreground text-lg">
+              <p className="text-muted-foreground text-base sm:text-lg">
                 Here's what's happening with your finances today.
               </p>
             </div>
@@ -149,9 +156,10 @@ export const Dashboard = () => {
               size="sm"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="glass border-white/20"
+              className="glass border-white/20 flex-shrink-0 transition-all hover:border-primary/30"
+              aria-label="Refresh dashboard data"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
               Refresh
             </Button>
           </div>
@@ -236,21 +244,29 @@ export const Dashboard = () => {
               </Button>
             </CardHeader>
             <CardContent className="space-y-6">
-              {dashboardData?.goals?.map((goal, index) => (
-                <div key={goal.name} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">{goal.name}</h4>
-                    <span className="text-sm text-muted-foreground">
-                      ${goal.currentAmount?.toLocaleString() || '0'} / ${goal.targetAmount?.toLocaleString() || '0'}
-                    </span>
+              {dashboardData?.goals?.length ? (
+                dashboardData.goals.map((goal, index) => (
+                  <div key={goal.name} className="space-y-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <h4 className="font-medium truncate">{goal.name}</h4>
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        ${goal.currentAmount?.toLocaleString() || '0'} / ${goal.targetAmount?.toLocaleString() || '0'}
+                      </span>
+                    </div>
+                    <Progress value={goal.progress} className="h-2" aria-label={`${goal.name}: ${goal.progress}% complete`} />
+                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                      <span>{goal.progress}% complete</span>
+                      <span>${((goal.targetAmount || 0) - (goal.currentAmount || 0)).toLocaleString()} remaining</span>
+                    </div>
                   </div>
-                  <Progress value={goal.progress} className="h-2" />
-                  <div className="flex justify-between items-center text-xs text-muted-foreground">
-                    <span>{goal.progress}% complete</span>
-                    <span>${((goal.targetAmount || 0) - (goal.currentAmount || 0)).toLocaleString()} remaining</span>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Target className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No goals set yet</p>
+                  <p className="text-xs mt-1">Create your first financial goal to track progress</p>
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
 
@@ -285,30 +301,38 @@ export const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {dashboardData?.recentTransactions?.map((transaction, index) => (
-                <div key={index} className="flex items-center justify-between p-4 rounded-lg bg-card/50 hover:bg-card/80 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      transaction.type === 'buy' || transaction.type === 'dividend' ? 'bg-success/20' : 'bg-error/20'
+            <div className="space-y-3">
+              {dashboardData?.recentTransactions?.length ? (
+                dashboardData.recentTransactions.map((transaction, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-card/50 hover:bg-card/80 transition-all duration-200 hover:translate-x-1">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        transaction.type === 'buy' || transaction.type === 'dividend' ? 'bg-success/20' : 'bg-error/20'
+                      }`} aria-hidden="true">
+                        {transaction.type === 'buy' || transaction.type === 'dividend' ?
+                          <TrendingUp className="h-5 w-5 text-success" /> :
+                          <TrendingDown className="h-5 w-5 text-error" />
+                        }
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{transaction.symbol || transaction.type}</p>
+                        <p className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className={`font-semibold tabular-nums whitespace-nowrap ml-4 ${
+                      transaction.type === 'buy' || transaction.type === 'dividend' ? 'text-success' : 'text-error'
                     }`}>
-                      {transaction.type === 'buy' || transaction.type === 'dividend' ? 
-                        <TrendingUp className="h-5 w-5 text-success" /> : 
-                        <TrendingDown className="h-5 w-5 text-error" />
-                      }
-                    </div>
-                    <div>
-                      <p className="font-medium">{transaction.symbol || transaction.type}</p>
-                      <p className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                      {transaction.type === 'sell' || transaction.type === 'fee' ? '-' : '+'}${Math.abs(transaction.amount).toLocaleString()}
                     </div>
                   </div>
-                  <div className={`font-semibold ${
-                    transaction.type === 'buy' || transaction.type === 'dividend' ? 'text-success' : 'text-error'
-                  }`}>
-                    {transaction.type === 'sell' || transaction.type === 'fee' ? '-' : '+'}${Math.abs(transaction.amount).toLocaleString()}
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Bell className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">No recent activity</p>
+                  <p className="text-xs mt-1">Your recent transactions will appear here</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

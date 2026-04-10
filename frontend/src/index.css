@@ -182,6 +182,34 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Improved focus styles for accessibility */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Skip to content link for keyboard users */
+  .skip-to-content {
+    position: absolute;
+    top: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    padding: 0.75rem 1.5rem;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-radius: var(--radius);
+    font-weight: 600;
+    transition: top 0.2s;
+  }
+
+  .skip-to-content:focus {
+    top: 1rem;
   }
 
   /* Scrollbar styling */
@@ -200,6 +228,15 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--primary) / 0.5);
+  }
+
+  /* Reduce motion for users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -259,26 +296,60 @@
 
   /* Interactive hover effects */
   .hover-lift {
-    transition: var(--transition-normal);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
   }
 
   .hover-lift:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-xl);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .hover-lift:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .hover-glow {
+    transition: box-shadow var(--transition-normal);
   }
 
   .hover-glow:hover {
     box-shadow: var(--shadow-glow);
   }
 
-  /* Card animations */
+  /* Card animations - subtle 3D tilt */
   .card-3d {
     transform-style: preserve-3d;
     transition: transform var(--transition-normal);
   }
 
   .card-3d:hover {
-    transform: rotateX(5deg) rotateY(10deg) translateZ(20px);
+    transform: perspective(800px) rotateX(2deg) rotateY(4deg) translateZ(4px);
+  }
+
+  /* Skeleton loading shimmer */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.08) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* Screen-reader only utility */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 }
 
@@ -365,5 +436,19 @@
 
   .animate-scale-in {
     animation: scaleIn 0.5s ease-out forwards;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
   }
 }

@@ -146,15 +146,20 @@ export const AuthenticatedLayout = () => {
 
   return (
     <div className="min-h-screen relative">
+      {/* Skip to content link for keyboard accessibility */}
+      <a href="#main-content" className="skip-to-content">
+        Skip to main content
+      </a>
+
       <ParticleBackground />
-      
+
       {/* Top Navigation Bar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10">
+      <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10" role="navigation" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-success flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-success flex items-center justify-center" aria-hidden="true">
                 <TrendingUp className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-success">
@@ -167,13 +172,13 @@ export const AuthenticatedLayout = () => {
               <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
                 Welcome back, <span className="font-semibold text-foreground">{user?.firstName || "User"}</span>
               </div>
-              
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full transition-transform hover:scale-105" aria-label="User menu">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={user?.profileImage} alt={user?.firstName || ""} />
-                      <AvatarFallback className="bg-gradient-to-br from-primary to-success text-white">
+                      <AvatarImage src={user?.profileImage} alt={`${user?.firstName || "User"}'s profile`} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-success text-white font-semibold">
                         {getUserInitials()}
                       </AvatarFallback>
                     </Avatar>
@@ -183,20 +188,20 @@ export const AuthenticatedLayout = () => {
                   <div className="flex items-center justify-start gap-2 p-2">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium">{user?.firstName} {user?.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{user?.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/profile")}>
+                  <DropdownMenuItem onClick={() => navigate("/profile")} className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
+                  <DropdownMenuItem onClick={() => navigate("/settings")} className="cursor-pointer">
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-500">
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-500 cursor-pointer focus:text-red-500">
                     <LogOut className="mr-2 h-4 w-4" />
                     Sign Out
                   </DropdownMenuItem>
@@ -210,18 +215,19 @@ export const AuthenticatedLayout = () => {
         <div className="border-t border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="w-full justify-start h-14 bg-transparent rounded-none border-0 p-0 overflow-x-auto">
+              <TabsList className="w-full justify-start h-14 bg-transparent rounded-none border-0 p-0 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Application sections">
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   return (
                     <TabsTrigger
                       key={item.id}
                       value={item.id}
-                      className="flex items-center gap-2 px-4 h-14 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                      className="flex items-center gap-2 px-4 h-14 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent transition-colors hover:text-primary/80"
+                      aria-label={`${item.label}: ${item.description}`}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span className="hidden sm:inline">{item.label}</span>
-                      <span className="sm:hidden">{item.label.split(' ')[0]}</span>
+                      <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                      <span className="hidden sm:inline whitespace-nowrap">{item.label}</span>
+                      <span className="sm:hidden whitespace-nowrap">{item.label.split(' ')[0]}</span>
                     </TabsTrigger>
                   );
                 })}
@@ -232,22 +238,22 @@ export const AuthenticatedLayout = () => {
       </nav>
 
       {/* Main Content Area */}
-      <main className="pt-32 pb-8 px-4 sm:px-6 relative z-10">
+      <main id="main-content" className="pt-32 pb-8 px-4 sm:px-6 relative z-10" role="main">
         <div className="max-w-7xl mx-auto">
           {/* Page Header */}
-          <div className="mb-8">
+          <div className="mb-8 animate-fade-in">
             {(() => {
               const currentItem = navItems.find(item => item.id === activeTab);
               if (currentItem) {
                 const Icon = currentItem.icon;
                 return (
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-success/20 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-success/20 flex items-center justify-center" aria-hidden="true">
                       <Icon className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <h1 className="text-3xl font-bold">{currentItem.label}</h1>
-                      <p className="text-muted-foreground">{currentItem.description}</p>
+                      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{currentItem.label}</h1>
+                      <p className="text-muted-foreground text-sm sm:text-base">{currentItem.description}</p>
                     </div>
                   </div>
                 );

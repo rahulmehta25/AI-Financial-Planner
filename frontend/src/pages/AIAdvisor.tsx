@@ -200,29 +200,31 @@ I can also export our conversation as a detailed PDF report for your records. Ho
   // Show loading state
   if (isLoading) {
     return (
-      <div className="">
-        
-        <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+      <div role="status" aria-label="Loading AI Advisor" aria-busy="true">
+        <main className="relative z-10 pt-0 px-4 sm:px-6 max-w-7xl mx-auto">
           <div className="mb-8">
-            <Skeleton className="h-12 w-96 mb-4" />
-            <Skeleton className="h-6 w-[500px] mb-8" />
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <Skeleton className="h-10 w-72 sm:w-96 mb-4 skeleton-shimmer" />
+            <Skeleton className="h-5 w-64 sm:w-[500px] mb-8 skeleton-shimmer" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
               {[1, 2, 3, 4].map((i) => (
                 <Card key={i} className="glass border-white/10">
                   <CardContent className="p-6">
                     <div className="flex items-center gap-4">
-                      <Skeleton className="w-12 h-12 rounded-lg" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-6 w-16" />
+                      <Skeleton className="w-12 h-12 rounded-lg skeleton-shimmer" />
+                      <div className="space-y-2 flex-1">
+                        <Skeleton className="h-4 w-20 skeleton-shimmer" />
+                        <Skeleton className="h-6 w-16 skeleton-shimmer" />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+
+            <Skeleton className="h-[500px] rounded-xl skeleton-shimmer" />
           </div>
+          <span className="sr-only">Loading AI Advisor...</span>
         </main>
       </div>
     );
@@ -310,30 +312,30 @@ I can also export our conversation as a detailed PDF report for your records. Ho
   }
 
   return (
-    <div className="">
-      
-      <main className="relative z-10 pt-0 px-6 max-w-7xl mx-auto">
+    <div>
+      <main className="relative z-10 pt-0 px-4 sm:px-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 animate-fade-in">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary-glow to-success mb-2">
+              <h1 className="text-3xl sm:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary-glow to-success mb-1 tracking-tight">
                 AI Financial Advisor
               </h1>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-base sm:text-lg text-muted-foreground">
                 Advanced AI-powered financial guidance with voice interaction and detailed analysis
               </p>
             </div>
-            <div className="flex items-center gap-4">
-              <Badge variant="outline" className="glass border-primary/30 text-primary flex items-center gap-2">
-                <Brain className="w-4 h-4" />
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <Badge variant="outline" className="glass border-primary/30 text-primary flex items-center gap-2 transition-colors hover:bg-primary/5">
+                <Brain className="w-4 h-4" aria-hidden="true" />
                 Advanced AI
               </Badge>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </Button>
@@ -341,58 +343,58 @@ I can also export our conversation as a detailed PDF report for your records. Ho
           </div>
 
           {/* AI Capabilities Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="glass border-white/10 hover-scale">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
-                    <MessageSquare className="w-6 h-6 text-white" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-8">
+            <Card className="glass border-white/10 hover-lift transition-all">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                    <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Conversations</p>
-                    <p className="text-2xl font-bold">{stats.totalSessions}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="glass border-white/10 hover-scale">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-success to-success-dark flex items-center justify-center">
-                    <TrendingUp className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Messages</p>
-                    <p className="text-2xl font-bold">{stats.totalMessages}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Conversations</p>
+                    <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.totalSessions}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="glass border-white/10 hover-scale">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center">
-                    <Target className="w-6 h-6 text-white" />
+            <Card className="glass border-white/10 hover-lift transition-all">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-success to-success-glow flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Recommendations</p>
-                    <p className="text-2xl font-bold">{stats.recommendationsGiven}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Messages</p>
+                    <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.totalMessages}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="glass border-white/10 hover-scale">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
-                    <Shield className="w-6 h-6 text-white" />
+            <Card className="glass border-white/10 hover-lift transition-all">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-warning to-warning-light flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                    <Target className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Powered By</p>
-                    <p className="text-2xl font-bold">Claude AI</p>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Recommendations</p>
+                    <p className="text-xl sm:text-2xl font-bold tabular-nums">{stats.recommendationsGiven}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass border-white/10 hover-lift transition-all">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                    <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Powered By</p>
+                    <p className="text-lg sm:text-2xl font-bold">Claude AI</p>
                   </div>
                 </div>
               </CardContent>
@@ -402,34 +404,37 @@ I can also export our conversation as a detailed PDF report for your records. Ho
 
         {/* Error Display */}
         {error && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive" className="mb-6 animate-fade-in" role="alert">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={() => setError(null)}
-            >
-              Dismiss
-            </Button>
+            <AlertDescription className="flex items-center justify-between gap-4">
+              <span>{error}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setError(null)}
+                className="flex-shrink-0"
+                aria-label="Dismiss error"
+              >
+                Dismiss
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
         {/* Main Interface */}
-        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 pt-0' : ''}`}>
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-4 sm:p-6 pt-0' : ''}`}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
             <TabsList className="grid w-full grid-cols-3 glass border-white/20 mb-6">
-              <TabsTrigger value="chat" className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />
+              <TabsTrigger value="chat" className="flex items-center gap-2 transition-colors">
+                <MessageSquare className="w-4 h-4" aria-hidden="true" />
                 Chat
               </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-2">
-                <History className="w-4 h-4" />
+              <TabsTrigger value="history" className="flex items-center gap-2 transition-colors">
+                <History className="w-4 h-4" aria-hidden="true" />
                 History
               </TabsTrigger>
-              <TabsTrigger value="topics" className="flex items-center gap-2">
-                <Lightbulb className="w-4 h-4" />
+              <TabsTrigger value="topics" className="flex items-center gap-2 transition-colors">
+                <Lightbulb className="w-4 h-4" aria-hidden="true" />
                 Topics
               </TabsTrigger>
             </TabsList>
