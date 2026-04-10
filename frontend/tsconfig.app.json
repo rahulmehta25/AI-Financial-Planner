@@ -14,12 +14,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Tightened from the original — strict mode will be enabled
+       incrementally as the codebase is cleaned up.                */
     "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": false,
+    "noFallthroughCasesInSwitch": true,
 
     "baseUrl": ".",
     "paths": {
@@ -27,10 +29,7 @@
     }
   },
   "include": [
-    "src/**/*",
     "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.js",
-    "src/**/*.jsx"
+    "src/**/*.tsx"
   ]
 }

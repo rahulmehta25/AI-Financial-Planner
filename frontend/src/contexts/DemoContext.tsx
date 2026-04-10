@@ -21,13 +21,16 @@ export const useDemo = () => {
 }
 
 export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isDemoMode, setIsDemoMode] = useState(true)
+  const [isDemoMode, setIsDemoMode] = useState(false)
 
   useEffect(() => {
+    // Check if demo mode is enabled in localStorage or URL params
     const urlParams = new URLSearchParams(window.location.search)
     const demoParam = urlParams.get('demo')
-    if (demoParam === 'false') {
-      setIsDemoMode(false)
+    const storedDemo = localStorage.getItem('demoMode')
+    
+    if (demoParam === 'true' || storedDemo === 'true') {
+      setIsDemoMode(true)
     }
   }, [])
 

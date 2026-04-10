@@ -7,10 +7,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      // Provide empty modules for Node.js built-ins
-      buffer: path.resolve(__dirname, "./src/polyfills/buffer.js"),
-      process: path.resolve(__dirname, "./src/polyfills/process.js"),
+      '@': path.resolve(__dirname, './src'),
+      // Shim Node.js built-ins that leak into the browser bundle
+      buffer: path.resolve(__dirname, './src/polyfills/buffer.js'),
+      process: path.resolve(__dirname, './src/polyfills/process.js'),
     },
   },
   define: {
@@ -21,41 +21,46 @@ export default defineConfig({
     port: 5173,
     host: true,
     strictPort: true,
-    open: false
+    open: false,
   },
   optimizeDeps: {
-    include: ['react', 'react-dom'],
+    include: ['react', 'react-dom', 'recharts'],
     exclude: ['playwright'],
     esbuildOptions: {
-      define: {
-        global: 'globalThis'
-      }
-    }
+      define: { global: 'globalThis' },
+    },
   },
   build: {
     outDir: 'dist',
     sourcemap: false,
     minify: 'esbuild',
-    chunkSizeWarningLimit: 2000,
+    // Plotly alone is ~4.8 MB; split builds are expected to be large chunks
+    chunkSizeWarningLimit: 5000,
     commonjsOptions: {
-      transformMixedEsModules: true
+      transformMixedEsModules: true,
     },
     rollupOptions: {
       output: {
-        manualChunks: {
-          'three-js': ['three'],
-          'plotly': ['plotly.js', 'react-plotly.js'],
-          'd3-charts': ['d3'],
-          'ui-radix': [
-            '@radix-ui/react-accordion',
-            '@radix-ui/react-alert-dialog', 
-            '@radix-ui/react-avatar',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu'
-          ]
-        }
-      }
-    }
-  }
+        // Function-based manualChunks for finer control.
+        // Three.js has been removed — these chunks keep optional heavy libs
+        // isolated so they only load when lazy-loaded routes are visited.
+        manualChunks(id) {
+          // Plotly — only loaded by Monte Carlo / ProbabilityChart (lazy)
+          if (id.includes('plotly')) return 'vendor-plotly'
+
+          // D3 — only loaded by portfolio optimizer charts (lazy)
+          if (id.includes('/node_modules/d3') || id.includes('/node_modules/d3-')) return 'vendor-d3'
+
+          // Supabase
+          if (id.includes('@supabase')) return 'vendor-supabase'
+
+          // Radix UI primitives
+          if (id.includes('@radix-ui')) return 'vendor-radix'
+
+          // TanStack Query
+          if (id.includes('@tanstack')) return 'vendor-query'
+        },
+      },
+    },
+  },
 })

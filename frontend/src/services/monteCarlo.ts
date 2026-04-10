@@ -1,371 +1,383 @@
-import { apiService } from './api';
+/**
+ * Monte Carlo Simulation Service — runs entirely in the browser.
+ * No backend required. Uses geometric Brownian motion with optional
+ * jump-diffusion (Merton model) for realistic market simulation.
+ */
 
 export interface MonteCarloRequest {
-  // Basic Parameters
-  timeHorizon: number;
-  initialInvestment: number;
-  monthlyContribution: number;
-  
-  // Market Parameters
-  expectedReturn: number;
-  volatility: number;
-  riskFreeRate: number;
-  
-  // Advanced Parameters
-  numSimulations: number;
-  jumpIntensity: number;
-  jumpSizeMean: number;
-  jumpSizeStd: number;
-  
-  // Regime Parameters
-  enableRegimeSwitching: boolean;
-  regimeDetection: boolean;
-  
-  // Goal Parameters
-  targetAmount?: number;
-  successThreshold: number;
+  timeHorizon: number
+  initialInvestment: number
+  monthlyContribution: number
+  expectedReturn: number
+  volatility: number
+  riskFreeRate: number
+  numSimulations: number
+  jumpIntensity: number
+  jumpSizeMean: number
+  jumpSizeStd: number
+  enableRegimeSwitching: boolean
+  regimeDetection: boolean
+  targetAmount?: number
+  successThreshold: number
 }
 
 export interface MonteCarloResponse {
-  simulation_id: string;
-  final_values: number[];
-  paths: number[][];
-  timestamps: number[];
+  simulation_id: string
+  final_values: number[]
+  paths: number[][]
+  timestamps: number[]
   risk_metrics: {
-    'Value at Risk (95%)': number;
-    'Conditional VaR (95%)': number;
-    'Maximum Drawdown': number;
-    'Sharpe Ratio': number;
-    'Skewness': number;
-    'Kurtosis': number;
-  };
-  success_rate?: number;
+    'Value at Risk (95%)': number
+    'Conditional VaR (95%)': number
+    'Maximum Drawdown': number
+    'Sharpe Ratio': number
+    'Skewness': number
+    'Kurtosis': number
+  }
+  success_rate?: number
   confidence_intervals: {
-    '10%': number[];
-    '25%': number[];
-    '50%': number[];
-    '75%': number[];
-    '90%': number[];
-  };
+    '10%': number[]
+    '25%': number[]
+    '50%': number[]
+    '75%': number[]
+    '90%': number[]
+  }
   metadata: {
-    computation_time: number;
-    gpu_accelerated: boolean;
-    regime_switches_detected: number;
-    total_jumps: number;
-  };
+    computation_time: number
+    gpu_accelerated: boolean
+    regime_switches_detected: number
+    total_jumps: number
+  }
 }
 
 export interface ScenarioComparison {
   scenarios: {
-    name: string;
-    parameters: MonteCarloRequest;
-    results: MonteCarloResponse;
-  }[];
+    name: string
+    parameters: MonteCarloRequest
+    results: MonteCarloResponse
+  }[]
   comparison_metrics: {
-    expected_returns: number[];
-    volatilities: number[];
-    success_rates: number[];
-    vars: number[];
-    sharpe_ratios: number[];
-  };
+    expected_returns: number[]
+    volatilities: number[]
+    success_rates: number[]
+    vars: number[]
+    sharpe_ratios: number[]
+  }
 }
+
+// --- Math helpers ---
+
+/** Box-Muller transform: uniform [0,1) → standard normal */
+function randn(): number {
+  const u1 = Math.random()
+  const u2 = Math.random()
+  return Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2)
+}
+
+/** Poisson-distributed random integer with rate λ */
+function poissonRandom(lambda: number): number {
+  const L = Math.exp(-lambda)
+  let k = 0
+  let p = 1
+  while (p > L) {
+    k++
+    p *= Math.random()
+  }
+  return k - 1
+}
+
+function percentile(sorted: number[], p: number): number {
+  const idx = (p / 100) * (sorted.length - 1)
+  const lo = Math.floor(idx)
+  const hi = Math.ceil(idx)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+}
+
+function mean(arr: number[]): number {
+  return arr.reduce((a, b) => a + b, 0) / arr.length
+}
+
+function stddev(arr: number[], mu?: number): number {
+  const m = mu ?? mean(arr)
+  const variance = arr.reduce((acc, v) => acc + (v - m) ** 2, 0) / arr.length
+  return Math.sqrt(variance)
+}
+
+function skewness(arr: number[]): number {
+  const m = mean(arr)
+  const s = stddev(arr, m)
+  if (s === 0) return 0
+  return arr.reduce((acc, v) => acc + ((v - m) / s) ** 3, 0) / arr.length
+}
+
+function kurtosis(arr: number[]): number {
+  const m = mean(arr)
+  const s = stddev(arr, m)
+  if (s === 0) return 0
+  return arr.reduce((acc, v) => acc + ((v - m) / s) ** 4, 0) / arr.length - 3
+}
+
+// --- Core simulation ---
 
 class MonteCarloService {
-  private baseURL = '/api/v1/simulation';
+  async runSimulation(params: MonteCarloRequest): Promise<MonteCarloResponse> {
+    const start = performance.now()
 
-  /**
-   * Run a Monte Carlo simulation
-   */
-  async runSimulation(parameters: MonteCarloRequest): Promise<MonteCarloResponse> {
-    try {
-      const response = await apiService.post<MonteCarloResponse>(`${this.baseURL}/monte-carlo`, {
-        // Map frontend parameter names to backend expected format
-        n_years: parameters.timeHorizon,
-        initial_investment: parameters.initialInvestment,
-        monthly_contribution: parameters.monthlyContribution,
-        expected_return: parameters.expectedReturn,
-        volatility: parameters.volatility,
-        risk_free_rate: parameters.riskFreeRate,
-        n_paths: parameters.numSimulations,
-        jump_intensity: parameters.jumpIntensity,
-        jump_size_mean: parameters.jumpSizeMean,
-        jump_size_std: parameters.jumpSizeStd,
-        enable_regime_switching: parameters.enableRegimeSwitching,
-        regime_detection: parameters.regimeDetection,
-        target_amount: parameters.targetAmount,
-        success_threshold: parameters.successThreshold,
-      });
+    const {
+      timeHorizon,
+      initialInvestment,
+      monthlyContribution,
+      expectedReturn,
+      volatility,
+      riskFreeRate,
+      numSimulations,
+      jumpIntensity,
+      jumpSizeMean,
+      jumpSizeStd,
+      enableRegimeSwitching,
+      targetAmount,
+      successThreshold,
+    } = params
 
-      return response.data;
-    } catch (error: any) {
-      console.error('Monte Carlo simulation failed:', error);
-      throw new Error(
-        error.response?.data?.message || 
-        'Failed to run Monte Carlo simulation. Please check your parameters and try again.'
-      );
-    }
-  }
+    // Cap simulations at 5 000 to keep the UI responsive in-browser
+    const nSims = Math.min(numSimulations, 5000)
+    const nSteps = timeHorizon * 12 // monthly steps
+    const dt = 1 / 12 // 1 month in years
 
-  /**
-   * Get simulation status (for long-running simulations)
-   */
-  async getSimulationStatus(simulationId: string): Promise<{
-    status: 'running' | 'completed' | 'failed';
-    progress?: number;
-    error?: string;
-    result?: MonteCarloResponse;
-  }> {
-    try {
-      const response = await apiService.get(`${this.baseURL}/status/${simulationId}`);
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to get simulation status:', error);
-      throw new Error('Failed to retrieve simulation status');
-    }
-  }
+    // Drift (μ - σ²/2) for GBM
+    const mu = expectedReturn - 0.5 * volatility ** 2
 
-  /**
-   * Cancel a running simulation
-   */
-  async cancelSimulation(simulationId: string): Promise<void> {
-    try {
-      await apiService.delete(`${this.baseURL}/cancel/${simulationId}`);
-    } catch (error: any) {
-      console.error('Failed to cancel simulation:', error);
-      throw new Error('Failed to cancel simulation');
-    }
-  }
+    // Regime parameters (bear/bull)
+    const bullReturn = expectedReturn * 1.2
+    const bearReturn = expectedReturn * 0.4
+    const bullVol = volatility * 0.9
+    const bearVol = volatility * 1.5
+    const transitionToBear = 0.02 // monthly probability of switching to bear
+    const transitionToBull = 0.10
 
-  /**
-   * Compare multiple scenarios
-   */
-  async compareScenarios(scenarios: {
-    name: string;
-    parameters: MonteCarloRequest;
-  }[]): Promise<ScenarioComparison> {
-    try {
-      const response = await apiService.post<ScenarioComparison>(`${this.baseURL}/compare`, {
-        scenarios: scenarios.map(scenario => ({
-          name: scenario.name,
-          parameters: {
-            n_years: scenario.parameters.timeHorizon,
-            initial_investment: scenario.parameters.initialInvestment,
-            monthly_contribution: scenario.parameters.monthlyContribution,
-            expected_return: scenario.parameters.expectedReturn,
-            volatility: scenario.parameters.volatility,
-            risk_free_rate: scenario.parameters.riskFreeRate,
-            n_paths: scenario.parameters.numSimulations,
-            jump_intensity: scenario.parameters.jumpIntensity,
-            jump_size_mean: scenario.parameters.jumpSizeMean,
-            jump_size_std: scenario.parameters.jumpSizeStd,
-            enable_regime_switching: scenario.parameters.enableRegimeSwitching,
-            regime_detection: scenario.parameters.regimeDetection,
-            target_amount: scenario.parameters.targetAmount,
-            success_threshold: scenario.parameters.successThreshold,
+    const allPaths: number[][] = []
+    const finalValues: number[] = []
+    let totalJumps = 0
+    let totalRegimeSwitches = 0
+
+    // Only sample a subset of paths for the chart to save memory (max 200)
+    const pathSampleRate = Math.max(1, Math.floor(nSims / 200))
+
+    for (let s = 0; s < nSims; s++) {
+      let value = initialInvestment
+      let inBullRegime = true
+      const path: number[] = [value]
+
+      for (let t = 0; t < nSteps; t++) {
+        // Regime switching
+        let mu_t = mu
+        let vol_t = volatility
+        if (enableRegimeSwitching) {
+          if (inBullRegime) {
+            if (Math.random() < transitionToBear) {
+              inBullRegime = false
+              totalRegimeSwitches++
+            }
+          } else {
+            if (Math.random() < transitionToBull) {
+              inBullRegime = true
+              totalRegimeSwitches++
+            }
           }
-        }))
-      });
+          const r = inBullRegime ? bullReturn : bearReturn
+          const v = inBullRegime ? bullVol : bearVol
+          mu_t = r - 0.5 * v ** 2
+          vol_t = v
+        }
 
-      return response.data;
-    } catch (error: any) {
-      console.error('Scenario comparison failed:', error);
-      throw new Error('Failed to compare scenarios');
-    }
-  }
+        // GBM step
+        const dW = randn() * Math.sqrt(dt)
+        let returnMultiplier = Math.exp(mu_t * dt + vol_t * dW)
 
-  /**
-   * Export simulation results
-   */
-  async exportResults(simulationId: string, format: 'csv' | 'json' | 'pdf' = 'csv'): Promise<Blob> {
-    try {
-      const response = await apiService.get(`${this.baseURL}/export/${simulationId}`, {
-        params: { format },
-        responseType: 'blob'
-      });
+        // Jump diffusion
+        if (jumpIntensity > 0) {
+          const nJumps = poissonRandom(jumpIntensity * dt)
+          if (nJumps > 0) {
+            totalJumps += nJumps
+            for (let j = 0; j < nJumps; j++) {
+              const jumpSize = Math.exp(jumpSizeMean + jumpSizeStd * randn()) - 1
+              returnMultiplier *= 1 + jumpSize
+            }
+          }
+        }
 
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to export results:', error);
-      throw new Error('Failed to export simulation results');
-    }
-  }
+        // Apply return and add monthly contribution
+        value = Math.max(0, value * returnMultiplier + monthlyContribution)
 
-  /**
-   * Get historical simulation results
-   */
-  async getHistoricalResults(limit: number = 10): Promise<{
-    simulations: Array<{
-      id: string;
-      parameters: MonteCarloRequest;
-      results: MonteCarloResponse;
-      created_at: string;
-    }>;
-  }> {
-    try {
-      const response = await apiService.get(`${this.baseURL}/history`, {
-        params: { limit }
-      });
-
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to get historical results:', error);
-      throw new Error('Failed to retrieve historical simulation results');
-    }
-  }
-
-  /**
-   * Validate simulation parameters
-   */
-  validateParameters(parameters: MonteCarloRequest): {
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
-  } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // Basic validation
-    if (parameters.timeHorizon <= 0 || parameters.timeHorizon > 50) {
-      errors.push('Time horizon must be between 1 and 50 years');
-    }
-
-    if (parameters.initialInvestment < 0) {
-      errors.push('Initial investment cannot be negative');
-    }
-
-    if (parameters.monthlyContribution < 0) {
-      errors.push('Monthly contribution cannot be negative');
-    }
-
-    if (parameters.expectedReturn < -0.5 || parameters.expectedReturn > 1.0) {
-      errors.push('Expected return must be between -50% and 100%');
-    }
-
-    if (parameters.volatility <= 0 || parameters.volatility > 1.0) {
-      errors.push('Volatility must be between 0% and 100%');
-    }
-
-    if (parameters.riskFreeRate < 0 || parameters.riskFreeRate > 0.2) {
-      errors.push('Risk-free rate must be between 0% and 20%');
-    }
-
-    if (parameters.numSimulations < 100 || parameters.numSimulations > 1000000) {
-      errors.push('Number of simulations must be between 100 and 1,000,000');
-    }
-
-    if (parameters.jumpIntensity < 0 || parameters.jumpIntensity > 5) {
-      errors.push('Jump intensity must be between 0 and 5');
-    }
-
-    if (parameters.successThreshold <= 0 || parameters.successThreshold > 1) {
-      errors.push('Success threshold must be between 0% and 100%');
-    }
-
-    // Warnings
-    if (parameters.numSimulations < 1000) {
-      warnings.push('Consider using at least 1,000 simulations for more accurate results');
-    }
-
-    if (parameters.expectedReturn > 0.15) {
-      warnings.push('Expected return above 15% may be optimistic for most asset classes');
-    }
-
-    if (parameters.volatility > 0.3) {
-      warnings.push('Volatility above 30% indicates very high risk');
-    }
-
-    if (parameters.jumpIntensity > 1 && parameters.jumpSizeMean < 0) {
-      warnings.push('High jump intensity with negative mean may lead to very pessimistic outcomes');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings
-    };
-  }
-
-  /**
-   * Get suggested parameter ranges based on asset class
-   */
-  getSuggestedParameters(assetClass: 'stocks' | 'bonds' | 'mixed' | 'aggressive'): Partial<MonteCarloRequest> {
-    const suggestions = {
-      stocks: {
-        expectedReturn: 0.10,
-        volatility: 0.16,
-        jumpIntensity: 0.1,
-        jumpSizeMean: -0.05,
-        jumpSizeStd: 0.2
-      },
-      bonds: {
-        expectedReturn: 0.04,
-        volatility: 0.05,
-        jumpIntensity: 0.02,
-        jumpSizeMean: -0.02,
-        jumpSizeStd: 0.1
-      },
-      mixed: {
-        expectedReturn: 0.07,
-        volatility: 0.12,
-        jumpIntensity: 0.05,
-        jumpSizeMean: -0.03,
-        jumpSizeStd: 0.15
-      },
-      aggressive: {
-        expectedReturn: 0.12,
-        volatility: 0.20,
-        jumpIntensity: 0.15,
-        jumpSizeMean: -0.08,
-        jumpSizeStd: 0.25
+        if (s % pathSampleRate === 0) {
+          path.push(value)
+        }
       }
-    };
 
-    return suggestions[assetClass];
-  }
+      finalValues.push(value)
+      if (s % pathSampleRate === 0) {
+        allPaths.push(path)
+      }
+    }
 
-  /**
-   * Calculate goal achievement probability
-   */
-  calculateGoalProbability(results: MonteCarloResponse, targetAmount: number): {
-    probability: number;
-    shortfall: number;
-    surplus: number;
-    confidenceLevel: string;
-  } {
-    const successCount = results.final_values.filter(value => value >= targetAmount).length;
-    const probability = successCount / results.final_values.length;
-    
-    const shortfalls = results.final_values
-      .filter(value => value < targetAmount)
-      .map(value => targetAmount - value);
-    
-    const surpluses = results.final_values
-      .filter(value => value >= targetAmount)
-      .map(value => value - targetAmount);
+    // Timestamps (years)
+    const timestamps = Array.from({ length: nSteps + 1 }, (_, i) => i / 12)
 
-    const avgShortfall = shortfalls.length > 0 
-      ? shortfalls.reduce((a, b) => a + b, 0) / shortfalls.length 
-      : 0;
-    
-    const avgSurplus = surpluses.length > 0 
-      ? surpluses.reduce((a, b) => a + b, 0) / surpluses.length 
-      : 0;
+    // Sort final values for percentile calculations
+    const sorted = [...finalValues].sort((a, b) => a - b)
 
-    const getConfidenceLevel = (prob: number): string => {
-      if (prob >= 0.95) return 'Very High';
-      if (prob >= 0.85) return 'High';
-      if (prob >= 0.70) return 'Moderate';
-      if (prob >= 0.50) return 'Low';
-      return 'Very Low';
-    };
+    // Confidence intervals at each time step
+    const nPathSamples = allPaths.length
+    const ci: MonteCarloResponse['confidence_intervals'] = {
+      '10%': [],
+      '25%': [],
+      '50%': [],
+      '75%': [],
+      '90%': [],
+    }
+
+    for (let t = 0; t <= nSteps; t++) {
+      const stepValues = allPaths.map((p) => p[Math.min(t, p.length - 1)]).sort((a, b) => a - b)
+      ci['10%'].push(percentile(stepValues, 10))
+      ci['25%'].push(percentile(stepValues, 25))
+      ci['50%'].push(percentile(stepValues, 50))
+      ci['75%'].push(percentile(stepValues, 75))
+      ci['90%'].push(percentile(stepValues, 90))
+    }
+
+    // Risk metrics
+    const varIndex = Math.floor(0.05 * sorted.length)
+    const var95 = sorted[varIndex]
+    const cvar95 = mean(sorted.slice(0, varIndex + 1))
+
+    // Sharpe ratio: annualised excess return / volatility
+    const finalReturns = finalValues.map((v) => Math.log(v / (initialInvestment || 1)) / timeHorizon)
+    const meanReturn = mean(finalReturns)
+    const retStd = stddev(finalReturns, meanReturn)
+    const sharpe = retStd > 0 ? (meanReturn - riskFreeRate) / retStd : 0
+
+    // Max drawdown across median path
+    const medianPath = ci['50%']
+    let peak = medianPath[0]
+    let maxDrawdown = 0
+    for (const v of medianPath) {
+      if (v > peak) peak = v
+      const dd = (peak - v) / (peak || 1)
+      if (dd > maxDrawdown) maxDrawdown = dd
+    }
+
+    const successRate = targetAmount
+      ? finalValues.filter((v) => v >= targetAmount * successThreshold).length / finalValues.length
+      : undefined
+
+    const elapsed = performance.now() - start
 
     return {
-      probability,
-      shortfall: avgShortfall,
-      surplus: avgSurplus,
-      confidenceLevel: getConfidenceLevel(probability)
-    };
+      simulation_id: 'browser-' + Date.now(),
+      final_values: sorted,
+      paths: allPaths,
+      timestamps,
+      risk_metrics: {
+        'Value at Risk (95%)': var95,
+        'Conditional VaR (95%)': cvar95,
+        'Maximum Drawdown': maxDrawdown,
+        'Sharpe Ratio': sharpe,
+        Skewness: skewness(finalValues),
+        Kurtosis: kurtosis(finalValues),
+      },
+      success_rate: successRate,
+      confidence_intervals: ci,
+      metadata: {
+        computation_time: Math.round(elapsed),
+        gpu_accelerated: false,
+        regime_switches_detected: totalRegimeSwitches,
+        total_jumps: totalJumps,
+      },
+    }
+  }
+
+  async compareScenarios(
+    scenarios: { name: string; parameters: MonteCarloRequest }[],
+  ): Promise<ScenarioComparison> {
+    const results = await Promise.all(scenarios.map((s) => this.runSimulation(s.parameters)))
+
+    return {
+      scenarios: scenarios.map((s, i) => ({ name: s.name, parameters: s.parameters, results: results[i] })),
+      comparison_metrics: {
+        expected_returns: results.map((r) => mean(r.final_values)),
+        volatilities: results.map((r) => stddev(r.final_values)),
+        success_rates: results.map((r) => r.success_rate ?? 0),
+        vars: results.map((r) => r.risk_metrics['Value at Risk (95%)']),
+        sharpe_ratios: results.map((r) => r.risk_metrics['Sharpe Ratio']),
+      },
+    }
+  }
+
+  validateParameters(parameters: MonteCarloRequest): {
+    isValid: boolean
+    errors: string[]
+    warnings: string[]
+  } {
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    if (parameters.timeHorizon <= 0 || parameters.timeHorizon > 50)
+      errors.push('Time horizon must be between 1 and 50 years')
+    if (parameters.initialInvestment < 0) errors.push('Initial investment cannot be negative')
+    if (parameters.monthlyContribution < 0) errors.push('Monthly contribution cannot be negative')
+    if (parameters.expectedReturn < -0.5 || parameters.expectedReturn > 1.0)
+      errors.push('Expected return must be between -50% and 100%')
+    if (parameters.volatility <= 0 || parameters.volatility > 1.0)
+      errors.push('Volatility must be between 0% and 100%')
+    if (parameters.riskFreeRate < 0 || parameters.riskFreeRate > 0.2)
+      errors.push('Risk-free rate must be between 0% and 20%')
+    if (parameters.numSimulations < 100 || parameters.numSimulations > 1000000)
+      errors.push('Number of simulations must be between 100 and 1,000,000')
+    if (parameters.successThreshold <= 0 || parameters.successThreshold > 1)
+      errors.push('Success threshold must be between 0% and 100%')
+
+    if (parameters.numSimulations < 1000)
+      warnings.push('Consider using at least 1,000 simulations for more accurate results')
+    if (parameters.expectedReturn > 0.15)
+      warnings.push('Expected return above 15% may be optimistic for most asset classes')
+    if (parameters.volatility > 0.3) warnings.push('Volatility above 30% indicates very high risk')
+
+    return { isValid: errors.length === 0, errors, warnings }
+  }
+
+  getSuggestedParameters(assetClass: 'stocks' | 'bonds' | 'mixed' | 'aggressive'): Partial<MonteCarloRequest> {
+    return {
+      stocks: { expectedReturn: 0.10, volatility: 0.16, jumpIntensity: 0.1, jumpSizeMean: -0.05, jumpSizeStd: 0.2 },
+      bonds: { expectedReturn: 0.04, volatility: 0.05, jumpIntensity: 0.02, jumpSizeMean: -0.02, jumpSizeStd: 0.1 },
+      mixed: { expectedReturn: 0.07, volatility: 0.12, jumpIntensity: 0.05, jumpSizeMean: -0.03, jumpSizeStd: 0.15 },
+      aggressive: { expectedReturn: 0.12, volatility: 0.20, jumpIntensity: 0.15, jumpSizeMean: -0.08, jumpSizeStd: 0.25 },
+    }[assetClass]
+  }
+
+  calculateGoalProbability(
+    results: MonteCarloResponse,
+    targetAmount: number,
+  ): { probability: number; shortfall: number; surplus: number; confidenceLevel: string } {
+    const successes = results.final_values.filter((v) => v >= targetAmount)
+    const failures = results.final_values.filter((v) => v < targetAmount)
+    const probability = successes.length / results.final_values.length
+    const avgShortfall = failures.length > 0 ? mean(failures.map((v) => targetAmount - v)) : 0
+    const avgSurplus = successes.length > 0 ? mean(successes.map((v) => v - targetAmount)) : 0
+
+    const confidenceLevel =
+      probability >= 0.95
+        ? 'Very High'
+        : probability >= 0.85
+          ? 'High'
+          : probability >= 0.7
+            ? 'Moderate'
+            : probability >= 0.5
+              ? 'Low'
+              : 'Very Low'
+
+    return { probability, shortfall: avgShortfall, surplus: avgSurplus, confidenceLevel }
   }
 }
 
-export const monteCarloService = new MonteCarloService();
+export const monteCarloService = new MonteCarloService()

@@ -1,204 +1,486 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Calculator, Play, TrendingUp } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { runClientMonteCarlo } from '@/data/demoData';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Play, 
+  StopCircle, 
+  Download, 
+  GitCompare, 
+  History,
+  AlertTriangle,
+  CheckCircle,
+  Info,
+  TrendingUp,
+  Calculator
+} from 'lucide-react';
 
-const formatCurrency = (v: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+// Import our components
+import SimulationControls, { SimulationParameters } from '@/components/simulation/SimulationControls';
+import SimulationResults from '@/components/simulation/SimulationResults';
+import ProbabilityChart, { SimulationResult } from '@/components/simulation/ProbabilityChart';
+
+// Import service
+import { 
+  monteCarloService, 
+  MonteCarloRequest, 
+  MonteCarloResponse,
+  ScenarioComparison 
+} from '@/services/monteCarlo';
 
 const MonteCarloSimulation: React.FC = () => {
-  const [initialInvestment, setInitialInvestment] = useState(100000);
-  const [monthlyContribution, setMonthlyContribution] = useState(1000);
-  const [timeHorizon, setTimeHorizon] = useState(20);
-  const [hasRun, setHasRun] = useState(false);
-  const [simKey, setSimKey] = useState(0);
+  // Simulation state
+  const [parameters, setParameters] = useState<SimulationParameters>({
+    timeHorizon: 30,
+    initialInvestment: 100000,
+    monthlyContribution: 1000,
+    expectedReturn: 0.08,
+    volatility: 0.15,
+    riskFreeRate: 0.02,
+    numSimulations: 10000,
+    jumpIntensity: 0.1,
+    jumpSizeMean: -0.05,
+    jumpSizeStd: 0.2,
+    enableRegimeSwitching: false,
+    regimeDetection: false,
+    targetAmount: undefined,
+    successThreshold: 0.95
+  });
 
-  const results = useMemo(() => {
-    if (!hasRun) return null;
-    return runClientMonteCarlo(initialInvestment, monthlyContribution, timeHorizon, 1000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRun, simKey]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState<SimulationResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
-  const chartData = useMemo(() => {
-    if (!results) return [];
-    const step = Math.max(1, Math.floor(results.months.length / 120));
-    return results.months
-      .filter((_, i) => i % step === 0 || i === results.months.length - 1)
-      .map((m, idx) => {
-        const i = m;
-        return {
-          month: m,
-          year: (m / 12).toFixed(1),
-          label: m % 12 === 0 ? `Year ${m / 12}` : '',
-          p90: results.p90[i],
-          median: results.median[i],
-          p10: results.p10[i],
-        };
+  // Scenario comparison state
+  const [scenarios, setScenarios] = useState<Array<{
+    name: string;
+    parameters: SimulationParameters;
+    results?: SimulationResult;
+  }>>([]);
+  const [comparisonResults, setComparisonResults] = useState<ScenarioComparison | null>(null);
+
+  // Validate parameters when they change
+  useEffect(() => {
+    const validation = monteCarloService.validateParameters(parameters);
+    setWarnings(validation.warnings);
+    if (!validation.isValid) {
+      setError(validation.errors.join(', '));
+    } else {
+      setError(null);
+    }
+  }, [parameters]);
+
+  // Transform backend response to frontend format
+  const transformResults = useCallback((response: MonteCarloResponse): SimulationResult => {
+    const successRate = parameters.targetAmount 
+      ? response.final_values.filter(value => value >= parameters.targetAmount!).length / response.final_values.length
+      : undefined;
+
+    return {
+      finalValues: response.final_values,
+      paths: response.paths,
+      timestamps: response.timestamps,
+      riskMetrics: response.risk_metrics,
+      successRate,
+      confidenceIntervals: response.confidence_intervals
+    };
+  }, [parameters.targetAmount]);
+
+  // Run simulation
+  const handleRunSimulation = useCallback(async () => {
+    try {
+      setIsRunning(true);
+      setError(null);
+      setProgress(0);
+
+      // Validate parameters
+      const validation = monteCarloService.validateParameters(parameters);
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      // Show warnings
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => {
+          toast({
+            title: "Parameter Warning",
+            description: warning,
+            variant: "default"
+          });
+        });
+      }
+
+      // Simulate progress for long-running simulations
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 10;
+        });
+      }, 500);
+
+      toast({
+        title: "Simulation Started",
+        description: `Running ${parameters.numSimulations.toLocaleString()} Monte Carlo simulations...`
       });
-  }, [results]);
 
-  const handleRun = () => {
-    setHasRun(true);
-    setSimKey((k) => k + 1);
+      const request: MonteCarloRequest = parameters;
+      const response = await monteCarloService.runSimulation(request);
+      
+      clearInterval(progressInterval);
+      setProgress(100);
+      
+      const transformedResults = transformResults(response);
+      setResults(transformedResults);
+      setSimulationId(response.simulation_id);
+
+      toast({
+        title: "Simulation Complete",
+        description: `Analysis completed in ${response.metadata.computation_time.toFixed(2)} seconds`
+      });
+
+    } catch (err: any) {
+      setError(err.message);
+      toast({
+        title: "Simulation Failed",
+        description: err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [parameters, transformResults]);
+
+  // Export results
+  const handleExportResults = useCallback(async () => {
+    if (!simulationId) return;
+
+    try {
+      const blob = await monteCarloService.exportResults(simulationId, 'csv');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `monte-carlo-results-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export Complete",
+        description: "Simulation results exported successfully"
+      });
+    } catch (err: any) {
+      toast({
+        title: "Export Failed",
+        description: err.message,
+        variant: "destructive"
+      });
+    }
+  }, [simulationId]);
+
+  // Add to scenario comparison
+  const handleAddToComparison = useCallback(() => {
+    if (!results) return;
+
+    const scenarioName = `Scenario ${scenarios.length + 1}`;
+    setScenarios(prev => [...prev, {
+      name: scenarioName,
+      parameters: { ...parameters },
+      results
+    }]);
+
+    toast({
+      title: "Scenario Added",
+      description: `Added ${scenarioName} to comparison`
+    });
+  }, [parameters, results, scenarios.length]);
+
+  // Load preset parameters
+  const handleLoadPreset = useCallback((assetClass: 'stocks' | 'bonds' | 'mixed' | 'aggressive') => {
+    const suggested = monteCarloService.getSuggestedParameters(assetClass);
+    setParameters(prev => ({ ...prev, ...suggested }));
+    
+    toast({
+      title: "Preset Loaded",
+      description: `Loaded ${assetClass} asset class parameters`
+    });
+  }, []);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
-  const finalMedian = results ? results.median[results.median.length - 1] : 0;
-  const finalP10 = results ? results.p10[results.p10.length - 1] : 0;
-  const finalP90 = results ? results.p90[results.p90.length - 1] : 0;
-
   return (
-    <div className="space-y-6">
-      {/* Controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5 text-emerald-600" />
-            Simulation Parameters
-          </CardTitle>
-          <CardDescription>Configure inputs and run 1,000 Monte Carlo paths using geometric Brownian motion</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-            <div className="space-y-2">
-              <Label htmlFor="mc-initial">Initial Investment</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                <Input
-                  id="mc-initial"
-                  type="number"
-                  min={0}
-                  value={initialInvestment}
-                  onChange={(e) => setInitialInvestment(Number(e.target.value) || 0)}
-                  className="pl-7"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mc-monthly">Monthly Contribution</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                <Input
-                  id="mc-monthly"
-                  type="number"
-                  min={0}
-                  value={monthlyContribution}
-                  onChange={(e) => setMonthlyContribution(Number(e.target.value) || 0)}
-                  className="pl-7"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mc-years">Time Horizon (Years)</Label>
-              <Input
-                id="mc-years"
-                type="number"
-                min={1}
-                max={50}
-                value={timeHorizon}
-                onChange={(e) => setTimeHorizon(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
-              />
-            </div>
-          </div>
-          <Button onClick={handleRun} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            <Play className="h-4 w-4 mr-2" />
-            Run Simulation
+    <div className="container mx-auto p-6 space-y-6" id="monte-carlo-simulation-page">
+      {/* Header */}
+      <div className="flex items-center justify-between" id="page-header">
+        <div id="page-title-section">
+          <h1 className="text-3xl font-bold flex items-center gap-3" id="page-title">
+            <Calculator className="h-8 w-8 text-blue-600" />
+            Monte Carlo Simulation
+          </h1>
+          <p className="text-muted-foreground mt-2" id="page-description">
+            Advanced portfolio simulation with statistical analysis and risk modeling
+          </p>
+        </div>
+
+        <div className="flex gap-2" id="page-actions">
+          <Button 
+            variant="outline" 
+            onClick={() => handleLoadPreset('mixed')}
+            id="load-preset-button"
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Load Preset
           </Button>
-        </CardContent>
-      </Card>
+          {results && (
+            <Button 
+              variant="outline" 
+              onClick={handleAddToComparison}
+              id="add-to-comparison-button"
+            >
+              <GitCompare className="h-4 w-4 mr-2" />
+              Add to Comparison
+            </Button>
+          )}
+        </div>
+      </div>
 
-      {/* Results */}
-      {results && (
+      {/* Status and Warnings */}
+      {(error || warnings.length > 0 || isRunning) && (
+        <div className="space-y-2" id="status-section">
+          {error && (
+            <Alert variant="destructive" id="error-alert">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
+          {warnings.map((warning, index) => (
+            <Alert key={index} id={`warning-alert-${index}`}>
+              <Info className="h-4 w-4" />
+              <AlertDescription>{warning}</AlertDescription>
+            </Alert>
+          ))}
+          
+          {isRunning && (
+            <Alert id="running-alert">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="flex items-center justify-between" id="progress-content">
+                  <span>Running simulation...</span>
+                  <Badge variant="outline" id="progress-badge">{progress.toFixed(0)}%</Badge>
+                </div>
+                <Progress value={progress} className="mt-2" id="simulation-progress" />
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" id="main-content-grid">
+        {/* Controls Panel */}
+        <div className="xl:col-span-1" id="controls-panel">
+          <SimulationControls
+            parameters={parameters}
+            onParametersChange={setParameters}
+            onRunSimulation={handleRunSimulation}
+            isRunning={isRunning}
+            className="sticky top-6"
+          />
+        </div>
+
+        {/* Results Panel */}
+        <div className="xl:col-span-2 space-y-6" id="results-panel">
+          {/* Quick Stats */}
+          {results && (
+            <Card id="quick-stats-card">
+              <CardHeader id="quick-stats-header">
+                <CardTitle className="flex items-center gap-2" id="quick-stats-title">
+                  <TrendingUp className="h-5 w-5" />
+                  Simulation Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent id="quick-stats-content">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="quick-stats-grid">
+                  <div className="text-center" id="mean-outcome">
+                    <div className="text-sm text-muted-foreground">Expected Value</div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(results.finalValues.reduce((a, b) => a + b, 0) / results.finalValues.length)}
+                    </div>
+                  </div>
+                  <div className="text-center" id="success-rate">
+                    <div className="text-sm text-muted-foreground">Success Rate</div>
+                    <div className="text-lg font-semibold">
+                      {results.successRate ? `${(results.successRate * 100).toFixed(1)}%` : 'N/A'}
+                    </div>
+                  </div>
+                  <div className="text-center" id="var-metric">
+                    <div className="text-sm text-muted-foreground">VaR (95%)</div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(results.riskMetrics['Value at Risk (95%)'])}
+                    </div>
+                  </div>
+                  <div className="text-center" id="sharpe-ratio">
+                    <div className="text-sm text-muted-foreground">Sharpe Ratio</div>
+                    <div className="text-lg font-semibold">
+                      {results.riskMetrics['Sharpe Ratio'].toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Simulation Results */}
+          <SimulationResults 
+            results={results}
+            targetAmount={parameters.targetAmount}
+            onExportResults={simulationId ? handleExportResults : undefined}
+          />
+
+          {/* Probability Analysis */}
+          <ProbabilityChart 
+            results={results}
+            targetAmount={parameters.targetAmount}
+          />
+        </div>
+      </div>
+
+      {/* Scenario Comparison */}
+      {scenarios.length > 0 && (
         <>
-          {/* Summary Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-5 text-center">
-                <p className="text-xs text-muted-foreground mb-1">Median Outcome (P50)</p>
-                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(finalMedian)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5 text-center">
-                <p className="text-xs text-muted-foreground mb-1">Pessimistic (P10)</p>
-                <p className="text-2xl font-bold text-amber-600">{formatCurrency(finalP10)}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5 text-center">
-                <p className="text-xs text-muted-foreground mb-1">Optimistic (P90)</p>
-                <p className="text-2xl font-bold text-blue-600">{formatCurrency(finalP90)}</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-emerald-600" />
-                Projected Portfolio Growth
+          <Separator id="scenario-separator" />
+          <Card id="scenario-comparison-card">
+            <CardHeader id="scenario-comparison-header">
+              <CardTitle className="flex items-center gap-2" id="scenario-comparison-title">
+                <GitCompare className="h-5 w-5" />
+                Scenario Comparison
               </CardTitle>
-              <CardDescription>
-                1,000 simulated paths &middot; 8% expected annual return &middot; 15% volatility
+              <CardDescription id="scenario-comparison-description">
+                Compare different simulation scenarios side by side
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="month"
-                    tickFormatter={(m: number) => m % 12 === 0 ? `Yr ${m / 12}` : ''}
-                    interval="preserveStartEnd"
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                  />
-                  <YAxis
-                    tickFormatter={(v: number) => v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : `$${(v / 1000).toFixed(0)}K`}
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                    width={65}
-                  />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [formatCurrency(v), name === 'p90' ? '90th Percentile' : name === 'p10' ? '10th Percentile' : 'Median']}
-                    labelFormatter={(m: number) => `Year ${(m / 12).toFixed(1)}`}
-                  />
-                  <Area type="monotone" dataKey="p90" stroke="#3b82f6" fill="#dbeafe" strokeWidth={1.5} name="p90" />
-                  <Area type="monotone" dataKey="median" stroke="#059669" fill="#d1fae5" strokeWidth={2} name="median" />
-                  <Area type="monotone" dataKey="p10" stroke="#d97706" fill="#fef3c7" strokeWidth={1.5} name="p10" />
-                </AreaChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-6 mt-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-500" />
-                  <span className="text-muted-foreground">90th Percentile (Optimistic)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-600" />
-                  <span className="text-muted-foreground">Median (Expected)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-amber-500" />
-                  <span className="text-muted-foreground">10th Percentile (Conservative)</span>
-                </div>
+            <CardContent id="scenario-comparison-content">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="scenarios-grid">
+                {scenarios.map((scenario, index) => (
+                  <Card key={index} className="p-4" id={`scenario-card-${index}`}>
+                    <div className="flex items-center justify-between mb-2" id={`scenario-header-${index}`}>
+                      <h4 className="font-semibold">{scenario.name}</h4>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setScenarios(prev => prev.filter((_, i) => i !== index))}
+                        id={`remove-scenario-${index}`}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm" id={`scenario-details-${index}`}>
+                      <div className="flex justify-between" id={`scenario-investment-${index}`}>
+                        <span>Initial Investment:</span>
+                        <span>{formatCurrency(scenario.parameters.initialInvestment)}</span>
+                      </div>
+                      <div className="flex justify-between" id={`scenario-return-${index}`}>
+                        <span>Expected Return:</span>
+                        <span>{(scenario.parameters.expectedReturn * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between" id={`scenario-volatility-${index}`}>
+                        <span>Volatility:</span>
+                        <span>{(scenario.parameters.volatility * 100).toFixed(1)}%</span>
+                      </div>
+                      {scenario.results && (
+                        <>
+                          <Separator className="my-2" id={`scenario-separator-${index}`} />
+                          <div className="flex justify-between font-medium" id={`scenario-expected-${index}`}>
+                            <span>Expected Value:</span>
+                            <span>
+                              {formatCurrency(
+                                scenario.results.finalValues.reduce((a, b) => a + b, 0) / scenario.results.finalValues.length
+                              )}
+                            </span>
+                          </div>
+                          {scenario.results.successRate && (
+                            <div className="flex justify-between" id={`scenario-success-${index}`}>
+                              <span>Success Rate:</span>
+                              <span>{(scenario.results.successRate * 100).toFixed(1)}%</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </Card>
+                ))}
               </div>
+              
+              {scenarios.length >= 2 && (
+                <div className="mt-4" id="compare-scenarios-section">
+                  <Button 
+                    onClick={() => {
+                      // TODO: Implement scenario comparison analysis
+                      toast({
+                        title: "Feature Coming Soon",
+                        description: "Detailed scenario comparison will be available in the next update"
+                      });
+                    }}
+                    className="w-full"
+                    id="compare-scenarios-button"
+                  >
+                    <GitCompare className="h-4 w-4 mr-2" />
+                    Run Detailed Comparison Analysis
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
       )}
 
-      {!results && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Calculator className="h-12 w-12 mb-4 opacity-40" />
-            <p className="text-lg font-medium mb-1">No simulation results yet</p>
-            <p className="text-sm">Configure parameters above and click "Run Simulation"</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Asset Class Presets */}
+      <Card id="presets-card">
+        <CardHeader id="presets-header">
+          <CardTitle>Parameter Presets</CardTitle>
+          <CardDescription>
+            Quick start with pre-configured parameters for different asset classes
+          </CardDescription>
+        </CardHeader>
+        <CardContent id="presets-content">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="presets-grid">
+            {[
+              { key: 'stocks', name: 'Stocks', desc: 'High growth, high volatility' },
+              { key: 'bonds', name: 'Bonds', desc: 'Low risk, stable returns' },
+              { key: 'mixed', name: 'Balanced', desc: '60/40 stocks/bonds mix' },
+              { key: 'aggressive', name: 'Aggressive', desc: 'Maximum growth potential' }
+            ].map(preset => (
+              <Button
+                key={preset.key}
+                variant="outline"
+                className="h-auto p-4 flex flex-col items-start"
+                onClick={() => handleLoadPreset(preset.key as any)}
+                id={`preset-${preset.key}`}
+              >
+                <div className="font-medium">{preset.name}</div>
+                <div className="text-xs text-muted-foreground mt-1">{preset.desc}</div>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

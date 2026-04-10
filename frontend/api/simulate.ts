@@ -33,7 +33,7 @@ function runMonteCarloSimulation(profile: FinancialProfile): SimulationResult {
   const annualSavings = income * 0.15 // Assume 15% savings rate
   
   // Simple compound growth calculation with some randomness
-  const projectedBalance = savings
+  let projectedBalance = savings
   const simulations = 1000
   const results: number[] = []
   

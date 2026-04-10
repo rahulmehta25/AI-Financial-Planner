@@ -154,12 +154,11 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       case 'starred':
         filtered = filtered.filter(session => session.isStarred);
         break;
-      case 'recent': {
+      case 'recent':
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         filtered = filtered.filter(session => session.lastActivity > weekAgo);
         break;
-      }
       case 'has_recommendations':
         filtered = filtered.filter(session => session.hasRecommendations);
         break;

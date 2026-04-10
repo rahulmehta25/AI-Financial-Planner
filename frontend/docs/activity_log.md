@@ -2,17 +2,6 @@
 
 A comprehensive record of project development, changes, and decision-making processes.
 
-## 2026-03-07 EST
-
-### User Prompt
-"Test the AI Financial Planner web app, check all nav tabs, portfolio holdings, sector allocation chart, and goal tracker. Fix any issues found."
-
-### Actions Taken
-- Removed default Vite boilerplate CSS from `src/App.css` that conflicted with the authenticated layout (#root had text-align: center, padding: 2rem, max-width: 1280px)
-- Fixed Sector Allocation PieChart rendering in `src/components/Dashboard.tsx` by adding wrapper div with explicit minHeight and minWidth on ResponsiveContainer
-- Fixed Sector Allocation PieChart rendering in `src/pages/PortfolioPage.tsx` with the same wrapper div pattern and added nameKey prop
-- Redeployed to Vercel production
-
 ## 2025-08-26 14:30 EDT
 
 ### User Prompt
