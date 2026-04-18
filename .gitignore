@@ -1,0 +1,47 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Env
+.env
+.env.local
+.env.*.local
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Demo artifacts
+docs/demos/*.mp4
+docs/screenshots/*.png
+!docs/screenshots/.gitkeep
+!docs/demos/.gitkeep
+
+# Local DB
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
