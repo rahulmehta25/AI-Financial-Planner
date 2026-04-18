@@ -1,0 +1,309 @@
+[
+  {
+    "id": "young_saver",
+    "name": "Maya Chen",
+    "age": 25,
+    "annual_income": 125000.0,
+    "annual_spending": 52000.0,
+    "savings_rate": 0.35,
+    "retirement_age": 60,
+    "accounts": [
+      {
+        "id": "ys_checking",
+        "name": "Everyday Checking",
+        "type": "checking",
+        "balance": 8400.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "ys_savings",
+        "name": "High Yield Savings",
+        "type": "savings",
+        "balance": 12000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "ys_brokerage",
+        "name": "Index Brokerage",
+        "type": "brokerage",
+        "balance": 18500.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "ys_401k",
+        "name": "Employer 401k",
+        "type": "retirement",
+        "balance": 34200.0,
+        "institution": "Plaid Sandbox"
+      }
+    ],
+    "transactions": [
+      {
+        "id": "txn_ys_checking_1",
+        "account_id": "ys_checking",
+        "date": "2026-04-01",
+        "amount": -1850.0,
+        "category": "rent",
+        "description": "Monthly rent"
+      },
+      {
+        "id": "txn_ys_checking_2",
+        "account_id": "ys_checking",
+        "date": "2026-04-05",
+        "amount": -420.0,
+        "category": "groceries",
+        "description": "Trader Joes"
+      },
+      {
+        "id": "txn_ys_checking_3",
+        "account_id": "ys_checking",
+        "date": "2026-04-10",
+        "amount": -80.0,
+        "category": "transport",
+        "description": "Transit card reload"
+      },
+      {
+        "id": "txn_ys_checking_4",
+        "account_id": "ys_checking",
+        "date": "2026-04-15",
+        "amount": 4800.0,
+        "category": "income",
+        "description": "Biweekly paycheck"
+      },
+      {
+        "id": "txn_ys_brokerage_5",
+        "account_id": "ys_brokerage",
+        "date": "2026-04-15",
+        "amount": -1500.0,
+        "category": "investment",
+        "description": "VTSAX buy"
+      }
+    ],
+    "goals": [
+      {
+        "id": "ys_ret",
+        "kind": "retirement",
+        "target_amount": 1800000.0,
+        "target_date": "2061-01-01",
+        "notes": "Wants to retire at 60"
+      },
+      {
+        "id": "ys_ef",
+        "kind": "emergency_fund",
+        "target_amount": 20000.0,
+        "target_date": null,
+        "notes": "Targeting six months of expenses"
+      }
+    ],
+    "backstory": "Software engineer two years out of college. Lives with a roommate in Seattle, no debt, maxes out 401k match, wants to retire early but has never modeled it."
+  },
+  {
+    "id": "mid_career",
+    "name": "Jordan Ramirez",
+    "age": 38,
+    "annual_income": 195000.0,
+    "annual_spending": 142000.0,
+    "savings_rate": 0.18,
+    "retirement_age": 65,
+    "accounts": [
+      {
+        "id": "mc_checking",
+        "name": "Joint Checking",
+        "type": "checking",
+        "balance": 14700.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_savings",
+        "name": "Joint Savings",
+        "type": "savings",
+        "balance": 46000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_brokerage",
+        "name": "Taxable Brokerage",
+        "type": "brokerage",
+        "balance": 92500.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_401k",
+        "name": "401k",
+        "type": "retirement",
+        "balance": 182300.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_roth",
+        "name": "Roth IRA",
+        "type": "retirement",
+        "balance": 61400.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_mortgage",
+        "name": "Primary Mortgage",
+        "type": "mortgage",
+        "balance": -612000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "mc_auto",
+        "name": "Auto Loan",
+        "type": "auto",
+        "balance": -18400.0,
+        "institution": "Plaid Sandbox"
+      }
+    ],
+    "transactions": [
+      {
+        "id": "txn_mc_checking_1",
+        "account_id": "mc_checking",
+        "date": "2026-04-01",
+        "amount": -4100.0,
+        "category": "housing",
+        "description": "Mortgage payment"
+      },
+      {
+        "id": "txn_mc_checking_2",
+        "account_id": "mc_checking",
+        "date": "2026-04-03",
+        "amount": -2800.0,
+        "category": "childcare",
+        "description": "Daycare"
+      },
+      {
+        "id": "txn_mc_checking_3",
+        "account_id": "mc_checking",
+        "date": "2026-04-07",
+        "amount": -950.0,
+        "category": "groceries",
+        "description": "Grocery run"
+      },
+      {
+        "id": "txn_mc_checking_4",
+        "account_id": "mc_checking",
+        "date": "2026-04-15",
+        "amount": 6400.0,
+        "category": "income",
+        "description": "Biweekly paycheck"
+      },
+      {
+        "id": "txn_mc_brokerage_5",
+        "account_id": "mc_brokerage",
+        "date": "2026-04-16",
+        "amount": -1000.0,
+        "category": "investment",
+        "description": "VTI buy"
+      }
+    ],
+    "goals": [
+      {
+        "id": "mc_ret",
+        "kind": "retirement",
+        "target_amount": 3500000.0,
+        "target_date": "2053-01-01",
+        "notes": ""
+      },
+      {
+        "id": "mc_house",
+        "kind": "house",
+        "target_amount": 120000.0,
+        "target_date": null,
+        "notes": "Possible move to a bigger place"
+      }
+    ],
+    "backstory": "Product manager with a spouse and two kids in the Bay Area. 401k is healthy but the mortgage is tight and daycare costs are real. Wants to know if the current trajectory is enough."
+  },
+  {
+    "id": "pre_retiree",
+    "name": "Linda Whitaker",
+    "age": 58,
+    "annual_income": 165000.0,
+    "annual_spending": 95000.0,
+    "savings_rate": 0.22,
+    "retirement_age": 63,
+    "accounts": [
+      {
+        "id": "pr_checking",
+        "name": "Checking",
+        "type": "checking",
+        "balance": 26000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "pr_savings",
+        "name": "Savings",
+        "type": "savings",
+        "balance": 85000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "pr_brokerage",
+        "name": "Taxable Brokerage",
+        "type": "brokerage",
+        "balance": 410000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "pr_401k",
+        "name": "401k",
+        "type": "retirement",
+        "balance": 720000.0,
+        "institution": "Plaid Sandbox"
+      },
+      {
+        "id": "pr_roth",
+        "name": "Roth IRA",
+        "type": "retirement",
+        "balance": 145000.0,
+        "institution": "Plaid Sandbox"
+      }
+    ],
+    "transactions": [
+      {
+        "id": "txn_pr_checking_1",
+        "account_id": "pr_checking",
+        "date": "2026-04-02",
+        "amount": -850.0,
+        "category": "utilities",
+        "description": "Power + water"
+      },
+      {
+        "id": "txn_pr_checking_2",
+        "account_id": "pr_checking",
+        "date": "2026-04-06",
+        "amount": -420.0,
+        "category": "groceries",
+        "description": "Market basket"
+      },
+      {
+        "id": "txn_pr_checking_3",
+        "account_id": "pr_checking",
+        "date": "2026-04-15",
+        "amount": 5200.0,
+        "category": "income",
+        "description": "Biweekly paycheck"
+      },
+      {
+        "id": "txn_pr_brokerage_4",
+        "account_id": "pr_brokerage",
+        "date": "2026-04-18",
+        "amount": -2500.0,
+        "category": "investment",
+        "description": "Dividend reinvest"
+      }
+    ],
+    "goals": [
+      {
+        "id": "pr_ret",
+        "kind": "retirement",
+        "target_amount": 2400000.0,
+        "target_date": "2031-01-01",
+        "notes": "Aiming for 63 if possible"
+      }
+    ],
+    "backstory": "Senior analyst. Kids are out of the house, mortgage is paid off. Deciding between retiring at 63 or working two more years to pad the portfolio. Wants to stress test a market downturn."
+  }
+]

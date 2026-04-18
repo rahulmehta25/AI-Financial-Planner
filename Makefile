@@ -1,7 +1,9 @@
 .PHONY: install dev api web seed test clean
 
+PYTHON ?= python3
+
 install:
-	cd api && python3.11 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+	cd api && $(PYTHON) -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 	cd web && pnpm install
 
 api:
