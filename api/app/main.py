@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import chat, health, personas, plaid, simulator
+from .routers import briefings, chat, health, personas, plaid, simulator
 
 app = FastAPI(title="AI Financial Planner API", version="0.1.0")
 
@@ -18,6 +18,7 @@ app.include_router(personas.router)
 app.include_router(plaid.router)
 app.include_router(simulator.router)
 app.include_router(chat.router)
+app.include_router(briefings.router)
 
 
 @app.get("/")
