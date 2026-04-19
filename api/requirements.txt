@@ -8,3 +8,7 @@ plaid-python==27.0.0
 python-dotenv==1.0.1
 httpx==0.27.2
 pytest==8.3.3
+
+# Cloud SQL portfolio-pg / aifp
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0

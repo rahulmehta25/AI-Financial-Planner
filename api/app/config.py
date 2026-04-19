@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
+    # Cloud SQL portfolio-pg / aifp database. See api/README.md and scripts/db-proxy.sh.
+    database_url: str = ""
+
     @property
     def plaid_configured(self) -> bool:
         return bool(self.plaid_client_id and self.plaid_secret_sandbox)
@@ -24,6 +27,10 @@ class Settings(BaseSettings):
     @property
     def anthropic_configured(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def database_configured(self) -> bool:
+        return bool(self.database_url)
 
 
 @lru_cache
