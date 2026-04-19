@@ -6,6 +6,7 @@ import { PersonaPicker } from "@/components/PersonaPicker";
 import { AccountsTable } from "@/components/AccountsTable";
 import { SimulatorPanel } from "@/components/SimulatorPanel";
 import { AdvisorChat } from "@/components/AdvisorChat";
+import staticPersonas from "./personas.json";
 
 type Health = {
   ok: boolean;
@@ -27,7 +28,12 @@ export default function Page() {
         setHealth(h);
         setSelectedId(ps[0]?.id ?? null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Backend not reachable"));
+      .catch(() => {
+        const ps = staticPersonas as unknown as Persona[];
+        setPersonas(ps);
+        setHealth({ ok: true, plaid_configured: false, anthropic_configured: false, model: "demo" });
+        setSelectedId(ps[0]?.id ?? null);
+      });
   }, []);
 
   const selected = personas.find((p) => p.id === selectedId) ?? null;

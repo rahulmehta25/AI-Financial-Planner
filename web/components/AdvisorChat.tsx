@@ -39,8 +39,17 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
           live: resp.anthropic_live,
         },
       ]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Chat failed");
+    } catch {
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content:
+            "The live advisor API isn't reachable from this static demo. In the running build this reply streams from Claude, grounded on the selected persona's accounts, transactions, and goals, and cites specific balances. The Monte Carlo simulator panel runs entirely in your browser — try that for a working taste.",
+          tool_calls: [],
+          live: false,
+        },
+      ]);
     } finally {
       setSending(false);
     }

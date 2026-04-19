@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, type Persona, type SimulationResult } from "@/app/api-client";
+import { runClientSimulation } from "@/app/lib/client-monte-carlo";
 
 const fmt = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -27,20 +28,21 @@ export function SimulatorPanel({ persona }: { persona: Persona }) {
   async function runIt() {
     setLoading(true);
     setError(null);
+    const input = {
+      current_assets: assets,
+      annual_contribution: contribution,
+      current_age: persona.age,
+      retirement_age: retirementAge,
+      annual_spending_in_retirement: Math.round(persona.annual_spending * 0.8),
+      horizon_years: Math.min(60, 100 - persona.age),
+      num_trials: 10_000,
+      income_shock_months: shock,
+    };
     try {
-      const res = await api.runSimulation({
-        current_assets: assets,
-        annual_contribution: contribution,
-        current_age: persona.age,
-        retirement_age: retirementAge,
-        annual_spending_in_retirement: Math.round(persona.annual_spending * 0.8),
-        horizon_years: Math.min(60, 100 - persona.age),
-        num_trials: 10_000,
-        income_shock_months: shock,
-      });
+      const res = await api.runSimulation(input);
       setResult(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Simulation failed");
+    } catch {
+      setResult(runClientSimulation(input));
     } finally {
       setLoading(false);
     }
