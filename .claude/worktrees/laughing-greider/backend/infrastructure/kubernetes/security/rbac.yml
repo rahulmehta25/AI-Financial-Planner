@@ -1,0 +1,477 @@
+# RBAC (Role-Based Access Control) configurations for Financial Planning Application
+# Service Accounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-api
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/FinancialPlanningAPIRole"
+    description: "Service account for Financial Planning API with AWS IAM integration"
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-sa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: service-account
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/FinancialPlanningServiceRole"
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-monitoring
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: service-account
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/MonitoringRole"
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: financial-planning-vault
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: vault-integration
+    app.kubernetes.io/component: service-account
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/VaultRole"
+automountServiceAccountToken: false
+
+---
+# ClusterRoles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: financial-planning-api-cluster-role
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: rbac
+rules:
+# Read access to nodes for health checks and metrics
+- apiGroups: [""]
+  resources: ["nodes", "nodes/status"]
+  verbs: ["get", "list"]
+# Read access to endpoints for service discovery
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get", "list", "watch"]
+# Read access to services for internal communication
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+# Read access to pods for debugging and metrics
+- apiGroups: [""]
+  resources: ["pods", "pods/status"]
+  verbs: ["get", "list", "watch"]
+# Read access to configmaps for configuration discovery
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: financial-planning-monitoring-cluster-role
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: rbac
+rules:
+# Full monitoring access
+- apiGroups: [""]
+  resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods", "ingresses", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+
+---
+# Roles (namespace-scoped)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning
+  name: financial-planning-api-role
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: rbac
+rules:
+# ConfigMap access for application configuration
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+# Secret access for sensitive configuration
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+# Pod access for self-discovery and health checks
+- apiGroups: [""]
+  resources: ["pods", "pods/status"]
+  verbs: ["get", "list", "watch"]
+# Service access for internal communication
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+# Events creation for application events
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+# Lease access for leader election (if needed)
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning
+  name: financial-planning-service-role
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: rbac
+rules:
+# Limited access for microservices
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods", "pods/status"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning-data
+  name: financial-planning-data-role
+  labels:
+    app.kubernetes.io/name: financial-planning-data
+    app.kubernetes.io/component: rbac
+rules:
+# Database and cache service permissions
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods", "pods/status", "pods/exec"]
+  verbs: ["get", "list", "watch", "create"]
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+# StatefulSet access for database scaling
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: financial-planning-monitoring
+  name: financial-planning-monitoring-role
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: rbac
+rules:
+# Full monitoring namespace access
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+# ClusterRoleBindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: financial-planning-api-cluster-binding
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-api
+  namespace: financial-planning
+roleRef:
+  kind: ClusterRole
+  name: financial-planning-api-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: financial-planning-monitoring-cluster-binding
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-monitoring
+  namespace: financial-planning-monitoring
+roleRef:
+  kind: ClusterRole
+  name: financial-planning-monitoring-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# RoleBindings
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: financial-planning-api-binding
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-api
+  namespace: financial-planning
+roleRef:
+  kind: Role
+  name: financial-planning-api-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: financial-planning-service-binding
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-sa
+  namespace: financial-planning
+roleRef:
+  kind: Role
+  name: financial-planning-service-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: financial-planning-data-binding
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: financial-planning-data
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-sa
+  namespace: financial-planning
+- kind: ServiceAccount
+  name: postgresql
+  namespace: financial-planning-data
+- kind: ServiceAccount
+  name: redis
+  namespace: financial-planning-data
+roleRef:
+  kind: Role
+  name: financial-planning-data-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: financial-planning-monitoring-binding
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-monitoring
+  namespace: financial-planning-monitoring
+roleRef:
+  kind: Role
+  name: financial-planning-monitoring-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Security Context Constraints (for OpenShift compatibility)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: financial-planning-scc
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: security
+  annotations:
+    kubernetes.io/description: "Security Context Constraints for Financial Planning application"
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+dropCapabilities:
+- ALL
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 1000
+readOnlyRootFilesystem: true
+requiredDropCapabilities:
+- ALL
+runAsUser:
+  type: MustRunAs
+  uid: 1000
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 1000
+users:
+- system:serviceaccount:financial-planning:financial-planning-api
+- system:serviceaccount:financial-planning:financial-planning-sa
+volumes:
+- configMap
+- emptyDir
+- projected
+- secret
+- downwardAPI
+- persistentVolumeClaim
+
+---
+# Pod Security Policy (deprecated but included for legacy clusters)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: financial-planning-psp
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: security
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: runtime/default
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: runtime/default
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+  - ALL
+  volumes:
+  - configMap
+  - emptyDir
+  - projected
+  - secret
+  - downwardAPI
+  - persistentVolumeClaim
+  runAsUser:
+    rule: MustRunAs
+    ranges:
+    - min: 1000
+      max: 1000
+  runAsGroup:
+    rule: MustRunAs
+    ranges:
+    - min: 1000
+      max: 1000
+  seLinux:
+    rule: RunAsAny
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+    - min: 1000
+      max: 1000
+  readOnlyRootFilesystem: true
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+
+---
+# ClusterRole for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: financial-planning-psp-role
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: security
+rules:
+- apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+  resourceNames:
+  - financial-planning-psp
+
+---
+# ClusterRoleBinding for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: financial-planning-psp-binding
+  labels:
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: security
+roleRef:
+  kind: ClusterRole
+  name: financial-planning-psp-role
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: financial-planning-api
+  namespace: financial-planning
+- kind: ServiceAccount
+  name: financial-planning-sa
+  namespace: financial-planning
+- kind: Group
+  name: system:serviceaccounts:financial-planning
+  apiGroup: rbac.authorization.k8s.io

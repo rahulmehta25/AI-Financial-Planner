@@ -1,0 +1,415 @@
+# Docker Compose for Financial Planning Platform - Production
+version: '3.8'
+
+networks:
+  financial-planning-network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  postgres-data:
+  redis-data:
+
+services:
+  # Database Services (External in production)
+  postgresql:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  # Microservices with scaling
+  user-service:
+    image: financial-planning/user-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${USER_SERVICE_DB_USER}
+      DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  banking-service:
+    image: financial-planning/banking-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${BANKING_SERVICE_DB_USER}
+      DB_PASSWORD: ${BANKING_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID}
+      PLAID_SECRET: ${PLAID_SECRET}
+      PLAID_ENV: ${PLAID_ENV}
+      YODLEE_COBRAND_NAME: ${YODLEE_COBRAND_NAME}
+      YODLEE_APPLICATION_ID: ${YODLEE_APPLICATION_ID}
+      YODLEE_SECRET: ${YODLEE_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 4
+      update_config:
+        parallelism: 2
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.8'
+        reservations:
+          memory: 512M
+          cpus: '0.4'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  simulation-service:
+    image: financial-planning/simulation-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${SIMULATION_SERVICE_DB_USER}
+      DB_PASSWORD: ${SIMULATION_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 2G
+          cpus: '1'
+      placement:
+        constraints:
+          - node.labels.compute == gpu # For GPU-accelerated simulations
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ml-service:
+    image: financial-planning/ml-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${ML_SERVICE_DB_USER}
+      DB_PASSWORD: ${ML_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      placement:
+        constraints:
+          - node.labels.ml == true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  notification-service:
+    image: financial-planning/notification-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${NOTIFICATION_SERVICE_DB_USER}
+      DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  document-service:
+    image: financial-planning/document-service:${VERSION:-latest}
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DOCUMENT_SERVICE_DB_USER}
+      DB_PASSWORD: ${DOCUMENT_SERVICE_DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.8'
+        reservations:
+          memory: 512M
+          cpus: '0.4'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway
+  kong:
+    image: kong:3.3.0-alpine
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+    configs:
+      - source: kong_config
+        target: /kong/kong.yml
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # GraphQL Gateway
+  graphql-gateway:
+    image: financial-planning/graphql-gateway:${VERSION:-latest}
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # Load Balancer
+  nginx:
+    image: nginx:alpine
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - financial-planning-network
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.1'
+      placement:
+        constraints:
+          - node.role == manager
+
+configs:
+  kong_config:
+    file: ../api-gateway/kong.yml
+  nginx_config:
+    file: ../api-gateway/nginx-gateway.conf
+
+secrets:
+  jwt_secret:
+    external: true
+  db_password:
+    external: true
+  redis_password:
+    external: true
+  plaid_secret:
+    external: true
+  encryption_key:
+    external: true

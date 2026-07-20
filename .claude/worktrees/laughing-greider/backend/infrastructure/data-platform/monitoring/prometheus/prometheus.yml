@@ -1,0 +1,296 @@
+# Prometheus Configuration for Financial Planning Data Platform
+# Scrapes metrics from all monitoring targets
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'financial-planning'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load alerting rules
+rule_files:
+  - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: node-exporter:9100
+
+  # PostgreSQL Exporter - Database metrics
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: database
+        replacement: 'financial_planning'
+
+  # Redis Exporter - Cache metrics
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # Kafka Exporter - Message queue metrics
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    scrape_interval: 30s
+
+  # Elasticsearch Exporter - Search engine metrics
+  - job_name: 'elasticsearch-exporter'
+    static_configs:
+      - targets: ['elasticsearch-exporter:9114']
+    scrape_interval: 30s
+
+  # Airflow Exporter - Pipeline metrics
+  - job_name: 'airflow-exporter'
+    static_configs:
+      - targets: ['airflow-exporter:9112']
+    scrape_interval: 60s
+    scrape_timeout: 30s
+
+  # Custom Financial Metrics Exporter
+  - job_name: 'financial-metrics'
+    static_configs:
+      - targets: ['financial-metrics-exporter:9200']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Blackbox Exporter - Endpoint monitoring
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - http://financial-planning-api:8000/health
+        - http://user-service:8002/health
+        - http://banking-service:8003/health
+        - http://ml-service:8004/health
+        - http://notification-service:8005/health
+        - http://document-service:8006/health
+        - http://simulation-service:8001/health
+        - http://graphql-gateway:4000/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # SSL Certificate monitoring
+  - job_name: 'blackbox-ssl'
+    metrics_path: /probe
+    params:
+      module: [ssl_expire]
+    static_configs:
+      - targets:
+        - https://api.financial-planning.com
+        - https://app.financial-planning.com
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # TCP monitoring
+  - job_name: 'blackbox-tcp'
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+        - postgres:5432
+        - redis:6379
+        - elasticsearch:9200
+        - kafka1:9092
+        - kafka2:9092
+        - kafka3:9092
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ICMP monitoring
+  - job_name: 'blackbox-icmp'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+        - 8.8.8.8  # Google DNS
+        - 1.1.1.1  # Cloudflare DNS
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Pushgateway - Batch job metrics
+  - job_name: 'pushgateway'
+    static_configs:
+      - targets: ['pushgateway:9091']
+    scrape_interval: 30s
+    honor_labels: true
+
+  # Application metrics from custom endpoints
+  - job_name: 'financial-planning-api'
+    static_configs:
+      - targets: ['financial-planning-api:8000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8002']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'banking-service'
+    static_configs:
+      - targets: ['banking-service:8003']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'ml-service'
+    static_configs:
+      - targets: ['ml-service:8004']
+    metrics_path: /metrics
+    scrape_interval: 60s  # ML service might be slower
+
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['notification-service:8005']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'document-service'
+    static_configs:
+      - targets: ['document-service:8006']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'simulation-service'
+    static_configs:
+      - targets: ['simulation-service:8001']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'graphql-gateway'
+    static_configs:
+      - targets: ['graphql-gateway:4000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # GPU metrics (if available)
+  - job_name: 'nvidia-gpu'
+    static_configs:
+      - targets: ['gpu-node:9445']
+    scrape_interval: 15s
+
+  # SNMP monitoring for network devices
+  - job_name: 'snmp-network'
+    static_configs:
+      - targets:
+        - 192.168.1.1  # Router
+        - 192.168.1.2  # Switch
+    metrics_path: /snmp
+    params:
+      module: [if_mib]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: snmp-exporter:9116
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+# Global configuration for remote storage (optional)
+remote_write:
+  - url: "http://cortex:9009/api/prom/push"
+    queue_config:
+      max_samples_per_send: 10000
+      max_shards: 200
+      capacity: 2500
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'prometheus_.*'
+        action: drop
+
+# Recording rules for performance optimization
+recording_rules:
+  - name: "financial_planning.rules"
+    interval: 30s
+    rules:
+      # CPU usage aggregations
+      - record: "instance:cpu_usage:rate5m"
+        expr: "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) by (instance) * 100)"
+        
+      # Memory usage aggregations
+      - record: "instance:memory_usage:percentage"
+        expr: "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100"
+        
+      # Disk usage aggregations
+      - record: "instance:disk_usage:percentage"
+        expr: "100 - (node_filesystem_avail_bytes / node_filesystem_size_bytes * 100)"
+        
+      # Application request rate aggregations
+      - record: "application:request_rate:5m"
+        expr: "sum(rate(http_requests_total[5m])) by (service)"
+        
+      # Application error rate aggregations
+      - record: "application:error_rate:5m"
+        expr: "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service)"
+        
+      # Database connection pool utilization
+      - record: "database:connection_pool_utilization"
+        expr: "postgres_stat_database_numbackends / postgres_settings_max_connections"
+        
+      # Kafka consumer lag aggregations
+      - record: "kafka:consumer_lag:max"
+        expr: "max(kafka_consumer_lag_sum) by (consumergroup, topic)"
+        
+      # Data quality score aggregations
+      - record: "data_quality:score:avg_by_schema"
+        expr: "avg(data_quality_score) by (schema)"

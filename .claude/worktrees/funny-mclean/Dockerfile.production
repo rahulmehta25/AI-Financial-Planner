@@ -1,0 +1,393 @@
+# ==============================================================================
+# Multi-stage Production Dockerfile for Financial Planning System
+# 
+# This Dockerfile creates optimized production images for:
+# 1. API Service
+# 2. ML Service (with GPU support)
+# 3. Worker Service
+# 4. Logger Sidecar
+#
+# Features:
+# - Multi-stage builds for minimal image size
+# - Security hardening with non-root user
+# - Dependency caching for faster builds
+# - Health checks and monitoring
+# - GPU support for ML workloads
+# ==============================================================================
+
+# ==============================================================================
+# Base Python Image with Security Updates
+# ==============================================================================
+FROM python:3.11-slim-bookworm AS base-python
+
+# Install system dependencies and security updates
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    curl \
+    ca-certificates \
+    git \
+    && apt-get upgrade -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create application user for security
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Set up application directory
+WORKDIR /app
+RUN chown -R appuser:appgroup /app
+
+# ==============================================================================
+# Python Dependencies Builder
+# ==============================================================================
+FROM base-python AS python-deps
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libc6-dev \
+    libffi-dev \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY backend/requirements.txt backend/requirements-production.txt ./
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install wheel
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements-production.txt
+
+# Install additional production dependencies
+RUN pip install --no-cache-dir \
+    gunicorn[gevent] \
+    uvicorn[standard] \
+    prometheus-client \
+    sentry-sdk[fastapi] \
+    python-json-logger \
+    structlog
+
+# ==============================================================================
+# ML Dependencies Builder (with GPU support)
+# ==============================================================================
+FROM nvidia/cuda:11.8-runtime-ubuntu20.04 AS ml-deps
+
+# Install Python 3.11
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    python3-pip \
+    build-essential \
+    gcc \
+    g++ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment for ML dependencies
+RUN python3.11 -m venv /opt/ml-venv
+ENV PATH="/opt/ml-venv/bin:$PATH"
+
+# Copy ML requirements
+COPY backend/requirements-ml.txt ./
+
+# Install ML dependencies with CUDA support
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 && \
+    pip install --no-cache-dir -r requirements-ml.txt
+
+# ==============================================================================
+# Application Base Image
+# ==============================================================================
+FROM base-python AS app-base
+
+# Copy virtual environment from builder
+COPY --from=python-deps /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./
+
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/static /app/media /tmp/app && \
+    chown -R appuser:appgroup /app /tmp/app
+
+# Switch to non-root user
+USER appuser
+
+# Set Python path
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# ==============================================================================
+# API Service Target
+# ==============================================================================
+FROM app-base AS api
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner API Service"
+LABEL version="2.0.0"
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--worker-connections", "1000", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--preload", \
+     "--timeout", "120", \
+     "--keepalive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info", \
+     "--capture-output", \
+     "app.main:app"]
+
+# ==============================================================================
+# ML Service Target (with GPU support)
+# ==============================================================================
+FROM nvidia/cuda:11.8-runtime-ubuntu20.04 AS ml-service
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner ML Service with GPU Support"
+LABEL version="2.0.0"
+
+# Install Python 3.11 and system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    curl \
+    ca-certificates \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create application user
+RUN groupadd -r mluser && useradd -r -g mluser mluser
+
+# Set up application directory
+WORKDIR /app
+RUN chown -R mluser:mluser /app
+
+# Copy ML virtual environment
+COPY --from=ml-deps /opt/ml-venv /opt/ml-venv
+ENV PATH="/opt/ml-venv/bin:$PATH"
+
+# Copy ML application code
+COPY backend/app/services/modeling ./services/modeling
+COPY backend/app/ml ./ml
+COPY backend/app/core ./core
+COPY backend/app/models ./models
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/models /app/cache && \
+    chown -R mluser:mluser /app
+
+# Switch to non-root user
+USER mluser
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV CUDA_VISIBLE_DEVICES=0
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Health check for ML service
+HEALTHCHECK --interval=60s --timeout=30s --start-period=120s --retries=3 \
+    CMD python -c "import grpc; import sys; \
+    channel = grpc.insecure_channel('localhost:50051'); \
+    grpc.channel_ready_future(channel).result(timeout=10); \
+    print('ML service is healthy')" || exit 1
+
+# Default command
+CMD ["python", "-m", "ml.grpc_server"]
+
+# ==============================================================================
+# Worker Service Target
+# ==============================================================================
+FROM app-base AS worker
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner Celery Worker Service"
+LABEL version="2.0.0"
+
+# Install additional worker dependencies
+RUN pip install --no-cache-dir celery[redis] flower
+
+# Create worker directories
+RUN mkdir -p /app/worker-logs && \
+    chown -R appuser:appgroup /app/worker-logs
+
+# Health check for worker
+HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=3 \
+    CMD celery -A app.main inspect ping || exit 1
+
+# Default command
+CMD ["celery", \
+     "--app=app.main", \
+     "worker", \
+     "--loglevel=info", \
+     "--concurrency=4", \
+     "--queues=default,compute,ml,notifications,reports", \
+     "--max-tasks-per-child=1000", \
+     "--time-limit=3600", \
+     "--soft-time-limit=3300", \
+     "--prefetch-multiplier=1", \
+     "--without-gossip", \
+     "--without-mingle"]
+
+# ==============================================================================
+# Logger Sidecar Target
+# ==============================================================================
+FROM alpine:3.18 AS logger
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner Logger Sidecar"
+LABEL version="1.0.0"
+
+# Install log processing tools
+RUN apk add --no-cache \
+    filebeat \
+    curl \
+    jq \
+    && rm -rf /var/cache/apk/*
+
+# Create logging user
+RUN addgroup -g 1000 loguser && \
+    adduser -D -s /bin/sh -u 1000 -G loguser loguser
+
+# Create log directories
+RUN mkdir -p /logs /var/log/filebeat && \
+    chown -R loguser:loguser /logs /var/log/filebeat
+
+# Copy filebeat configuration
+COPY docker/filebeat.yml /etc/filebeat/filebeat.yml
+RUN chown root:loguser /etc/filebeat/filebeat.yml && \
+    chmod 640 /etc/filebeat/filebeat.yml
+
+# Switch to logging user
+USER loguser
+
+# Health check for logger
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD pgrep filebeat > /dev/null || exit 1
+
+# Default command
+CMD ["filebeat", "-e", "-c", "/etc/filebeat/filebeat.yml"]
+
+# ==============================================================================
+# Nginx Reverse Proxy (Optional)
+# ==============================================================================
+FROM nginx:1.25-alpine AS nginx
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner Nginx Reverse Proxy"
+LABEL version="1.0.0"
+
+# Install security updates
+RUN apk add --no-cache --upgrade apk-tools && \
+    apk upgrade --available
+
+# Copy nginx configuration
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf
+
+# Create nginx user directories
+RUN mkdir -p /var/cache/nginx /var/log/nginx && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx
+
+# Health check for nginx
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:80/health || exit 1
+
+# Expose ports
+EXPOSE 80 443
+
+# ==============================================================================
+# Development Target (for local development)
+# ==============================================================================
+FROM app-base AS development
+
+LABEL maintainer="DevOps Team <devops@financialplanner.com>"
+LABEL description="Financial Planner Development Environment"
+LABEL version="2.0.0"
+
+# Install development dependencies
+USER root
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    vim \
+    htop \
+    postgresql-client \
+    redis-tools \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development Python packages
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-asyncio \
+    black \
+    isort \
+    flake8 \
+    mypy \
+    pre-commit \
+    ipython \
+    jupyter
+
+# Switch back to app user
+USER appuser
+
+# Set development environment
+ENV ENV=development
+ENV DEBUG=true
+
+# Expose additional ports for development
+EXPOSE 8000 5678 8888
+
+# Default command for development
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ==============================================================================
+# Production Builder Target (for CI/CD optimization)
+# ==============================================================================
+FROM scratch AS production-builder
+
+# Copy all built targets for multi-arch builds
+COPY --from=api /app /api-app
+COPY --from=ml-service /app /ml-app  
+COPY --from=worker /app /worker-app
+COPY --from=logger /etc/filebeat /logger-config

@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: financial-planning-prod
+
+resources:
+- ../../base
+- ingress.yml
+- certificate.yml
+
+patchesStrategicMerge:
+- deployment-patch.yml
+- configmap-patch.yml
+- hpa-patch.yml
+
+commonLabels:
+  environment: production
+  
+commonAnnotations:
+  environment: production
+  
+images:
+- name: ghcr.io/financial-planning/backend
+  newTag: latest
+
+replicas:
+- name: financial-planning-api
+  count: 5
+
+configMapGenerator:
+- name: production-config
+  literals:
+  - ENVIRONMENT=production
+  - LOG_LEVEL=INFO
+  - WORKERS=8
+  - DB_POOL_SIZE=50
+  - REDIS_MAX_CONNECTIONS=200

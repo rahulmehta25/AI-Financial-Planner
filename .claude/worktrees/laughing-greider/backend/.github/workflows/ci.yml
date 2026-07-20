@@ -1,0 +1,500 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.6.1"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Code Quality Checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pre-commit
+    
+    - name: Cache Pre-commit
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+    
+    - name: Run Pre-commit Hooks
+      run: |
+        pre-commit install
+        pre-commit run --all-files
+    
+    - name: Run Black Code Formatter
+      run: black --check --diff app/ tests/
+    
+    - name: Run isort Import Sorter
+      run: isort --check-only --diff app/ tests/
+    
+    - name: Run Flake8 Linter
+      run: flake8 app/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+    
+    - name: Run MyPy Type Checker
+      run: mypy app/ --ignore-missing-imports --no-strict-optional
+    
+    - name: Upload Code Quality Results
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: code-quality-results
+        path: |
+          .mypy_cache/
+          .pytest_cache/
+
+  # Security Scanning
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit semgrep
+    
+    - name: Run Safety (Dependency Vulnerability Check)
+      run: safety check --json --output safety-report.json || true
+    
+    - name: Run Bandit (Security Linter)
+      run: bandit -r app/ -f json -o bandit-report.json || true
+    
+    - name: Run Semgrep Security Scan
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      run: |
+        python -m pip install semgrep
+        semgrep --config=auto --json --output=semgrep-report.json app/ || true
+    
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          safety-report.json
+          bandit-report.json
+          semgrep-report.json
+
+  # Dependency Vulnerability Scanning
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Run Snyk to check for vulnerabilities
+      uses: snyk/actions/python@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high --file=requirements.txt
+    
+    - name: Upload Snyk results to GitHub Code Scanning
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: snyk.sarif
+
+  # Unit and Integration Tests
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_financial_planning
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev build-essential
+    
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Set up Test Environment
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_financial_planning
+        REDIS_URL: redis://localhost:6379/0
+        SECRET_KEY: test-secret-key-for-ci
+        ENVIRONMENT: test
+      run: |
+        echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+        echo "REDIS_URL=$REDIS_URL" >> $GITHUB_ENV
+        echo "SECRET_KEY=$SECRET_KEY" >> $GITHUB_ENV
+        echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+    
+    - name: Run Database Migrations
+      run: |
+        alembic upgrade head
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+    
+    - name: Run Unit Tests
+      run: |
+        pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=html --junitxml=pytest-unit.xml
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        REDIS_URL: ${{ env.REDIS_URL }}
+        SECRET_KEY: ${{ env.SECRET_KEY }}
+        ENVIRONMENT: ${{ env.ENVIRONMENT }}
+    
+    - name: Run Integration Tests
+      run: |
+        pytest tests/integration/ -v --cov=app --cov-append --cov-report=xml --cov-report=html --junitxml=pytest-integration.xml
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        REDIS_URL: ${{ env.REDIS_URL }}
+        SECRET_KEY: ${{ env.SECRET_KEY }}
+        ENVIRONMENT: ${{ env.ENVIRONMENT }}
+    
+    - name: Upload Coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          pytest-*.xml
+          htmlcov/
+          coverage.xml
+
+  # Performance Tests
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_financial_planning
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Performance Tests
+      run: |
+        pytest tests/ -m "performance" --benchmark-json=benchmark.json
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_financial_planning
+    
+    - name: Upload Performance Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results
+        path: benchmark.json
+
+  # Build Docker Image
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [code-quality, security, test]
+    
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and Push Docker Image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+    
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        format: spdx-json
+        output-file: sbom.spdx.json
+    
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v3
+      with:
+        name: sbom
+        path: sbom.spdx.json
+
+  # Container Security Scan
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Run Trivy Vulnerability Scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ needs.build.outputs.image-tag }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Database Migration Test
+  migration-test:
+    name: Migration Test
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_financial_planning
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test Database Migrations
+      run: |
+        # Test forward migrations
+        alembic upgrade head
+        
+        # Test rollback (go back 1 revision and forward again)
+        alembic downgrade -1
+        alembic upgrade head
+        
+        # Verify database schema
+        python -c "
+        from app.database.base import engine
+        from sqlalchemy import inspect
+        
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        print(f'Found {len(tables)} tables: {tables}')
+        assert len(tables) > 0, 'No tables found after migration'
+        "
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_financial_planning
+
+  # API Documentation Test
+  docs-test:
+    name: API Documentation Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Generate API Documentation
+      run: |
+        python -c "
+        from app.main import app
+        import json
+        
+        # Test that OpenAPI schema can be generated
+        openapi_schema = app.openapi()
+        
+        # Save schema for artifact
+        with open('openapi.json', 'w') as f:
+            json.dump(openapi_schema, f, indent=2)
+        
+        print(f'Generated OpenAPI schema with {len(openapi_schema.get(\"paths\", {}))} endpoints')
+        "
+    
+    - name: Upload API Documentation
+      uses: actions/upload-artifact@v3
+      with:
+        name: api-documentation
+        path: openapi.json
+
+  # Results Summary
+  results:
+    name: CI Results
+    runs-on: ubuntu-latest
+    needs: [code-quality, security, test, build, container-scan, migration-test, docs-test]
+    if: always()
+    
+    steps:
+    - name: Check CI Results
+      run: |
+        echo "## CI Pipeline Results" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Code Quality | ${{ needs.code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security Scan | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Container Scan | ${{ needs.container-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Migration Test | ${{ needs.migration-test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docs Test | ${{ needs.docs-test.result }} |" >> $GITHUB_STEP_SUMMARY
+        
+        # Fail if any critical job failed
+        if [[ "${{ needs.code-quality.result }}" == "failure" ]] || \
+           [[ "${{ needs.test.result }}" == "failure" ]] || \
+           [[ "${{ needs.migration-test.result }}" == "failure" ]]; then
+          echo "❌ Critical CI jobs failed"
+          exit 1
+        else
+          echo "✅ All critical CI jobs passed"
+        fi

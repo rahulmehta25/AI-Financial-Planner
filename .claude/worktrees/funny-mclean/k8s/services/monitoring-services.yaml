@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - name: prometheus
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+  - name: grafana
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-service
+  namespace: monitoring
+  labels:
+    app: jaeger
+    component: tracing
+spec:
+  selector:
+    app: jaeger
+  ports:
+  - name: jaeger-ui
+    port: 16686
+    targetPort: 16686
+    protocol: TCP
+  - name: jaeger-grpc
+    port: 14250
+    targetPort: 14250
+    protocol: TCP
+  - name: jaeger-thrift
+    port: 14268
+    targetPort: 14268
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-service
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+    component: logging
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+  - name: elasticsearch
+    port: 9200
+    targetPort: 9200
+    protocol: TCP
+  - name: elasticsearch-transport
+    port: 9300
+    targetPort: 9300
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana-service
+  namespace: monitoring
+  labels:
+    app: kibana
+    component: logging
+spec:
+  selector:
+    app: kibana
+  ports:
+  - name: kibana
+    port: 5601
+    targetPort: 5601
+    protocol: TCP
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning
+  labels:
+    app: financial-planning
+    environment: base
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    scheduler.alpha.kubernetes.io/node-selector: "kubernetes.io/os=linux"

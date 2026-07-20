@@ -1,0 +1,512 @@
+# Prometheus Alerting Rules for Financial Planning Data Platform
+# Comprehensive alerting for infrastructure, applications, and business metrics
+
+groups:
+  # System Infrastructure Alerts
+  - name: system_infrastructure
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: instance:cpu_usage:rate5m > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-cpu"
+
+      - alert: CriticalCPUUsage
+        expr: instance:cpu_usage:rate5m > 90
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical CPU usage detected"
+          description: "CPU usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/critical-cpu"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: instance:memory_usage:percentage > 85
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-memory"
+
+      - alert: CriticalMemoryUsage
+        expr: instance:memory_usage:percentage > 95
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/critical-memory"
+
+      # High disk usage
+      - alert: HighDiskUsage
+        expr: instance:disk_usage:percentage > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-disk"
+
+      - alert: CriticalDiskUsage
+        expr: instance:disk_usage:percentage > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Critical disk usage detected"
+          description: "Disk usage is {{ $value }}% on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/critical-disk"
+
+      # Service down alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Service is down"
+          description: "Service {{ $labels.job }} on instance {{ $labels.instance }} is down"
+          runbook_url: "https://docs.financial-planning.com/runbooks/service-down"
+
+      # Node filesystem full
+      - alert: NodeFilesystemSpaceFillingUp
+        expr: |
+          (
+            node_filesystem_avail_bytes{fstype!="",job="node-exporter"} / node_filesystem_size_bytes{fstype!="",job="node-exporter"} * 100 < 10
+          and
+            predict_linear(node_filesystem_avail_bytes{fstype!="",job="node-exporter"}[6h], 24*60*60) < 0
+          and
+            node_filesystem_readonly{fstype!="",job="node-exporter"} == 0
+          )
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Filesystem is predicted to run out of space within the next 24 hours."
+          description: "Filesystem on {{ $labels.device }} at {{ $labels.instance }} has only {{ printf \"%.2f\" $value }}% available space left and is filling up."
+
+  # Database Alerts
+  - name: database
+    rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: postgres_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is down on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/postgres-down"
+
+      # High connection usage
+      - alert: PostgreSQLHighConnections
+        expr: postgres_stat_database_numbackends / postgres_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "PostgreSQL high connection usage"
+          description: "PostgreSQL connection usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/postgres-connections"
+
+      # Slow queries
+      - alert: PostgreSQLSlowQueries
+        expr: rate(postgres_stat_user_tables_seq_scan[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "High sequential scan rate detected on {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/postgres-slow-queries"
+
+      # Redis down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is down on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/redis-down"
+
+      # High Redis memory usage
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_config_maxmemory > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/redis-memory"
+
+  # Application Alerts
+  - name: applications
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: application:error_rate:5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-error-rate"
+
+      - alert: CriticalErrorRate
+        expr: application:error_rate:5m > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          team: application
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/critical-error-rate"
+
+      # High response time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s for service {{ $labels.service }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-response-time"
+
+      # Low request rate (might indicate an issue)
+      - alert: LowRequestRate
+        expr: application:request_rate:5m < 1
+        for: 10m
+        labels:
+          severity: warning
+          team: application
+        annotations:
+          summary: "Low request rate detected"
+          description: "Request rate is {{ $value }} req/s for service {{ $labels.service }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/low-request-rate"
+
+      # API endpoint down
+      - alert: APIEndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: application
+        annotations:
+          summary: "API endpoint is down"
+          description: "API endpoint {{ $labels.instance }} is not responding"
+          runbook_url: "https://docs.financial-planning.com/runbooks/api-endpoint-down"
+
+      # SSL certificate expiring
+      - alert: SSLCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7  # 7 days
+        for: 0m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/ssl-certificate-expiring"
+
+  # Data Quality Alerts
+  - name: data_quality
+    rules:
+      # Low data quality score
+      - alert: LowDataQuality
+        expr: data_quality_score < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Low data quality detected"
+          description: "Data quality score is {{ $value }} for table {{ $labels.table }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/low-data-quality"
+
+      - alert: CriticalDataQuality
+        expr: data_quality_score < 0.6
+        for: 5m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Critical data quality issue"
+          description: "Data quality score is {{ $value }} for table {{ $labels.table }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/critical-data-quality"
+
+      # High null percentage
+      - alert: HighNullPercentage
+        expr: data_null_percentage > 20
+        for: 15m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "High null percentage detected"
+          description: "Null percentage is {{ $value }}% for column {{ $labels.column }} in table {{ $labels.table }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-null-percentage"
+
+      # Duplicate records detected
+      - alert: DuplicateRecordsDetected
+        expr: data_duplicate_count > 100
+        for: 10m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Duplicate records detected"
+          description: "{{ $value }} duplicate records found in table {{ $labels.table }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/duplicate-records"
+
+      # Data freshness issue
+      - alert: DataFreshnessIssue
+        expr: data_freshness_hours > 24
+        for: 30m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Data freshness issue"
+          description: "Data in table {{ $labels.table }} is {{ $value }} hours old"
+          runbook_url: "https://docs.financial-planning.com/runbooks/data-freshness"
+
+  # Pipeline Health Alerts
+  - name: pipeline_health
+    rules:
+      # Pipeline failure
+      - alert: PipelineFailure
+        expr: pipeline_success_rate < 0.9
+        for: 10m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Pipeline failure detected"
+          description: "Pipeline {{ $labels.dag_id }} has success rate of {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/pipeline-failure"
+
+      # Pipeline duration too long
+      - alert: PipelineDurationTooLong
+        expr: pipeline_duration_seconds > 3600  # 1 hour
+        for: 0m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Pipeline taking too long"
+          description: "Pipeline {{ $labels.dag_id }} has been running for {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/pipeline-duration"
+
+      # High task failure rate
+      - alert: HighTaskFailureRate
+        expr: rate(pipeline_failed_tasks_total[1h]) > 5
+        for: 15m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "High task failure rate"
+          description: "High task failure rate detected: {{ $value }} failures per hour"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-task-failure-rate"
+
+      # SLA violations
+      - alert: PipelineSLAViolation
+        expr: increase(pipeline_sla_violations_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Pipeline SLA violation"
+          description: "SLA violated for pipeline {{ $labels.dag_id }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/pipeline-sla-violation"
+
+  # Business KPI Alerts
+  - name: business_kpis
+    rules:
+      # Low active users
+      - alert: LowActiveUsers
+        expr: business_active_users_total < 100
+        for: 30m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Low active user count"
+          description: "Active user count is {{ $value }}, below threshold of 100"
+          runbook_url: "https://docs.financial-planning.com/runbooks/low-active-users"
+
+      # Low transaction volume
+      - alert: LowTransactionVolume
+        expr: business_daily_transactions_total < 50
+        for: 30m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Low transaction volume"
+          description: "Daily transaction count is {{ $value }}, below expected threshold"
+          runbook_url: "https://docs.financial-planning.com/runbooks/low-transaction-volume"
+
+      # Low goal completion rate
+      - alert: LowGoalCompletionRate
+        expr: business_goal_completion_rate < 0.5
+        for: 60m
+        labels:
+          severity: warning
+          team: business
+        annotations:
+          summary: "Low goal completion rate"
+          description: "Goal completion rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/low-goal-completion"
+
+      # Revenue drop
+      - alert: RevenueDrop
+        expr: |
+          (
+            business_revenue_usd{period="today"} / business_revenue_usd{period="yesterday"} < 0.8
+          )
+        for: 60m
+        labels:
+          severity: critical
+          team: business
+        annotations:
+          summary: "Significant revenue drop detected"
+          description: "Today's revenue is significantly lower than yesterday"
+          runbook_url: "https://docs.financial-planning.com/runbooks/revenue-drop"
+
+  # Kafka/Streaming Alerts
+  - name: kafka_streaming
+    rules:
+      # Kafka broker down
+      - alert: KafkaBrokerDown
+        expr: kafka_brokers == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Kafka broker is down"
+          description: "No Kafka brokers are available"
+          runbook_url: "https://docs.financial-planning.com/runbooks/kafka-broker-down"
+
+      # High consumer lag
+      - alert: KafkaHighConsumerLag
+        expr: kafka_consumer_lag_sum > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer lag is {{ $value }} for group {{ $labels.consumergroup }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/kafka-consumer-lag"
+
+      # Topic partition offline
+      - alert: KafkaTopicPartitionOffline
+        expr: kafka_topic_partition_leader == -1
+        for: 1m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Kafka topic partition offline"
+          description: "Topic {{ $labels.topic }} partition {{ $labels.partition }} is offline"
+          runbook_url: "https://docs.financial-planning.com/runbooks/kafka-partition-offline"
+
+  # Elasticsearch Alerts
+  - name: elasticsearch
+    rules:
+      # Cluster status
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          team: data
+        annotations:
+          summary: "Elasticsearch cluster status is red"
+          description: "Elasticsearch cluster health is red"
+          runbook_url: "https://docs.financial-planning.com/runbooks/elasticsearch-cluster-red"
+
+      - alert: ElasticsearchClusterYellow
+        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Elasticsearch cluster status is yellow"
+          description: "Elasticsearch cluster health is yellow"
+          runbook_url: "https://docs.financial-planning.com/runbooks/elasticsearch-cluster-yellow"
+
+      # High JVM memory usage
+      - alert: ElasticsearchHighJVMMemoryUsage
+        expr: elasticsearch_jvm_memory_used_bytes / elasticsearch_jvm_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: data
+        annotations:
+          summary: "Elasticsearch high JVM memory usage"
+          description: "JVM memory usage is {{ $value | humanizePercentage }} on node {{ $labels.node }}"
+          runbook_url: "https://docs.financial-planning.com/runbooks/elasticsearch-memory"
+
+  # Security Alerts
+  - name: security
+    rules:
+      # High number of authentication failures
+      - alert: HighAuthenticationFailures
+        expr: rate(authentication_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failure rate is {{ $value }} per second"
+          runbook_url: "https://docs.financial-planning.com/runbooks/high-auth-failures"
+
+      # Suspicious activity detected
+      - alert: SuspiciousActivity
+        expr: rate(security_incidents_total[5m]) > 1
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Security incident rate is {{ $value }} per second"
+          runbook_url: "https://docs.financial-planning.com/runbooks/suspicious-activity"

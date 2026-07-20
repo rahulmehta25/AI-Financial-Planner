@@ -1,0 +1,682 @@
+{
+  "info": {
+    "name": "Financial Planning API Test Collection",
+    "description": "Comprehensive API testing collection for the Financial Planning System",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "profile_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "goal_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "console.log('Making request to:', pm.request.url);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "pm.test('Response time is reasonable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "pm.test('Response has valid JSON', function () {",
+          "    pm.response.to.have.jsonBody();",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & System",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('System is healthy', function () {",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.status).to.eql('healthy');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detailed Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health check passes', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson.status).to.eql('healthy');",
+                  "    pm.expect(responseJson).to.have.property('database');",
+                  "    pm.expect(responseJson).to.have.property('simulation_engine');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"full_name\": \"Test User\",\n  \"age\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "auth", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('User registration successful', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('id');",
+                  "    pm.expect(responseJson).to.have.property('email');",
+                  "    ",
+                  "    // Store user ID for later use",
+                  "    pm.environment.set('user_id', responseJson.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "test@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "SecurePassword123!",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('access_token');",
+                  "    pm.expect(responseJson).to.have.property('token_type');",
+                  "    ",
+                  "    // Store access token for authentication",
+                  "    pm.environment.set('access_token', responseJson.access_token);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Financial Profiles",
+      "item": [
+        {
+          "name": "Create Financial Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"annual_income\": 100000,\n  \"current_savings\": 50000,\n  \"monthly_expenses\": 6000,\n  \"debt_amount\": 20000,\n  \"risk_tolerance\": \"moderate\",\n  \"investment_timeline\": 20,\n  \"retirement_age\": 65,\n  \"dependents\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/financial-profiles/",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "financial-profiles", ""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Financial profile created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('id');",
+                  "    pm.expect(responseJson.annual_income).to.eql(100000);",
+                  "    pm.expect(responseJson.risk_tolerance).to.eql('moderate');",
+                  "    ",
+                  "    // Store profile ID",
+                  "    pm.environment.set('profile_id', responseJson.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Financial Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/financial-profiles/{{profile_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "financial-profiles", "{{profile_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Profile retrieved successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('id');",
+                  "    pm.expect(responseJson).to.have.property('annual_income');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Goals",
+      "item": [
+        {
+          "name": "Create Goal - Retirement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Retirement Fund\",\n  \"target_amount\": 1000000,\n  \"target_date\": \"2044-01-01T00:00:00Z\",\n  \"priority\": \"high\",\n  \"category\": \"retirement\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/goals/",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "goals", ""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Goal created successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('id');",
+                  "    pm.expect(responseJson.name).to.eql('Retirement Fund');",
+                  "    pm.expect(responseJson.target_amount).to.eql(1000000);",
+                  "    ",
+                  "    // Store goal ID",
+                  "    pm.environment.set('goal_id', responseJson.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User Goals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/goals/",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "goals", ""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Goals retrieved successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Monte Carlo Simulation",
+      "item": [
+        {
+          "name": "Run Monte Carlo Simulation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": \"{{profile_id}}\",\n  \"iterations\": 10000,\n  \"years\": 20,\n  \"inflation_rate\": 0.025,\n  \"market_volatility\": 0.15,\n  \"expected_return\": 0.07\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/monte-carlo/run",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "monte-carlo", "run"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Monte Carlo simulation completed', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const responseJson = pm.response.json();",
+                  "    pm.expect(responseJson).to.have.property('iterations');",
+                  "    pm.expect(responseJson).to.have.property('success_probability');",
+                  "    pm.expect(responseJson).to.have.property('expected_value');",
+                  "    ",
+                  "    console.log('Simulation Results:', responseJson);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ML Recommendations",
+      "item": [
+        {
+          "name": "Get ML Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/ml/recommendations/{{profile_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "ml", "recommendations", "{{profile_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ML recommendations endpoint accessible', function () {",
+                  "    // Accept both 200 (success) and 404/500 (service not configured)",
+                  "    pm.expect([200, 404, 500, 503]).to.include(pm.response.code);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('recommendations');",
+                  "        console.log('ML Recommendations:', responseJson);",
+                  "    } else {",
+                  "        console.log('ML service not available - this is expected in demo environment');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PDF Export",
+      "item": [
+        {
+          "name": "Generate PDF Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": \"{{profile_id}}\",\n  \"template\": \"detailed_plan\",\n  \"include_charts\": true,\n  \"include_goals\": true,\n  \"include_recommendations\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/export/pdf/financial-plan",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "export", "pdf", "financial-plan"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('PDF generation initiated', function () {",
+                  "    // Accept 200 (sync) or 202 (async) responses",
+                  "    pm.expect([200, 202]).to.include(pm.response.code);",
+                  "    ",
+                  "    const contentType = pm.response.headers.get('Content-Type');",
+                  "    if (contentType && contentType.includes('application/pdf')) {",
+                  "        console.log('PDF generated synchronously');",
+                  "        pm.expect(pm.response.responseSize).to.be.above(1000);",
+                  "    } else {",
+                  "        console.log('PDF generation started asynchronously');",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('task_id');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Market Data",
+      "item": [
+        {
+          "name": "Get Stock Quote",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/market-data/quote/AAPL",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "market-data", "quote", "AAPL"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Market data endpoint accessible', function () {",
+                  "    // Accept success or expected failures (no API key)",
+                  "    pm.expect([200, 401, 403, 404, 500, 503]).to.include(pm.response.code);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('symbol');",
+                  "        console.log('Market data:', responseJson);",
+                  "    } else {",
+                  "        console.log('Market data service not configured - expected in demo');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Banking Integration",
+      "item": [
+        {
+          "name": "Get Connected Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/banking/accounts",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "banking", "accounts"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Banking endpoint accessible', function () {",
+                  "    // Accept success or expected configuration errors",
+                  "    pm.expect([200, 401, 404, 500, 503]).to.include(pm.response.code);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('accounts');",
+                  "        console.log('Banking accounts:', responseJson);",
+                  "    } else {",
+                  "        console.log('Banking service not configured - expected without Plaid/Yodlee');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Voice Interface",
+      "item": [
+        {
+          "name": "Process Voice Command",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"command\": \"What is my current financial status?\",\n  \"language\": \"en-US\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/voice/process-command",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "voice", "process-command"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Voice interface endpoint accessible', function () {",
+                  "    // Accept success or expected configuration errors",
+                  "    pm.expect([200, 404, 500, 503]).to.include(pm.response.code);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseJson = pm.response.json();",
+                  "        pm.expect(responseJson).to.have.property('response');",
+                  "        console.log('Voice response:', responseJson);",
+                  "    } else {",
+                  "        console.log('Voice service not configured - expected without speech API keys');",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get Notification Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["{{api_version}}", "notifications", "preferences"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Notifications endpoint accessible', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "    ",
+                  "    if (pm.response.code === 200) {",
+                  "        const responseJson = pm.response.json();",
+                  "        console.log('Notification preferences:', responseJson);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

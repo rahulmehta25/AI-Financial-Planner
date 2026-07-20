@@ -1,0 +1,111 @@
+name: 'financial_planning_dw'
+version: '1.0.0'
+config-version: 2
+
+# This setting configures which "profile" dbt uses for this project.
+profile: 'financial_planning_dw'
+
+# These configurations specify where dbt should look for different types of files.
+model-paths: ["models"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+seed-paths: ["data"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Model configurations
+models:
+  financial_planning_dw:
+    # Staging models - ephemeral
+    staging:
+      +materialized: ephemeral
+      +schema: staging
+    
+    # Dimension models - table materialization for SCD
+    dimensions:
+      +materialized: table
+      +schema: dimensions
+      +post-hook: "{{ create_indexes() }}"
+    
+    # Fact models - incremental with partitioning
+    facts:
+      +materialized: incremental
+      +schema: facts
+      +on_schema_change: "fail"
+      +partition_by: "date_key"
+      +cluster_by: ["user_key", "date_key"]
+    
+    # Mart models - materialized views for performance
+    marts:
+      +materialized: view
+      +schema: marts
+      daily:
+        +materialized: table
+      monthly:
+        +materialized: table
+      reporting:
+        +materialized: view
+
+# Test configurations
+tests:
+  +store_failures: true
+  +schema: test_failures
+
+# Snapshot configurations
+snapshots:
+  financial_planning_dw:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+# Seed configurations
+seeds:
+  financial_planning_dw:
+    +schema: seeds
+    reference_data:
+      +column_types:
+        id: varchar(50)
+        created_at: timestamp
+
+# Variables for environment-specific settings
+vars:
+  # Date settings
+  start_date: '2020-01-01'
+  end_date: '2030-12-31'
+  
+  # Data retention periods (in days)
+  transaction_retention_days: 2555  # 7 years
+  market_data_retention_days: 1825  # 5 years
+  user_activity_retention_days: 1095  # 3 years
+  
+  # Data quality thresholds
+  completeness_threshold: 0.95
+  accuracy_threshold: 0.98
+  timeliness_threshold_hours: 2
+  
+  # Performance settings
+  batch_size: 10000
+  max_parallel_jobs: 4
+  
+  # Environment-specific settings
+  timezone: 'UTC'
+  base_currency: 'USD'
+
+# Documentation
+docs:
+  financial_planning_dw:
+    node_colors:
+      staging: "#FFE6CC"
+      dimensions: "#D4E6F1"
+      facts: "#D5F4E6"
+      marts: "#F9EBEA"
+
+# Macros
+dispatch:
+  - macro_namespace: dbt_utils
+    search_order: ['financial_planning_dw', 'dbt_utils']

@@ -1,0 +1,119 @@
+apiVersion: v2
+name: financial-planning
+description: Enterprise-grade Helm chart for Financial Planning microservices platform
+type: application
+version: 2.0.0
+appVersion: "1.0.0"
+keywords:
+  - financial-planning
+  - microservices
+  - api
+  - fintech
+  - ai
+  - ml
+  - kubernetes
+home: https://github.com/financialplanning/backend
+sources:
+  - https://github.com/financialplanning/backend
+maintainers:
+  - name: Financial Planning DevOps Team
+    email: devops@financialplanning.com
+  - name: Platform Engineering
+    email: platform@financialplanning.com
+icon: https://financialplanning.com/assets/icon.png
+deprecated: false
+kubeVersion: ">=1.24.0-0"
+
+dependencies:
+  # Database Dependencies
+  - name: postgresql
+    version: "13.2.24"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    tags:
+      - database
+      - persistence
+  - name: redis
+    version: "18.4.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+    tags:
+      - cache
+      - database
+  
+  # Monitoring Stack
+  - name: kube-prometheus-stack
+    version: "55.5.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+    tags:
+      - monitoring
+      - observability
+  - name: grafana
+    version: "7.0.19"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: monitoring.grafana.enabled
+    tags:
+      - monitoring
+      - observability
+  - name: jaeger
+    version: "0.71.14"
+    repository: "https://jaegertracing.github.io/helm-charts"
+    condition: monitoring.tracing.enabled
+    tags:
+      - monitoring
+      - tracing
+  
+  # Service Mesh
+  - name: istio-base
+    version: "1.20.1"
+    repository: "https://istio-release.storage.googleapis.com/charts"
+    condition: serviceMesh.istio.enabled
+    tags:
+      - service-mesh
+      - istio
+  - name: istiod
+    version: "1.20.1"
+    repository: "https://istio-release.storage.googleapis.com/charts"
+    condition: serviceMesh.istio.enabled
+    tags:
+      - service-mesh
+      - istio
+  
+  # Ingress
+  - name: ingress-nginx
+    version: "4.8.4"
+    repository: "https://kubernetes.github.io/ingress-nginx"
+    condition: ingress.nginx.enabled
+    tags:
+      - ingress
+      - networking
+  
+  # Security
+  - name: cert-manager
+    version: "1.13.3"
+    repository: "https://charts.jetstack.io"
+    condition: security.certManager.enabled
+    tags:
+      - security
+      - tls
+  - name: external-secrets
+    version: "0.9.11"
+    repository: "https://charts.external-secrets.io"
+    condition: security.externalSecrets.enabled
+    tags:
+      - security
+      - secrets
+
+annotations:
+  category: Financial Services
+  licenses: MIT
+  artifacthub.io/changes: |
+    - Added comprehensive monitoring stack
+    - Implemented service mesh support
+    - Enhanced security with external secrets
+    - Added autoscaling capabilities
+    - Multi-environment configuration support
+  artifacthub.io/containsSecurityUpdates: "true"
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/operator: "false"

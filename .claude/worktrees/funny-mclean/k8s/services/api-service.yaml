@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planner-api-service
+  namespace: production
+  labels:
+    app: financial-planner-api
+    tier: backend
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+spec:
+  selector:
+    app: financial-planner-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8000
+    protocol: TCP
+  type: LoadBalancer
+  sessionAffinity: None
+  externalTrafficPolicy: Cluster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planner-api-internal
+  namespace: production
+  labels:
+    app: financial-planner-api
+    tier: backend
+spec:
+  selector:
+    app: financial-planner-api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planner-ml-service
+  namespace: production
+  labels:
+    app: financial-planner-ml
+    tier: ml
+spec:
+  selector:
+    app: financial-planner-ml
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  type: ClusterIP
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planner-worker-headless
+  namespace: production
+  labels:
+    app: financial-planner-worker
+    tier: worker
+spec:
+  selector:
+    app: financial-planner-worker
+  ports:
+  - name: metrics
+    port: 9540
+    targetPort: 9540
+    protocol: TCP
+  type: ClusterIP
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: production
+  labels:
+    app: redis
+    tier: cache
+spec:
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-service
+  namespace: production
+  labels:
+    app: postgresql
+    tier: database
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  type: ClusterIP

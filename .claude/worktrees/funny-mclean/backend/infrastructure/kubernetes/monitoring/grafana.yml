@@ -1,0 +1,675 @@
+# Grafana dashboard and visualization for Financial Planning Application
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/GrafanaRole"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: config
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = false
+    reporting_enabled = false
+    
+    [security]
+    admin_user = ${GF_SECURITY_ADMIN_USER}
+    admin_password = ${GF_SECURITY_ADMIN_PASSWORD}
+    secret_key = ${GF_SECURITY_SECRET_KEY}
+    disable_gravatar = true
+    cookie_secure = true
+    cookie_samesite = strict
+    strict_transport_security = true
+    strict_transport_security_max_age_seconds = 86400
+    strict_transport_security_preload = true
+    strict_transport_security_subdomains = true
+    x_content_type_options = true
+    x_xss_protection = true
+    
+    [server]
+    protocol = http
+    http_port = 3000
+    domain = grafana.financialplanning.com
+    root_url = https://grafana.financialplanning.com/
+    enable_gzip = true
+    
+    [database]
+    type = postgres
+    host = postgresql.financial-planning-data.svc.cluster.local:5432
+    name = grafana
+    user = ${GF_DATABASE_USER}
+    password = ${GF_DATABASE_PASSWORD}
+    ssl_mode = require
+    
+    [session]
+    provider = redis
+    provider_config = addr=redis.financial-planning-data.svc.cluster.local:6379,pool_size=100,prefix=grafana:session:
+    
+    [dataproxy]
+    timeout = 30
+    keep_alive_seconds = 30
+    
+    [users]
+    allow_sign_up = false
+    allow_org_create = false
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+    
+    [auth]
+    oauth_auto_login = true
+    disable_login_form = false
+    
+    [auth.generic_oauth]
+    enabled = true
+    name = AWS SSO
+    client_id = ${GF_AUTH_GENERIC_OAUTH_CLIENT_ID}
+    client_secret = ${GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}
+    scopes = openid email profile
+    auth_url = https://financial-planning.awsapps.com/start/oauth2/authorize
+    token_url = https://financial-planning.awsapps.com/start/oauth2/token
+    api_url = https://financial-planning.awsapps.com/start/oauth2/userinfo
+    allowed_domains = financialplanning.com
+    allow_assign_grafana_admin = true
+    role_attribute_path = contains(groups[*], 'admin') && 'Admin' || contains(groups[*], 'editor') && 'Editor' || 'Viewer'
+    
+    [log]
+    mode = console
+    level = info
+    format = json
+    
+    [log.console]
+    level = info
+    format = json
+    
+    [metrics]
+    enabled = true
+    interval_seconds = 10
+    
+    [feature_toggles]
+    enable = publicDashboards,alerting,ngalert,live
+    
+    [alerting]
+    enabled = true
+    execute_alerts = true
+    max_attempts = 3
+    
+    [unified_alerting]
+    enabled = true
+    
+    [smtp]
+    enabled = true
+    host = ${GF_SMTP_HOST}
+    user = ${GF_SMTP_USER}
+    password = ${GF_SMTP_PASSWORD}
+    from_address = alerts@financialplanning.com
+    from_name = Financial Planning Monitoring
+    
+    [rendering]
+    server_url = http://grafana-image-renderer.financial-planning-monitoring.svc.cluster.local:8081/render
+    callback_url = http://grafana.financial-planning-monitoring.svc.cluster.local:3000/
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: datasources
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus.financial-planning-monitoring.svc.cluster.local:9090
+      isDefault: true
+      editable: false
+      jsonData:
+        timeInterval: 15s
+        queryTimeout: 60s
+        httpMethod: POST
+        manageAlerts: true
+        prometheusType: Prometheus
+        prometheusVersion: 2.48.0
+        cacheLevel: Low
+        incrementalQuery: true
+        disableRecordingRules: false
+      secureJsonData: {}
+    
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki.financial-planning-monitoring.svc.cluster.local:3100
+      editable: false
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+        - datasourceUid: jaeger-uid
+          matcherRegex: '"trace_id":"(\w+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+    
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger-query.financial-planning-monitoring.svc.cluster.local:16686
+      uid: jaeger-uid
+      editable: false
+      jsonData:
+        tracesToLogs:
+          datasourceUid: loki-uid
+          tags: ['job', 'instance', 'pod', 'namespace']
+          mappedTags: [
+            { key: 'service.name', value: 'service' }
+          ]
+          mapTagNamesEnabled: true
+          spanStartTimeShift: '-1h'
+          spanEndTimeShift: '1h'
+          filterByTraceID: true
+          filterBySpanID: false
+    
+    - name: PostgreSQL
+      type: postgres
+      access: proxy
+      url: postgresql.financial-planning-data.svc.cluster.local:5432
+      database: financial_planning
+      user: ${GF_DATABASE_USER}
+      editable: false
+      jsonData:
+        sslmode: require
+        postgresVersion: 1300
+        timescaledb: false
+      secureJsonData:
+        password: ${GF_DATABASE_PASSWORD}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboards
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'financial-planning'
+      orgId: 1
+      folder: 'Financial Planning'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 30
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/financial-planning
+    
+    - name: 'infrastructure'
+      orgId: 1
+      folder: 'Infrastructure'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 30
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/infrastructure
+    
+    - name: 'business'
+      orgId: 1
+      folder: 'Business Metrics'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 30
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/business
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-financial-overview
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: dashboard
+data:
+  financial-planning-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Financial Planning - Application Overview",
+        "tags": ["financial-planning", "overview"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "API Request Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{job=\"financial-planning-api\"}[5m]))",
+                "legendFormat": "Requests/sec"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 100},
+                    {"color": "red", "value": 500}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "API Response Time (95th percentile)",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"financial-planning-api\"}[5m]))",
+                "legendFormat": "95th percentile"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 0.5},
+                    {"color": "red", "value": 1.0}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Error Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{job=\"financial-planning-api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"financial-planning-api\"}[5m])) * 100",
+                "legendFormat": "Error Rate %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 1},
+                    {"color": "red", "value": 5}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+          },
+          {
+            "id": 4,
+            "title": "Active Users",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "financial_planning_active_users_total",
+                "legendFormat": "Active Users"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+          },
+          {
+            "id": 5,
+            "title": "CPU Usage by Service",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{namespace=\"financial-planning\",container!=\"POD\",container!=\"\"}[5m]) * 100",
+                "legendFormat": "{{pod}} - {{container}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent"
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+          },
+          {
+            "id": 6,
+            "title": "Memory Usage by Service",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{namespace=\"financial-planning\",container!=\"POD\",container!=\"\"} / 1024 / 1024",
+                "legendFormat": "{{pod}} - {{container}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "decbytes"
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          }
+        ],
+        "time": {"from": "now-1h", "to": "now"},
+        "refresh": "5s"
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/version: "10.2.2"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/component: monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: grafana
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.2.2
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-credentials
+              key: grafana-admin-user
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-credentials
+              key: grafana-admin-password
+        - name: GF_SECURITY_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-credentials
+              key: grafana-secret-key
+        - name: GF_DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: grafana-username
+        - name: GF_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: grafana-password
+        - name: GF_AUTH_GENERIC_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth-credentials
+              key: client-id
+        - name: GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth-credentials
+              key: client-secret
+        - name: GF_SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: smtp-host
+        - name: GF_SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: smtp-user
+        - name: GF_SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: notification-credentials
+              key: smtp-password
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+            ephemeral-storage: 1Gi
+          limits:
+            memory: 1Gi
+            cpu: 500m
+            ephemeral-storage: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 472
+          runAsGroup: 472
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: config
+          mountPath: /etc/grafana/grafana.ini
+          subPath: grafana.ini
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-config
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboards-financial
+          mountPath: /var/lib/grafana/dashboards/financial-planning
+        - name: storage
+          mountPath: /var/lib/grafana
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /var/log/grafana
+      volumes:
+      - name: config
+        configMap:
+          name: grafana-config
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: dashboards-config
+        configMap:
+          name: grafana-dashboards-config
+      - name: dashboards-financial
+        configMap:
+          name: grafana-dashboard-financial-overview
+      - name: storage
+        persistentVolumeClaim:
+          claimName: grafana-data-pvc
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: logs
+        emptyDir:
+          sizeLimit: 500Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: grafana
+              topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        kubernetes.io/os: linux
+        node-type: monitoring
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: grafana
+
+---
+# Grafana Image Renderer for PDF reports
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-image-renderer
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana-image-renderer
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana-image-renderer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana-image-renderer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: grafana-image-renderer
+        image: grafana/grafana-image-renderer:3.8.3
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: ENABLE_METRICS
+          value: "true"
+        - name: HTTP_PORT
+          value: "8081"
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-image-renderer
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: grafana-image-renderer
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: grafana-image-renderer

@@ -1,0 +1,210 @@
+# Production environment values for financial-planning platform
+# Override default values for production deployment
+
+global:
+  environment: production
+  imageTag: "1.0.0"
+  imagePullPolicy: IfNotPresent
+
+# Production scaling
+replicaCount: 5
+
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 50
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Production resources
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+    ephemeral-storage: 8Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+    ephemeral-storage: 4Gi
+
+# Production microservices scaling
+microservices:
+  userService:
+    replicaCount: 5
+    autoscaling:
+      minReplicas: 3
+      maxReplicas: 15
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1500m
+        memory: 2Gi
+
+  bankingService:
+    replicaCount: 8
+    autoscaling:
+      minReplicas: 5
+      maxReplicas: 20
+    resources:
+      requests:
+        cpu: 750m
+        memory: 1.5Gi
+      limits:
+        cpu: 2000m
+        memory: 3Gi
+    priorityClassName: financial-planning-critical
+
+  mlService:
+    replicaCount: 4
+    resources:
+      requests:
+        cpu: 2000m
+        memory: 4Gi
+        nvidia.com/gpu: 1
+      limits:
+        cpu: 8000m
+        memory: 16Gi
+        nvidia.com/gpu: 2
+
+  notificationService:
+    replicaCount: 5
+    autoscaling:
+      minReplicas: 3
+      maxReplicas: 12
+
+# Production database configuration
+postgresql:
+  primary:
+    persistence:
+      size: 500Gi
+    resources:
+      requests:
+        memory: 8Gi
+        cpu: 4000m
+      limits:
+        memory: 16Gi
+        cpu: 8000m
+  
+  readReplicas:
+    replicaCount: 3
+    resources:
+      requests:
+        memory: 4Gi
+        cpu: 2000m
+      limits:
+        memory: 8Gi
+        cpu: 4000m
+
+redis:
+  master:
+    persistence:
+      size: 200Gi
+    resources:
+      requests:
+        memory: 4Gi
+        cpu: 2000m
+      limits:
+        memory: 8Gi
+        cpu: 4000m
+  
+  replica:
+    replicaCount: 3
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 1000m
+      limits:
+        memory: 4Gi
+        cpu: 2000m
+
+# Production ingress
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/rate-limit-burst: "400"
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+
+ingress-nginx:
+  controller:
+    replicaCount: 5
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# Production monitoring
+monitoring:
+  enabled: true
+  prometheusRule:
+    rules:
+      # Custom production alerts
+      - alert: FinancialPlanningHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="financial-planning-api"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on Financial Planning API"
+          description: "95th percentile latency is above 500ms"
+      
+      - alert: FinancialPlanningHighErrorRate
+        expr: rate(http_requests_total{job="financial-planning-api",status=~"5.."}[5m]) / rate(http_requests_total{job="financial-planning-api"}[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on Financial Planning API"
+          description: "Error rate is above 5%"
+
+# Production security
+security:
+  certManager:
+    enabled: true
+  externalSecrets:
+    enabled: true
+  podSecurityStandards:
+    enabled: true
+    enforce: "restricted"
+
+# Production backup
+backup:
+  velero:
+    enabled: true
+    schedule: "0 1,13 * * *"  # Twice daily
+    ttl: "2160h0m0s"  # 90 days retention
+
+# Production service mesh
+serviceMesh:
+  istio:
+    enabled: true
+    destinationRule:
+      trafficPolicy:
+        connectionPool:
+          tcp:
+            maxConnections: 200
+          http:
+            http1MaxPendingRequests: 100
+            maxRequestsPerConnection: 20
+
+# Production configuration overrides
+config:
+  api:
+    maxRequestSize: 104857600  # 100MB for production
+    timeoutSeconds: 180
+  security:
+    accessTokenExpireMinutes: 720  # 12 hours
+    refreshTokenExpireMinutes: 20160  # 2 weeks
+  performance:
+    workers: 8
+    cacheDefaultTimeout: 300
+    cacheTTL: 900
+
+# Node selectors for production
+nodeSelector:
+  node-tier: production
+  node-type: compute-optimized

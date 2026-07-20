@@ -1,0 +1,106 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "status": "stable",
+      "release_date": "2024-01-01T00:00:00",
+      "description": "Initial stable release with core financial planning features",
+      "breaking_changes": [],
+      "new_features": [
+        "User authentication and authorization",
+        "Financial profile management",
+        "Goal setting and tracking",
+        "Monte Carlo simulations",
+        "PDF report generation"
+      ],
+      "bug_fixes": [],
+      "supported_until": "2025-12-31T23:59:59"
+    },
+    {
+      "version": "2.0.0",
+      "status": "development",
+      "release_date": "2024-06-01T00:00:00",
+      "description": "Enhanced features with AI recommendations and social platform",
+      "breaking_changes": [
+        "Authentication header format changed",
+        "Response format standardized",
+        "Endpoint paths restructured"
+      ],
+      "new_features": [
+        "AI-powered financial recommendations",
+        "Social platform integration",
+        "Advanced portfolio optimization",
+        "Real-time market data integration",
+        "Voice interface support"
+      ],
+      "bug_fixes": []
+    }
+  ],
+  "compatibility": {
+    "2.0.0": [
+      {
+        "from_version": "1.0.0",
+        "to_version": "2.0.0",
+        "compatibility_level": "breaking",
+        "migration_required": true,
+        "breaking_changes": [
+          "Authentication headers must include 'Bearer' prefix",
+          "All response envelopes now include 'data' wrapper",
+          "Date formats changed to ISO 8601"
+        ],
+        "migration_guide_url": "/docs/migration/v1-to-v2"
+      }
+    ]
+  },
+  "endpoints": [
+    {
+      "path": "/auth/login",
+      "methods": ["POST"],
+      "introduced_in": "1.0.0",
+      "deprecated_in": null,
+      "removed_in": null,
+      "changes": {}
+    },
+    {
+      "path": "/users/profile",
+      "methods": ["GET"],
+      "introduced_in": "1.0.0",
+      "deprecated_in": null,
+      "removed_in": null,
+      "changes": {}
+    },
+    {
+      "path": "/goals",
+      "methods": ["GET", "POST"],
+      "introduced_in": "1.0.0",
+      "deprecated_in": null,
+      "removed_in": null,
+      "changes": {}
+    },
+    {
+      "path": "/ai/recommendations",
+      "methods": ["GET", "POST"],
+      "introduced_in": "2.0.0",
+      "deprecated_in": null,
+      "removed_in": null,
+      "changes": {}
+    }
+  ],
+  "ab_tests": [
+    {
+      "test_name": "api_v2_migration",
+      "from_version": "1.0.0",
+      "to_version": "2.0.0",
+      "traffic_percentage": 10.0,
+      "user_segments": ["beta_users"],
+      "metrics_to_track": ["response_time", "error_rate", "success_rate"],
+      "success_criteria": {
+        "error_rate_threshold": 0.05,
+        "response_time_threshold": 1000
+      },
+      "start_date": "2024-08-22T00:00:00",
+      "end_date": "2024-09-22T00:00:00",
+      "is_active": true
+    }
+  ]
+}

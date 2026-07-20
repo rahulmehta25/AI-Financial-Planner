@@ -1,0 +1,69 @@
+# ============ PERFORMANCE OPTIMIZATION DEPENDENCIES ============
+# Additional dependencies for performance optimization
+# Install with: pip install -r requirements_performance.txt
+
+# GPU Acceleration for Monte Carlo
+cupy-cuda12x==12.3.0  # For NVIDIA GPUs with CUDA 12.x
+# cupy-cuda11x==12.3.0  # Alternative for CUDA 11.x
+pycuda==2022.2.2
+
+# Advanced Caching
+msgpack==1.0.7  # Binary serialization for cache
+redis-py-cluster==2.1.3  # Redis cluster support
+diskcache==5.6.3  # Disk-based cache fallback
+
+# Database Optimization
+pg-activity==3.4.2  # PostgreSQL activity monitoring
+pgcli==4.0.1  # Enhanced PostgreSQL CLI
+psycopg2-pool==1.1  # Connection pooling
+
+# CDN and Compression
+brotli==1.1.0  # Brotli compression
+python-cloudflare==2.11.7  # CloudFlare API
+
+# GraphQL
+strawberry-graphql[fastapi]==0.215.1  # GraphQL with FastAPI
+graphene==3.3  # Alternative GraphQL library
+
+# Monitoring and Metrics
+prometheus-client==0.19.0  # Prometheus metrics
+grafana-api==1.0.3  # Grafana integration
+psutil==5.9.6  # System resource monitoring
+pynvml==11.5.0  # NVIDIA GPU monitoring
+statsd==4.0.1  # StatsD metrics client
+
+# Load Testing
+k6-python==0.1.0  # k6 integration
+taurus==1.16.29  # Meta load testing tool
+
+# Image Optimization
+pillow-avif-plugin==1.4.1  # AVIF support for Pillow
+mozjpeg-lossless-optimization==1.1.2  # JPEG optimization
+
+# Performance Profiling
+py-spy==0.3.14  # Python profiler
+memory-profiler==0.61.0  # Memory profiling
+line-profiler==4.1.1  # Line-by-line profiling
+scalene==1.5.35  # High-performance profiler
+
+# Async Performance
+uvloop==0.19.0  # High-performance event loop
+aiocache==0.12.2  # Async caching
+aiofiles==23.2.1  # Async file operations
+
+# Data Processing Optimization
+vaex==4.17.0  # Out-of-core DataFrames
+dask==2023.12.1  # Parallel computing
+ray==2.9.0  # Distributed computing
+
+# Network Optimization
+h2==4.1.0  # HTTP/2 support
+httptools==0.6.1  # Fast HTTP parsing
+
+# Serialization Performance
+orjson==3.9.10  # Fast JSON serialization
+python-rapidjson==1.13  # Alternative fast JSON
+cbor2==5.5.1  # CBOR serialization
+
+# Query Optimization
+sqlparse==0.4.4  # SQL parsing and formatting

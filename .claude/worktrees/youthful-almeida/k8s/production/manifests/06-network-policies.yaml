@@ -1,0 +1,459 @@
+---
+# Default Deny All Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: financial-planning-prod
+  labels:
+    app: network-security
+    environment: production
+    policy-type: deny-all
+spec:
+  podSelector: {}  # Applies to all pods in namespace
+  policyTypes:
+  - Ingress
+  - Egress
+  # No ingress or egress rules = deny all traffic
+---
+# Allow ingress to API pods from LoadBalancer/Ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    policy-type: ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow traffic from same namespace (internal communication)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-prod
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090  # Metrics port
+  
+  # Allow traffic from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090  # Metrics port
+  
+  # Allow health checks from load balancer
+  - from: []  # Allow from any source for health checks
+    ports:
+    - protocol: TCP
+      port: 8000
+      # Only allow health check endpoint
+    # Note: Additional filtering should be done at application level
+---
+# Allow egress from API pods to required services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-from-api
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    policy-type: egress
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # Allow access to database
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+  
+  # Allow access to Redis cache
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: cache
+    ports:
+    - protocol: TCP
+      port: 6379  # Redis
+  
+  # Allow access to external APIs (market data providers)
+  - to: []  # Internet access
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+  
+  # Allow access to logging services
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: logging
+    ports:
+    - protocol: TCP
+      port: 9200  # Elasticsearch
+    - protocol: TCP
+      port: 24224 # Fluentd
+  
+  # Allow access to monitoring services
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090  # Prometheus
+    - protocol: UDP
+      port: 6831  # Jaeger agent
+  
+  # Allow internal cluster communication
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-prod
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+---
+# Allow specific inter-service communication within namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-internal-communication
+  namespace: financial-planning-prod
+  labels:
+    app: internal-communication
+    environment: production
+    policy-type: internal
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow communication between pods in same namespace
+  - from:
+    - podSelector:
+        matchLabels:
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+  
+  egress:
+  # Allow communication to pods in same namespace
+  - to:
+    - podSelector:
+        matchLabels:
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+---
+# Database access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-access
+  namespace: financial-planning-prod
+  labels:
+    app: database-access
+    environment: production
+    policy-type: database
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow access to PostgreSQL database
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+      podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access to database connection pooler
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: database
+      podSelector:
+        matchLabels:
+          app: pgbouncer
+    ports:
+    - protocol: TCP
+      port: 6432
+---
+# Redis cache access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cache-access
+  namespace: financial-planning-prod
+  labels:
+    app: cache-access
+    environment: production
+    policy-type: cache
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow access to Redis cache
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: cache
+      podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access to Redis Sentinel (if used)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: cache
+      podSelector:
+        matchLabels:
+          app: redis-sentinel
+    ports:
+    - protocol: TCP
+      port: 26379
+---
+# Monitoring access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-access
+  namespace: financial-planning-prod
+  labels:
+    app: monitoring-access
+    environment: production
+    policy-type: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow Prometheus to scrape metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  # Allow Grafana to access metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: grafana
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  egress:
+  # Allow sending traces to Jaeger
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: jaeger
+    ports:
+    - protocol: UDP
+      port: 6831
+    - protocol: UDP
+      port: 6832
+    - protocol: TCP
+      port: 14268
+---
+# External API access policy (restrictive)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-api-access
+  namespace: financial-planning-prod
+  labels:
+    app: external-api-access
+    environment: production
+    policy-type: external
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow HTTPS traffic to external APIs
+  - to: []  # Any external destination
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP traffic (should be minimized in production)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Block access to internal cluster IPs and private networks
+  # This is handled by additional firewall rules outside Kubernetes
+---
+# Deny access to Kubernetes API server from application pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-kube-api-access
+  namespace: financial-planning-prod
+  labels:
+    app: security-restriction
+    environment: production
+    policy-type: deny-kube-api
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Explicitly deny access to Kubernetes API server
+  # (This is complemented by RBAC policies)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+      podSelector:
+        matchLabels:
+          component: kube-apiserver
+    ports: []  # No ports allowed
+---
+# Emergency access policy (disabled by default)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: emergency-access-policy
+  namespace: financial-planning-prod
+  labels:
+    app: emergency-access
+    environment: production
+    policy-type: emergency
+    enabled: "false"  # Disabled by default
+  annotations:
+    description: "Emergency access policy for troubleshooting. Enable only when needed."
+    usage: "kubectl label networkpolicy emergency-access-policy enabled=true"
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow access from specific troubleshooting pods
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: debugging
+      podSelector:
+        matchLabels:
+          app: debug-tools
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  egress:
+  # Allow broader access for troubleshooting
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 22   # SSH
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP

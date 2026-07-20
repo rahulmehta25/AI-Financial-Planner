@@ -1,0 +1,31 @@
+# Minimal requirements for running the Financial Planning System
+# This file contains the absolute minimum dependencies needed to start the application
+
+# Core FastAPI framework
+fastapi>=0.104.1
+
+# ASGI server for development
+uvicorn[standard]>=0.24.0
+
+# Data validation and settings management
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database ORM and async support
+sqlalchemy[asyncio]>=2.0.23
+asyncpg>=0.29.0
+
+# Password hashing
+passlib[bcrypt]>=1.7.4
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# Basic logging and utilities (usually included in Python stdlib but explicit for clarity)
+# These are typically included with Python but listed for completeness:
+# - logging (stdlib)
+# - datetime (stdlib)
+# - typing (stdlib)
+# - json (stdlib)
+# - sys (stdlib)
+# - os (stdlib)

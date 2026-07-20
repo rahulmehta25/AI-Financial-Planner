@@ -1,0 +1,5 @@
+source,transformations,destination,timestamp,row_count
+CSV Files,Price categorization;Volume ranking,Transformed CSV,2025-08-22T18:52:55.526890,8000
+Database,Historical analysis,Market summary,2025-08-22T18:52:55.526898,1000
+API,Trend calculation,Economic indicators,2025-08-22T18:52:55.526899,200
+Stream,Real-time enrichment,Event analytics,2025-08-22T18:52:55.526900,5000

@@ -1,0 +1,415 @@
+version: '3.8'
+
+networks:
+  financial-monitoring:
+    driver: bridge
+    name: financial-monitoring
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:
+  jaeger_data:
+  alertmanager_data:
+
+services:
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.external-url=http://localhost:9090'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    depends_on:
+      - cadvisor
+      - node-exporter
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # AlertManager - Alert Processing
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alerting/pagerduty_config.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Grafana - Visualization and Dashboards
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=${SMTP_HOST:-localhost:587}
+      - GF_SMTP_USER=${SMTP_USER}
+      - GF_SMTP_PASSWORD=${SMTP_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Elasticsearch - Log Storage
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
+    container_name: elasticsearch
+    environment:
+      - cluster.name=financial-planning-logs
+      - node.name=elasticsearch-master
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./elk/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Logstash - Log Processing
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.9.0
+    container_name: logstash
+    ports:
+      - "5044:5044"
+      - "5514:5514/udp"
+      - "8080:8080"
+    environment:
+      - "LS_JAVA_OPTS=-Xmx1g -Xms1g"
+    volumes:
+      - ./elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./elk/templates:/usr/share/logstash/templates
+    networks:
+      - financial-monitoring
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 1G
+
+  # Kibana - Log Visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.9.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - KIBANA_PASSWORD=${KIBANA_PASSWORD:-changeme}
+      - KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY:-encryption-key-32-chars}
+    volumes:
+      - ./elk/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    networks:
+      - financial-monitoring
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Filebeat - Log Shipping
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.9.0
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./elk/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    networks:
+      - financial-monitoring
+    depends_on:
+      - logstash
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC
+      - "14268:14268"  # HTTP
+      - "6831:6831/udp"  # UDP thrift
+      - "6832:6832/udp"  # UDP thrift
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Redis - Caching (for application)
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Node Exporter - System Metrics
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # cAdvisor - Container Metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # PostgreSQL Exporter - Database Metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.14.0
+    container_name: postgres-exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
+    ports:
+      - "9187:9187"
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Redis Exporter - Redis Metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.52.0
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - financial-monitoring
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # Blackbox Exporter - Synthetic Monitoring
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: blackbox-exporter
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./synthetics/blackbox_config.yml:/config/blackbox.yml:ro
+    command:
+      - '--config.file=/config/blackbox.yml'
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Nginx - Reverse Proxy for Monitoring Services
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: monitoring-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - financial-monitoring
+    depends_on:
+      - grafana
+      - prometheus
+      - kibana
+      - jaeger
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Synthetic Monitoring Runner
+  synthetic-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.synthetic
+    container_name: synthetic-monitor
+    environment:
+      - FINANCIAL_API_BASE_URL=${FINANCIAL_API_BASE_URL:-http://app:8000}
+      - SYNTHETIC_API_TOKEN=${SYNTHETIC_API_TOKEN}
+      - PROMETHEUS_PUSHGATEWAY_URL=http://prometheus:9090
+    volumes:
+      - ./synthetics:/app/synthetics:ro
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Watchtower - Automatic Updates
+  watchtower:
+    image: containrrr/watchtower:1.6.0
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=3600  # Check every hour
+      - WATCHTOWER_INCLUDE_STOPPED=true
+    networks:
+      - financial-monitoring
+    restart: unless-stopped
+
+# Additional volumes for persistence
+volumes:
+  redis_data:

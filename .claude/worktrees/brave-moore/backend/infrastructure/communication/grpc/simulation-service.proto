@@ -1,0 +1,337 @@
+// Simulation Service gRPC Definition
+syntax = "proto3";
+
+package financial_planning.simulation.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/financial-planning/proto/simulation/v1";
+
+// Simulation Service for Monte Carlo simulations
+service SimulationService {
+  // Simulation operations
+  rpc RunSimulation(RunSimulationRequest) returns (RunSimulationResponse);
+  rpc GetSimulation(GetSimulationRequest) returns (GetSimulationResponse);
+  rpc GetSimulations(GetSimulationsRequest) returns (GetSimulationsResponse);
+  rpc CancelSimulation(CancelSimulationRequest) returns (google.protobuf.Empty);
+  
+  // Results operations
+  rpc GetResults(GetResultsRequest) returns (GetResultsResponse);
+  rpc GetScenarioAnalysis(GetScenarioAnalysisRequest) returns (GetScenarioAnalysisResponse);
+  rpc GetSensitivityAnalysis(GetSensitivityAnalysisRequest) returns (GetSensitivityAnalysisResponse);
+  
+  // Streaming operations
+  rpc StreamSimulation(StreamSimulationRequest) returns (stream SimulationUpdate);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Simulation messages
+message RunSimulationRequest {
+  string user_id = 1;
+  SimulationParameters parameters = 2;
+  int32 num_simulations = 3;
+  int32 time_horizon_years = 4;
+  repeated Goal goals = 5;
+  Portfolio current_portfolio = 6;
+  map<string, double> assumptions = 7;
+}
+
+message RunSimulationResponse {
+  string simulation_id = 1;
+  SimulationStatus status = 2;
+  google.protobuf.Timestamp started_at = 3;
+  int64 estimated_duration_seconds = 4;
+}
+
+message GetSimulationRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+}
+
+message GetSimulationResponse {
+  Simulation simulation = 1;
+}
+
+message GetSimulationsRequest {
+  string user_id = 1;
+  SimulationStatus status = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetSimulationsResponse {
+  repeated Simulation simulations = 1;
+  int32 total_count = 2;
+}
+
+message CancelSimulationRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+}
+
+// Results messages
+message GetResultsRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+  repeated string metrics = 3;
+}
+
+message GetResultsResponse {
+  SimulationResults results = 1;
+}
+
+message GetScenarioAnalysisRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+  repeated double confidence_levels = 3;
+}
+
+message GetScenarioAnalysisResponse {
+  repeated ScenarioOutcome scenarios = 1;
+  RiskMetrics risk_metrics = 2;
+}
+
+message GetSensitivityAnalysisRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+  repeated string variables = 3;
+}
+
+message GetSensitivityAnalysisResponse {
+  repeated SensitivityResult sensitivities = 1;
+}
+
+// Streaming messages
+message StreamSimulationRequest {
+  string user_id = 1;
+  string simulation_id = 2;
+}
+
+message SimulationUpdate {
+  string simulation_id = 1;
+  SimulationStatus status = 2;
+  int32 progress_percentage = 3;
+  int32 completed_simulations = 4;
+  int32 total_simulations = 5;
+  google.protobuf.Timestamp timestamp = 6;
+  string message = 7;
+  SimulationResults partial_results = 8;
+}
+
+// Health check
+message HealthResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  int32 active_simulations = 3;
+  int32 queue_length = 4;
+}
+
+// Data models
+message SimulationParameters {
+  int32 initial_age = 1;
+  int32 retirement_age = 2;
+  double initial_savings = 3;
+  double annual_contribution = 4;
+  double annual_income = 5;
+  double inflation_rate = 6;
+  MarketAssumptions market_assumptions = 7;
+  repeated Allocation asset_allocation = 8;
+  RebalancingStrategy rebalancing = 9;
+}
+
+message MarketAssumptions {
+  double stock_return_mean = 1;
+  double stock_return_std = 2;
+  double bond_return_mean = 3;
+  double bond_return_std = 4;
+  double real_estate_return_mean = 5;
+  double real_estate_return_std = 6;
+  double commodity_return_mean = 7;
+  double commodity_return_std = 8;
+  CorrelationMatrix correlations = 9;
+}
+
+message CorrelationMatrix {
+  double stock_bond = 1;
+  double stock_real_estate = 2;
+  double stock_commodity = 3;
+  double bond_real_estate = 4;
+  double bond_commodity = 5;
+  double real_estate_commodity = 6;
+}
+
+message Goal {
+  string id = 1;
+  string name = 2;
+  GoalType type = 3;
+  double target_amount = 4;
+  google.protobuf.Timestamp target_date = 5;
+  int32 priority = 6;
+  bool adjustable = 7;
+}
+
+message Portfolio {
+  repeated Holding holdings = 1;
+  double total_value = 2;
+  google.protobuf.Timestamp as_of_date = 3;
+}
+
+message Holding {
+  string asset_id = 1;
+  string symbol = 2;
+  string name = 3;
+  AssetClass asset_class = 4;
+  double shares = 5;
+  double price = 6;
+  double value = 7;
+  double weight = 8;
+}
+
+message Allocation {
+  AssetClass asset_class = 1;
+  double target_percentage = 2;
+  double min_percentage = 3;
+  double max_percentage = 4;
+}
+
+message RebalancingStrategy {
+  RebalancingType type = 1;
+  int32 frequency_months = 2;
+  double threshold_percentage = 3;
+  bool tax_aware = 4;
+}
+
+message Simulation {
+  string id = 1;
+  string user_id = 2;
+  SimulationParameters parameters = 3;
+  SimulationStatus status = 4;
+  int32 num_simulations = 5;
+  int32 time_horizon_years = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+  SimulationResults results = 10;
+  string error_message = 11;
+}
+
+message SimulationResults {
+  ResultsSummary summary = 1;
+  repeated PathResult paths = 2;
+  repeated GoalProbability goal_probabilities = 3;
+  repeated YearResult year_results = 4;
+  RiskMetrics risk_metrics = 5;
+}
+
+message ResultsSummary {
+  double success_probability = 1;
+  double median_final_value = 2;
+  double percentile_10 = 3;
+  double percentile_25 = 4;
+  double percentile_75 = 5;
+  double percentile_90 = 6;
+  double shortfall_probability = 7;
+  double average_shortfall = 8;
+}
+
+message PathResult {
+  int32 path_number = 1;
+  repeated double annual_values = 2;
+  double final_value = 3;
+  bool goal_achieved = 4;
+  double shortfall_amount = 5;
+}
+
+message GoalProbability {
+  string goal_id = 1;
+  string goal_name = 2;
+  double success_probability = 3;
+  double expected_shortfall = 4;
+  int32 years_to_achievement = 5;
+}
+
+message YearResult {
+  int32 year = 1;
+  double median_value = 2;
+  double percentile_10 = 3;
+  double percentile_25 = 4;
+  double percentile_75 = 5;
+  double percentile_90 = 6;
+  double survival_probability = 7;
+}
+
+message RiskMetrics {
+  double value_at_risk_95 = 1;
+  double conditional_value_at_risk_95 = 2;
+  double maximum_drawdown = 3;
+  double volatility = 4;
+  double sharpe_ratio = 5;
+  double sortino_ratio = 6;
+}
+
+message ScenarioOutcome {
+  string scenario_name = 1;
+  double confidence_level = 2;
+  double final_portfolio_value = 3;
+  double goal_achievement_probability = 4;
+  string description = 5;
+}
+
+message SensitivityResult {
+  string variable_name = 1;
+  double base_value = 2;
+  repeated SensitivityPoint sensitivity_points = 3;
+  double correlation_coefficient = 4;
+}
+
+message SensitivityPoint {
+  double variable_change_percentage = 1;
+  double outcome_change_percentage = 2;
+  double final_value = 3;
+}
+
+// Enums
+enum SimulationStatus {
+  SIMULATION_STATUS_UNSPECIFIED = 0;
+  SIMULATION_STATUS_QUEUED = 1;
+  SIMULATION_STATUS_RUNNING = 2;
+  SIMULATION_STATUS_COMPLETED = 3;
+  SIMULATION_STATUS_FAILED = 4;
+  SIMULATION_STATUS_CANCELLED = 5;
+}
+
+enum GoalType {
+  GOAL_TYPE_UNSPECIFIED = 0;
+  GOAL_TYPE_RETIREMENT = 1;
+  GOAL_TYPE_EDUCATION = 2;
+  GOAL_TYPE_HOME_PURCHASE = 3;
+  GOAL_TYPE_EMERGENCY_FUND = 4;
+  GOAL_TYPE_VACATION = 5;
+  GOAL_TYPE_DEBT_PAYOFF = 6;
+  GOAL_TYPE_GENERAL_SAVINGS = 7;
+}
+
+enum AssetClass {
+  ASSET_CLASS_UNSPECIFIED = 0;
+  ASSET_CLASS_DOMESTIC_STOCKS = 1;
+  ASSET_CLASS_INTERNATIONAL_STOCKS = 2;
+  ASSET_CLASS_EMERGING_MARKET_STOCKS = 3;
+  ASSET_CLASS_GOVERNMENT_BONDS = 4;
+  ASSET_CLASS_CORPORATE_BONDS = 5;
+  ASSET_CLASS_HIGH_YIELD_BONDS = 6;
+  ASSET_CLASS_REAL_ESTATE = 7;
+  ASSET_CLASS_COMMODITIES = 8;
+  ASSET_CLASS_CASH = 9;
+  ASSET_CLASS_ALTERNATIVES = 10;
+}
+
+enum RebalancingType {
+  REBALANCING_TYPE_UNSPECIFIED = 0;
+  REBALANCING_TYPE_CALENDAR = 1;
+  REBALANCING_TYPE_THRESHOLD = 2;
+  REBALANCING_TYPE_HYBRID = 3;
+  REBALANCING_TYPE_NONE = 4;
+}

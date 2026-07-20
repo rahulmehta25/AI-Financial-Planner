@@ -1,0 +1,33 @@
+Hi {{user_name}},
+
+We detected {{alert_type}} activity on your Financial Planning App account and wanted to notify you immediately.
+
+Activity Details:
+- Type: {{alert_type}}
+- Time: {{activity_time}}
+- Location: {{location}}
+- IP Address: {{ip_address}}
+- Device: {{device_info}}
+
+If this was you:
+No action is required. This is just a security notification to keep you informed.
+
+If this wasn't you:
+1. Change your password immediately
+2. Review your account activity
+3. Contact our support team at security@financialplanning.com
+
+For your security, we recommend:
+- Using a strong, unique password
+- Enabling two-factor authentication
+- Regularly reviewing your account activity
+
+Secure your account: {{security_url}}
+
+If you have any concerns, please contact our security team immediately.
+
+Best regards,
+The Security Team
+Financial Planning App
+
+This is an automated security alert. Please do not reply to this email.

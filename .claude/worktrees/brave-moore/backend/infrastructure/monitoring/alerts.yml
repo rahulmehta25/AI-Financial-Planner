@@ -1,0 +1,301 @@
+# Prometheus Alerting Rules for Financial Planning Platform
+groups:
+- name: financial_planning.rules
+  rules:
+  
+  # Service Availability Alerts
+  - alert: ServiceDown
+    expr: up == 0
+    for: 1m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "Service {{ $labels.instance }} is down"
+      description: "Service {{ $labels.instance }} has been down for more than 1 minute."
+      runbook_url: "https://runbooks.financial-planning.app/service-down"
+
+  - alert: HighErrorRate
+    expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 5
+    for: 2m
+    labels:
+      severity: warning
+      team: platform
+    annotations:
+      summary: "High error rate on {{ $labels.service }}"
+      description: "Error rate is {{ $value }}% for service {{ $labels.service }}."
+      runbook_url: "https://runbooks.financial-planning.app/high-error-rate"
+
+  - alert: CriticalErrorRate
+    expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 10
+    for: 1m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "Critical error rate on {{ $labels.service }}"
+      description: "Error rate is {{ $value }}% for service {{ $labels.service }}."
+      runbook_url: "https://runbooks.financial-planning.app/critical-error-rate"
+
+  # Performance Alerts
+  - alert: HighLatency
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+    for: 3m
+    labels:
+      severity: warning
+      team: platform
+    annotations:
+      summary: "High latency on {{ $labels.service }}"
+      description: "95th percentile latency is {{ $value }}s for service {{ $labels.service }}."
+      runbook_url: "https://runbooks.financial-planning.app/high-latency"
+
+  - alert: CriticalLatency
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 3
+    for: 1m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "Critical latency on {{ $labels.service }}"
+      description: "95th percentile latency is {{ $value }}s for service {{ $labels.service }}."
+      runbook_url: "https://runbooks.financial-planning.app/critical-latency"
+
+  # Resource Usage Alerts
+  - alert: HighCPUUsage
+    expr: (rate(container_cpu_usage_seconds_total[5m]) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+      team: platform
+    annotations:
+      summary: "High CPU usage on {{ $labels.pod }}"
+      description: "CPU usage is {{ $value }}% on pod {{ $labels.pod }}."
+      runbook_url: "https://runbooks.financial-planning.app/high-cpu"
+
+  - alert: CriticalCPUUsage
+    expr: (rate(container_cpu_usage_seconds_total[5m]) * 100) > 95
+    for: 2m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "Critical CPU usage on {{ $labels.pod }}"
+      description: "CPU usage is {{ $value }}% on pod {{ $labels.pod }}."
+      runbook_url: "https://runbooks.financial-planning.app/critical-cpu"
+
+  - alert: HighMemoryUsage
+    expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 80
+    for: 5m
+    labels:
+      severity: warning
+      team: platform
+    annotations:
+      summary: "High memory usage on {{ $labels.pod }}"
+      description: "Memory usage is {{ $value }}% on pod {{ $labels.pod }}."
+      runbook_url: "https://runbooks.financial-planning.app/high-memory"
+
+  - alert: CriticalMemoryUsage
+    expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 95
+    for: 2m
+    labels:
+      severity: critical
+      team: platform
+    annotations:
+      summary: "Critical memory usage on {{ $labels.pod }}"
+      description: "Memory usage is {{ $value }}% on pod {{ $labels.pod }}."
+      runbook_url: "https://runbooks.financial-planning.app/critical-memory"
+
+  # Database Alerts
+  - alert: DatabaseConnectionPoolHigh
+    expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+    for: 2m
+    labels:
+      severity: warning
+      team: database
+    annotations:
+      summary: "High database connection pool usage"
+      description: "Database connection pool usage is {{ $value | humanizePercentage }}."
+      runbook_url: "https://runbooks.financial-planning.app/db-connections"
+
+  - alert: DatabaseSlowQueries
+    expr: rate(pg_stat_user_tables_n_tup_upd[5m]) + rate(pg_stat_user_tables_n_tup_ins[5m]) + rate(pg_stat_user_tables_n_tup_del[5m]) > 1000
+    for: 5m
+    labels:
+      severity: warning
+      team: database
+    annotations:
+      summary: "High database query rate"
+      description: "Database query rate is {{ $value }} queries/sec."
+      runbook_url: "https://runbooks.financial-planning.app/db-slow-queries"
+
+  - alert: RedisHighMemoryUsage
+    expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
+    for: 3m
+    labels:
+      severity: warning
+      team: cache
+    annotations:
+      summary: "Redis high memory usage"
+      description: "Redis memory usage is {{ $value }}%."
+      runbook_url: "https://runbooks.financial-planning.app/redis-memory"
+
+  # Business Logic Alerts
+  - alert: SimulationQueueBacklog
+    expr: simulation_queue_length > 50
+    for: 2m
+    labels:
+      severity: warning
+      team: simulation
+    annotations:
+      summary: "Simulation queue backlog"
+      description: "Simulation queue has {{ $value }} pending jobs."
+      runbook_url: "https://runbooks.financial-planning.app/simulation-backlog"
+
+  - alert: BankConnectionFailures
+    expr: rate(bank_connection_failures_total[5m]) > 0.1
+    for: 3m
+    labels:
+      severity: warning
+      team: banking
+    annotations:
+      summary: "High bank connection failure rate"
+      description: "Bank connection failure rate is {{ $value }} failures/sec."
+      runbook_url: "https://runbooks.financial-planning.app/bank-failures"
+
+  - alert: MLModelAccuracyDrop
+    expr: ml_model_accuracy < 0.85
+    for: 10m
+    labels:
+      severity: warning
+      team: ml
+    annotations:
+      summary: "ML model accuracy drop"
+      description: "ML model {{ $labels.model }} accuracy is {{ $value }}."
+      runbook_url: "https://runbooks.financial-planning.app/ml-accuracy"
+
+  - alert: DocumentGenerationFailures
+    expr: rate(document_generation_failures_total[5m]) > 0.05
+    for: 3m
+    labels:
+      severity: warning
+      team: documents
+    annotations:
+      summary: "High document generation failure rate"
+      description: "Document generation failure rate is {{ $value }} failures/sec."
+      runbook_url: "https://runbooks.financial-planning.app/doc-failures"
+
+  - alert: NotificationDeliveryFailures
+    expr: rate(notification_delivery_failures_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: warning
+      team: notifications
+    annotations:
+      summary: "High notification delivery failure rate"
+      description: "Notification delivery failure rate is {{ $value }} failures/sec."
+      runbook_url: "https://runbooks.financial-planning.app/notification-failures"
+
+  # Security Alerts
+  - alert: AuthenticationFailures
+    expr: rate(authentication_failures_total[5m]) > 1
+    for: 1m
+    labels:
+      severity: warning
+      team: security
+    annotations:
+      summary: "High authentication failure rate"
+      description: "Authentication failure rate is {{ $value }} failures/sec."
+      runbook_url: "https://runbooks.financial-planning.app/auth-failures"
+
+  - alert: SuspiciousUserActivity
+    expr: rate(suspicious_activity_total[5m]) > 0
+    for: 0m
+    labels:
+      severity: critical
+      team: security
+    annotations:
+      summary: "Suspicious user activity detected"
+      description: "Suspicious activity detected: {{ $labels.activity_type }}."
+      runbook_url: "https://runbooks.financial-planning.app/suspicious-activity"
+
+  # Infrastructure Alerts
+  - alert: KubernetesNodeNotReady
+    expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+    for: 2m
+    labels:
+      severity: critical
+      team: infrastructure
+    annotations:
+      summary: "Kubernetes node not ready"
+      description: "Node {{ $labels.node }} has been not ready for more than 2 minutes."
+      runbook_url: "https://runbooks.financial-planning.app/node-not-ready"
+
+  - alert: KubernetesPodCrashLooping
+    expr: rate(kube_pod_container_status_restarts_total[5m]) * 60 * 5 > 0
+    for: 2m
+    labels:
+      severity: warning
+      team: platform
+    annotations:
+      summary: "Pod {{ $labels.pod }} is crash looping"
+      description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping."
+      runbook_url: "https://runbooks.financial-planning.app/crash-loop"
+
+  - alert: KafkaConsumerLag
+    expr: kafka_consumer_lag_sum > 1000
+    for: 3m
+    labels:
+      severity: warning
+      team: streaming
+    annotations:
+      summary: "Kafka consumer lag high"
+      description: "Kafka consumer {{ $labels.consumer_group }} has lag of {{ $value }} messages."
+      runbook_url: "https://runbooks.financial-planning.app/kafka-lag"
+
+  # SLA Alerts
+  - alert: ServiceSLABreach
+    expr: (rate(http_requests_total{status!~"5.."}[5m]) / rate(http_requests_total[5m])) < 0.995
+    for: 5m
+    labels:
+      severity: critical
+      team: platform
+      sla: "99.5%"
+    annotations:
+      summary: "Service SLA breach"
+      description: "Service {{ $labels.service }} availability is {{ $value | humanizePercentage }}, below SLA of 99.5%."
+      runbook_url: "https://runbooks.financial-planning.app/sla-breach"
+
+  - alert: LatencySLABreach
+    expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 2
+    for: 5m
+    labels:
+      severity: critical
+      team: platform
+      sla: "p99<2s"
+    annotations:
+      summary: "Latency SLA breach"
+      description: "Service {{ $labels.service }} p99 latency is {{ $value }}s, above SLA of 2s."
+      runbook_url: "https://runbooks.financial-planning.app/latency-sla"
+
+  # Custom Business Metrics Alerts
+  - alert: LowUserEngagement
+    expr: rate(user_actions_total[1h]) < 100
+    for: 10m
+    labels:
+      severity: warning
+      team: product
+    annotations:
+      summary: "Low user engagement"
+      description: "User engagement rate is {{ $value }} actions/hour."
+      runbook_url: "https://runbooks.financial-planning.app/low-engagement"
+
+  - alert: RevenueDecline
+    expr: rate(revenue_total[24h]) < 10000
+    for: 30m
+    labels:
+      severity: critical
+      team: business
+    annotations:
+      summary: "Revenue decline detected"
+      description: "Revenue rate is ${{ $value }}/day."
+      runbook_url: "https://runbooks.financial-planning.app/revenue-decline"

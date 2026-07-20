@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ai-financial-planner-backend
+    runtime: python
+    buildCommand: pip install -r requirements_simple.txt
+    startCommand: python simple_backend.py
+    region: oregon
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: FRONTEND_URL
+        value: "https://ai-financial-planner-zeta.vercel.app"
+      - key: DEBUG
+        value: "false"
+      - key: PORT
+        value: "10000"

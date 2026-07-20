@@ -1,0 +1,739 @@
+name: Comprehensive Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  PYTHON_VERSION: 3.11
+  NODE_VERSION: 18
+  POSTGRES_VERSION: 15
+
+jobs:
+  # Health checks and basic validation
+  health-check:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-asyncio httpx
+    
+    - name: Wait for services
+      run: |
+        timeout 30s bash -c 'until pg_isready -h localhost -p 5432; do sleep 1; done'
+        timeout 30s bash -c 'until redis-cli -h localhost -p 6379 ping; do sleep 1; done'
+    
+    - name: Run health check script
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        python health_check.py --detailed --json
+    
+    - name: Upload health check report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: health-check-report
+        path: health_check_report.json
+
+  # Unit tests
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: health-check
+    
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-cov pytest-xdist pytest-html
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Run unit tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        pytest tests/unit/ -v \
+          --cov=app \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --junit-xml=junit/test-results.xml \
+          --html=reports/unit-tests.html \
+          --self-contained-html \
+          -n auto
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: unit-test-results-${{ matrix.python-version }}
+        path: |
+          junit/test-results.xml
+          reports/unit-tests.html
+          htmlcov/
+
+  # Integration tests
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install testcontainers
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Run integration tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+        TESTING: true
+      run: |
+        pytest tests/integration/ -v \
+          --junit-xml=junit/integration-results.xml \
+          --html=reports/integration-tests.html \
+          --self-contained-html \
+          --maxfail=5
+    
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: |
+          junit/integration-results.xml
+          reports/integration-tests.html
+
+  # Demo test suite
+  demo-tests:
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Run demo test suite
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+        TESTING: true
+      run: |
+        python test_demo.py
+        pytest test_demo.py -v \
+          --junit-xml=junit/demo-results.xml \
+          --html=reports/demo-tests.html \
+          --self-contained-html
+    
+    - name: Upload demo test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: demo-test-results
+        path: |
+          junit/demo-results.xml
+          reports/demo-tests.html
+
+  # End-to-end tests
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: demo-tests
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install playwright pytest-playwright
+        playwright install --with-deps chromium
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Start API server
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+      
+    - name: Run E2E tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+        TESTING: true
+      run: |
+        pytest tests/e2e/ -v \
+          --headless \
+          --junit-xml=junit/e2e-results.xml \
+          --html=reports/e2e-tests.html \
+          --self-contained-html \
+          --maxfail=3
+    
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: |
+          junit/e2e-results.xml
+          reports/e2e-tests.html
+          tests/e2e/screenshots/
+          tests/e2e/videos/
+
+  # Security tests
+  security-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install bandit safety semgrep
+    
+    - name: Run Bandit security linter
+      run: |
+        bandit -r app/ -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Run Safety dependency check
+      run: |
+        safety check --json --output safety-report.json
+      continue-on-error: true
+    
+    - name: Run security tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        pytest tests/security/ -v \
+          --junit-xml=junit/security-results.xml \
+          --html=reports/security-tests.html \
+          --self-contained-html
+    
+    - name: Upload security test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-test-results
+        path: |
+          bandit-report.json
+          safety-report.json
+          junit/security-results.xml
+          reports/security-tests.html
+
+  # Performance tests
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install locust pytest-benchmark
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Start API server
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+    
+    - name: Run performance tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        pytest tests/performance/ -v \
+          --benchmark-json=benchmark-results.json \
+          --junit-xml=junit/performance-results.xml \
+          --html=reports/performance-tests.html \
+          --self-contained-html
+    
+    - name: Run load tests
+      run: |
+        locust -f tests/performance/locust_tests.py \
+          --host=http://localhost:8000 \
+          --users=10 \
+          --spawn-rate=2 \
+          --run-time=60s \
+          --headless \
+          --html=reports/load-test-report.html
+    
+    - name: Upload performance test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-test-results
+        path: |
+          benchmark-results.json
+          junit/performance-results.xml
+          reports/performance-tests.html
+          reports/load-test-report.html
+
+  # API documentation tests
+  api-docs-tests:
+    runs-on: ubuntu-latest
+    needs: health-check
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: financial_planning_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        npm install -g @apidevtools/swagger-parser newman
+    
+    - name: Run database migrations
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        alembic upgrade head
+    
+    - name: Start API server
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/financial_planning_test
+        REDIS_URL: redis://localhost:6379
+        SECRET_KEY: test-secret-key
+        ENVIRONMENT: testing
+      run: |
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+        curl -f http://localhost:8000/health || exit 1
+    
+    - name: Test OpenAPI schema
+      run: |
+        curl -o openapi.json http://localhost:8000/api/v1/openapi.json
+        swagger-parser validate openapi.json
+    
+    - name: Run Postman collection tests
+      run: |
+        newman run api_test_collection.json \
+          --environment api_test_environment.json \
+          --reporters cli,htmlextra \
+          --reporter-htmlextra-export reports/postman-report.html \
+          --reporter-htmlextra-title "Financial Planning API Tests"
+    
+    - name: Upload API test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: api-docs-test-results
+        path: |
+          openapi.json
+          reports/postman-report.html
+
+  # Generate test report
+  test-report:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, demo-tests, e2e-tests, security-tests, performance-tests, api-docs-tests]
+    if: always()
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Generate comprehensive test report
+      run: |
+        python -c "
+        import json
+        import os
+        from datetime import datetime
+        
+        # Collect test results
+        report = {
+            'generated_at': datetime.now().isoformat(),
+            'workflow_run': '${{ github.run_id }}',
+            'commit': '${{ github.sha }}',
+            'branch': '${{ github.ref_name }}',
+            'test_results': {}
+        }
+        
+        # Process artifacts (simplified)
+        artifacts = [d for d in os.listdir('.') if os.path.isdir(d) and 'test-results' in d]
+        report['artifacts'] = artifacts
+        
+        with open('comprehensive-test-report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        print('Comprehensive test report generated')
+        "
+    
+    - name: Upload comprehensive test report
+      uses: actions/upload-artifact@v3
+      with:
+        name: comprehensive-test-report
+        path: comprehensive-test-report.json
+    
+    - name: Comment PR with test results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('comprehensive-test-report.json', 'utf8'));
+          
+          const comment = `## 🧪 Test Results Summary
+          
+          **Workflow Run:** ${report.workflow_run}
+          **Commit:** ${report.commit}
+          **Generated:** ${report.generated_at}
+          
+          ### Test Artifacts
+          ${report.artifacts.map(a => `- ✅ ${a}`).join('\n')}
+          
+          ### Status
+          All test suites have been executed. Check the workflow logs for detailed results.
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+# Workflow completion notification
+  notify:
+    runs-on: ubuntu-latest
+    needs: [test-report]
+    if: always()
+    
+    steps:
+    - name: Notify completion
+      run: |
+        echo "🎉 Comprehensive test suite completed!"
+        echo "Results: ${{ needs.test-report.result }}"

@@ -1,0 +1,491 @@
+# Pod Security Standards for Financial Planning Application
+# Implements Kubernetes Pod Security Standards for comprehensive security
+
+# Pod Security Standards enforcement at namespace level
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning
+  labels:
+    name: financial-planning
+    tier: application
+    # Pod Security Standards labels
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    # Version labels
+    pod-security.kubernetes.io/enforce-version: v1.28
+    pod-security.kubernetes.io/audit-version: v1.28
+    pod-security.kubernetes.io/warn-version: v1.28
+  annotations:
+    # Pod Security Standards annotations for fine-grained control
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# Data namespace with restricted standards
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning-data
+  labels:
+    name: financial-planning-data
+    tier: data
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/enforce-version: v1.28
+    pod-security.kubernetes.io/audit-version: v1.28
+    pod-security.kubernetes.io/warn-version: v1.28
+
+---
+# Monitoring namespace with baseline (less restrictive for monitoring tools)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning-monitoring
+  labels:
+    name: financial-planning-monitoring
+    tier: monitoring
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/enforce-version: v1.28
+    pod-security.kubernetes.io/audit-version: v1.28
+    pod-security.kubernetes.io/warn-version: v1.28
+
+---
+# Security Context Constraints for enhanced pod security
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-security-config
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: pod-security
+    app.kubernetes.io/component: config
+data:
+  security-requirements.yaml: |
+    # Pod Security Standards Configuration
+    
+    # Restricted Profile Requirements
+    restricted:
+      # Security Context Requirements
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+        supplementalGroups: [1000]
+      
+      # Container Security Context
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        capabilities:
+          drop:
+          - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Volume Types (allowed)
+      allowedVolumeTypes:
+        - configMap
+        - emptyDir
+        - projected
+        - secret
+        - downwardAPI
+        - persistentVolumeClaim
+        - csi
+      
+      # Prohibited Volume Types
+      prohibitedVolumeTypes:
+        - hostPath
+        - hostPID
+        - hostIPC
+        - hostNetwork
+        - privileged
+      
+      # Resource Requirements
+      resourceRequirements:
+        required: true
+        limits:
+          memory: required
+          cpu: required
+          ephemeral-storage: required
+        requests:
+          memory: required
+          cpu: required
+          ephemeral-storage: required
+      
+      # Networking
+      networking:
+        hostNetwork: false
+        hostPID: false
+        hostIPC: false
+        hostPorts: false
+      
+      # Sysctls (forbidden)
+      forbiddenSysctls:
+        - "*"
+      
+      # Proc Mount
+      allowedProcMountTypes:
+        - Default
+    
+    # Baseline Profile (for monitoring namespace)
+    baseline:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+          add: []
+        seccompProfile:
+          type: RuntimeDefault
+      
+      networking:
+        hostNetwork: false
+        hostPID: false
+        hostIPC: false
+
+---
+# OPA Gatekeeper Constraint Templates for Pod Security
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredsecuritycontext
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredSecurityContext
+      validation:
+        type: object
+        properties:
+          runAsNonRoot:
+            type: boolean
+          runAsUser:
+            type: integer
+          runAsGroup:
+            type: integer
+          fsGroup:
+            type: integer
+          readOnlyRootFilesystem:
+            type: boolean
+          allowPrivilegeEscalation:
+            type: boolean
+          requiredDropCapabilities:
+            type: array
+            items:
+              type: string
+          seccompProfile:
+            type: object
+            properties:
+              type:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredsecuritycontext
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot == true
+          msg := "Container must run as non-root user"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.readOnlyRootFilesystem == true
+          msg := "Container must have read-only root filesystem"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.allowPrivilegeEscalation == true
+          msg := "Container must not allow privilege escalation"
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          required_caps := input.parameters.requiredDropCapabilities
+          provided_caps := container.securityContext.capabilities.drop
+          missing_caps := required_caps - provided_caps
+          count(missing_caps) > 0
+          msg := sprintf("Container must drop required capabilities: %v", [missing_caps])
+        }
+        
+        violation[{"msg": msg}] {
+          not input.review.object.spec.securityContext.runAsNonRoot == true
+          msg := "Pod must run as non-root user"
+        }
+        
+        violation[{"msg": msg}] {
+          input.review.object.spec.securityContext.runAsUser < 1000
+          msg := "Pod must run with UID >= 1000"
+        }
+
+---
+# Gatekeeper Constraint for Financial Planning namespace
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredSecurityContext
+metadata:
+  name: financial-planning-security-context
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["financial-planning"]
+  parameters:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    requiredDropCapabilities: ["ALL"]
+    seccompProfile:
+      type: "RuntimeDefault"
+
+---
+# Constraint Template for Resource Requirements
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredresources
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredResources
+      validation:
+        type: object
+        properties:
+          limits:
+            type: array
+            items:
+              type: string
+          requests:
+            type: array
+            items:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredresources
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          required_limits := input.parameters.limits
+          provided_limits := object.get(container.resources, "limits", {})
+          missing_limits := required_limits - object.keys(provided_limits)
+          count(missing_limits) > 0
+          msg := sprintf("Container must specify resource limits: %v", [missing_limits])
+        }
+        
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          required_requests := input.parameters.requests
+          provided_requests := object.get(container.resources, "requests", {})
+          missing_requests := required_requests - object.keys(provided_requests)
+          count(missing_requests) > 0
+          msg := sprintf("Container must specify resource requests: %v", [missing_requests])
+        }
+
+---
+# Resource Requirements Constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredResources
+metadata:
+  name: financial-planning-resource-requirements
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["financial-planning", "financial-planning-data"]
+  parameters:
+    limits: ["memory", "cpu", "ephemeral-storage"]
+    requests: ["memory", "cpu", "ephemeral-storage"]
+
+---
+# Constraint Template for Allowed Volume Types
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedvolumetypes
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedVolumeTypes
+      validation:
+        type: object
+        properties:
+          allowedTypes:
+            type: array
+            items:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedvolumetypes
+        
+        violation[{"msg": msg}] {
+          volume := input.review.object.spec.volumes[_]
+          allowed_types := input.parameters.allowedTypes
+          volume_fields := object.remove(volume, ["name"])
+          volume_type := [key | volume_fields[key]; key != "name"][0]
+          not volume_type in allowed_types
+          msg := sprintf("Volume type %v is not allowed. Allowed types: %v", [volume_type, allowed_types])
+        }
+
+---
+# Allowed Volume Types Constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedVolumeTypes
+metadata:
+  name: financial-planning-allowed-volumes
+  labels:
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/component: security
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["financial-planning", "financial-planning-data"]
+  parameters:
+    allowedTypes:
+      - configMap
+      - emptyDir
+      - projected
+      - secret
+      - downwardAPI
+      - persistentVolumeClaim
+      - csi
+
+---
+# Admission Controller Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admission-controller-config
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: admission-controller
+    app.kubernetes.io/component: security
+data:
+  admission-control.yaml: |
+    # Admission Controller Configuration
+    plugins:
+      - name: PodSecurity
+        configuration:
+          apiVersion: pod-security.admission.config.k8s.io/v1beta1
+          kind: PodSecurityConfiguration
+          defaults:
+            enforce: "restricted"
+            enforce-version: "v1.28"
+            audit: "restricted"
+            audit-version: "v1.28"
+            warn: "restricted"
+            warn-version: "v1.28"
+          exemptions:
+            usernames: []
+            runtimeClasses: []
+            namespaces: ["kube-system", "kube-public", "kube-node-lease"]
+      
+      - name: ResourceQuota
+        configuration:
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: ResourceQuotaConfiguration
+      
+      - name: LimitRanger
+        configuration:
+          apiVersion: apiserver.config.k8s.io/v1
+          kind: LimitRangerConfiguration
+
+---
+# Security Scanning Integration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-scanning-config
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: security-scanning
+    app.kubernetes.io/component: security
+data:
+  trivy-config.yaml: |
+    # Trivy security scanner configuration
+    scan:
+      skip-update: false
+      skip-files:
+        - "*.md"
+        - "*.txt"
+      severity:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+      vulnerability:
+        type:
+          - os
+          - library
+      secret:
+        config: "trivy-secret.yaml"
+    
+    cache:
+      dir: "/tmp/trivy"
+    
+    db:
+      skip-update: false
+    
+    format: json
+    output: "/tmp/trivy-results.json"
+  
+  trivy-secret.yaml: |
+    # Secret scanning patterns
+    rules:
+      - id: aws-access-key-id
+        pattern: "AKIA[0-9A-Z]{16}"
+        description: "AWS Access Key ID"
+      
+      - id: aws-secret-access-key
+        pattern: "[0-9a-zA-Z/+]{40}"
+        description: "AWS Secret Access Key"
+      
+      - id: jwt-token
+        pattern: "eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+\\.?[A-Za-z0-9-_.+/=]*"
+        description: "JWT Token"
+      
+      - id: api-key
+        pattern: "[Aa][Pp][Ii]_?[Kk][Ee][Yy].*['\"][0-9a-zA-Z]{32,45}['\"]"
+        description: "Generic API Key"

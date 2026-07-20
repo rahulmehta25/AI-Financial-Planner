@@ -1,0 +1,245 @@
+name: Feature Flag Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - create-flag
+          - update-flag
+          - archive-flag
+          - sync-flags
+      flag_name:
+        description: 'Feature flag name'
+        required: false
+        type: string
+      flag_description:
+        description: 'Feature flag description'
+        required: false
+        type: string
+      flag_type:
+        description: 'Flag type'
+        required: false
+        default: 'boolean'
+        type: choice
+        options:
+          - boolean
+          - string
+          - number
+          - json
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      initial_value:
+        description: 'Initial flag value'
+        required: false
+        type: string
+      rollout_percentage:
+        description: 'Rollout percentage (0-100)'
+        required: false
+        type: number
+        default: 0
+
+env:
+  LAUNCHDARKLY_API_KEY: ${{ secrets.LAUNCHDARKLY_API_KEY }}
+  LAUNCHDARKLY_PROJECT_KEY: financial-planning
+
+jobs:
+  feature-flag-management:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install LaunchDarkly CLI
+        run: |
+          curl -s https://api.github.com/repos/launchdarkly/ldcli/releases/latest \
+            | grep "browser_download_url.*linux_amd64.tar.gz" \
+            | cut -d : -f 2,3 \
+            | tr -d \" \
+            | wget -qi -
+          
+          tar -xzf ldcli_*_linux_amd64.tar.gz
+          sudo mv ldcli /usr/local/bin/
+          chmod +x /usr/local/bin/ldcli
+
+      - name: Configure LaunchDarkly CLI
+        run: |
+          ldcli config --access-token ${{ env.LAUNCHDARKLY_API_KEY }}
+
+      - name: Create Feature Flag
+        if: github.event.inputs.action == 'create-flag'
+        run: |
+          FLAG_NAME="${{ github.event.inputs.flag_name }}"
+          FLAG_DESC="${{ github.event.inputs.flag_description }}"
+          FLAG_TYPE="${{ github.event.inputs.flag_type }}"
+          INITIAL_VALUE="${{ github.event.inputs.initial_value }}"
+          
+          # Create flag configuration
+          cat > flag-config.json << EOF
+          {
+            "key": "$FLAG_NAME",
+            "name": "$FLAG_NAME",
+            "description": "$FLAG_DESC",
+            "kind": "$FLAG_TYPE",
+            "temporary": false,
+            "tags": ["automated", "github-actions"],
+            "clientSideAvailability": {
+              "usingEnvironmentId": true,
+              "usingMobileKey": true
+            },
+            "variations": [
+              {
+                "value": false,
+                "name": "Disabled",
+                "description": "Feature is disabled"
+              },
+              {
+                "value": true,
+                "name": "Enabled", 
+                "description": "Feature is enabled"
+              }
+            ],
+            "defaults": {
+              "onVariation": 1,
+              "offVariation": 0
+            }
+          }
+          EOF
+          
+          # Create the flag
+          ldcli flags create \
+            --project ${{ env.LAUNCHDARKLY_PROJECT_KEY }} \
+            --data @flag-config.json
+          
+          echo "Feature flag '$FLAG_NAME' created successfully"
+
+      - name: Update Feature Flag
+        if: github.event.inputs.action == 'update-flag'
+        run: |
+          FLAG_NAME="${{ github.event.inputs.flag_name }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          ROLLOUT_PERCENTAGE="${{ github.event.inputs.rollout_percentage }}"
+          
+          # Update flag targeting
+          ldcli flags patch \
+            --project ${{ env.LAUNCHDARKLY_PROJECT_KEY }} \
+            --flag $FLAG_NAME \
+            --environment $ENVIRONMENT \
+            --comment "Updated via GitHub Actions" \
+            --data '[
+              {
+                "op": "replace",
+                "path": "/on",
+                "value": true
+              },
+              {
+                "op": "replace", 
+                "path": "/rules/0/rollout/variations/0/weight",
+                "value": '$ROLLOUT_PERCENTAGE'
+              }
+            ]'
+          
+          echo "Feature flag '$FLAG_NAME' updated in $ENVIRONMENT environment"
+
+      - name: Archive Feature Flag
+        if: github.event.inputs.action == 'archive-flag'
+        run: |
+          FLAG_NAME="${{ github.event.inputs.flag_name }}"
+          
+          ldcli flags archive \
+            --project ${{ env.LAUNCHDARKLY_PROJECT_KEY }} \
+            --flag $FLAG_NAME
+          
+          echo "Feature flag '$FLAG_NAME' archived"
+
+      - name: Sync Flags to Configuration
+        if: github.event.inputs.action == 'sync-flags'
+        run: |
+          # Export current flags to configuration files
+          mkdir -p config/feature-flags
+          
+          # Export flags for each environment
+          for env in development staging production; do
+            ldcli flags list \
+              --project ${{ env.LAUNCHDARKLY_PROJECT_KEY }} \
+              --environment $env \
+              --format json > config/feature-flags/$env-flags.json
+          done
+          
+          # Commit changes if any
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          if [[ -n $(git status --porcelain) ]]; then
+            git add config/feature-flags/
+            git commit -m "chore: sync feature flags configuration"
+            git push
+          fi
+
+      - name: Generate Feature Flag Report
+        run: |
+          # Generate a report of current feature flags
+          cat > feature-flag-report.md << 'EOF'
+          # Feature Flag Status Report
+          
+          **Generated:** $(date)
+          **Environment:** ${{ github.event.inputs.environment }}
+          **Action Performed:** ${{ github.event.inputs.action }}
+          
+          ## Current Flags
+          
+          EOF
+          
+          # Add flag details to report
+          ldcli flags list \
+            --project ${{ env.LAUNCHDARKLY_PROJECT_KEY }} \
+            --environment ${{ github.event.inputs.environment }} \
+            --format table >> feature-flag-report.md
+
+      - name: Upload Feature Flag Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: feature-flag-report
+          path: feature-flag-report.md
+
+  notify-teams:
+    runs-on: ubuntu-latest
+    needs: feature-flag-management
+    if: always()
+    
+    steps:
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              attachments: [{
+                color: '${{ needs.feature-flag-management.result == "success" && "good" || "danger" }}',
+                blocks: [{
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*Feature Flag Management*\n*Action:* ${{ github.event.inputs.action }}\n*Flag:* ${{ github.event.inputs.flag_name || 'N/A' }}\n*Environment:* ${{ github.event.inputs.environment }}\n*Status:* ${{ needs.feature-flag-management.result == "success" && "✅ Success" || "❌ Failed" }}\n*Triggered by:* ${{ github.actor }}`
+                  }
+                }]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

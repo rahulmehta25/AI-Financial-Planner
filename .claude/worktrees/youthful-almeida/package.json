@@ -1,0 +1,24 @@
+{
+  "name": "ai-financial-planning-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered financial planning system with comprehensive portfolio management",
+  "scripts": {
+    "validate:vercel": "node validate-vercel-config.js",
+    "deploy:preview": "./deploy-vercel.sh",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:install": "cd frontend && npm install"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.55.0"
+  },
+  "keywords": [
+    "financial-planning",
+    "ai",
+    "portfolio-management",
+    "vercel",
+    "react",
+    "typescript"
+  ]
+}

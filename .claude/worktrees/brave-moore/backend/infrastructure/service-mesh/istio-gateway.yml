@@ -1,0 +1,361 @@
+# Istio Gateway Configuration
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: financial-planning-gateway
+  namespace: financial-planning
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: financial-planning-tls
+      hosts:
+        - api.financial-planning.app
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - api.financial-planning.app
+      tls:
+        httpsRedirect: true
+
+---
+# Virtual Service for routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: financial-planning-vs
+  namespace: financial-planning
+spec:
+  hosts:
+    - api.financial-planning.app
+  gateways:
+    - financial-planning-gateway
+  http:
+    # Authentication routes
+    - match:
+        - uri:
+            prefix: /api/v1/auth
+      route:
+        - destination:
+            host: user-service.financial-planning.svc.cluster.local
+            port:
+              number: 8002
+      timeout: 60s
+      retries:
+        attempts: 3
+        perTryTimeout: 20s
+        retryOn: gateway-error,connect-failure,refused-stream
+        
+    # User management routes
+    - match:
+        - uri:
+            prefix: /api/v1/users
+      route:
+        - destination:
+            host: user-service.financial-planning.svc.cluster.local
+            port:
+              number: 8002
+      timeout: 60s
+      
+    # Banking routes
+    - match:
+        - uri:
+            prefix: /api/v1/banking
+      route:
+        - destination:
+            host: banking-service.financial-planning.svc.cluster.local
+            port:
+              number: 8003
+      timeout: 60s
+      
+    # Simulation routes
+    - match:
+        - uri:
+            prefix: /api/v1/simulations
+      route:
+        - destination:
+            host: simulation-service.financial-planning.svc.cluster.local
+            port:
+              number: 8001
+      timeout: 300s  # Extended timeout for simulations
+      
+    # ML routes
+    - match:
+        - uri:
+            prefix: /api/v1/ml
+      route:
+        - destination:
+            host: ml-service.financial-planning.svc.cluster.local
+            port:
+              number: 8004
+      timeout: 120s
+      
+    # Notification routes
+    - match:
+        - uri:
+            prefix: /api/v1/notifications
+      route:
+        - destination:
+            host: notification-service.financial-planning.svc.cluster.local
+            port:
+              number: 8005
+      timeout: 60s
+      
+    # Document routes
+    - match:
+        - uri:
+            prefix: /api/v1/documents
+      route:
+        - destination:
+            host: document-service.financial-planning.svc.cluster.local
+            port:
+              number: 8006
+      timeout: 180s
+      
+    # WebSocket routes for real-time notifications
+    - match:
+        - uri:
+            prefix: /ws
+      route:
+        - destination:
+            host: notification-service.financial-planning.svc.cluster.local
+            port:
+              number: 8005
+      websocketUpgrade: true
+
+---
+# Destination Rules for circuit breaker and load balancing
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: simulation-service-dr
+  namespace: financial-planning
+spec:
+  host: simulation-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        consecutiveGatewayErrors: 3
+        interval: 30s
+        baseEjectionTime: 30s
+        maxEjectionPercent: 50
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 70
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: user-service-dr
+  namespace: financial-planning
+spec:
+  host: user-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 200
+        http2MaxRequests: 200
+        maxRequestsPerConnection: 20
+        maxRetries: 3
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: banking-service-dr
+  namespace: financial-planning
+spec:
+  host: banking-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 75
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 150
+        http2MaxRequests: 150
+        maxRequestsPerConnection: 15
+        maxRetries: 2
+    outlierDetection:
+      consecutiveGatewayErrors: 3
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 40
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ml-service-dr
+  namespace: financial-planning
+spec:
+  host: ml-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 30
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 60
+        http2MaxRequests: 60
+        maxRequestsPerConnection: 5
+        maxRetries: 2
+    outlierDetection:
+      consecutiveGatewayErrors: 2
+      interval: 60s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 50
+
+---
+# Service Mesh Security Policies
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: financial-planning
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Authorization Policies
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: banking-service-authz
+  namespace: financial-planning
+spec:
+  selector:
+    matchLabels:
+      app: banking-service
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/financial-planning/sa/user-service
+              - cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE"]
+    - when:
+        - key: request.headers[authorization]
+          notValues: [""]
+
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: simulation-service-authz
+  namespace: financial-planning
+spec:
+  selector:
+    matchLabels:
+      app: simulation-service
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/financial-planning/sa/user-service
+              - cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+
+---
+# Request Authentication for JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: financial-planning
+spec:
+  jwtRules:
+    - issuer: "https://auth.financial-planning.app"
+      jwksUri: "https://auth.financial-planning.app/.well-known/jwks.json"
+      audiences:
+        - "financial-planning-api"
+      fromHeaders:
+        - name: Authorization
+          prefix: "Bearer "
+      fromParams:
+        - "access_token"
+
+---
+# Telemetry Configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: metrics
+  namespace: financial-planning
+spec:
+  metrics:
+    - providers:
+        - name: prometheus
+    - overrides:
+        - match:
+            metric: ALL_METRICS
+          tagOverrides:
+            request_id:
+              operation: INSERT
+              value: "%{REQUEST_ID}"
+        - match:
+            metric: REQUEST_COUNT
+          disabled: false
+        - match:
+            metric: REQUEST_DURATION
+          disabled: false
+        - match:
+            metric: REQUEST_SIZE
+          disabled: false
+        - match:
+            metric: RESPONSE_SIZE
+          disabled: false
+
+---
+# Access Logging
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: access-logging
+  namespace: financial-planning
+spec:
+  accessLogging:
+    - providers:
+        - name: otel
+    - filter:
+        expression: 'response.code >= 400'

@@ -1,0 +1,566 @@
+# Blue-Green Deployment Configuration for Production
+# This configuration supports zero-downtime deployments using blue-green strategy
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financial-planning-blue
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    color: blue
+    version: stable
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: financial-planning
+      color: blue
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero downtime
+  
+  template:
+    metadata:
+      labels:
+        app: financial-planning
+        color: blue
+        version: stable
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: financial-planning
+        image: ghcr.io/financial-planning/backend:stable
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: COLOR
+          value: "blue"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: REDIS_URL
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: SECRET_KEY
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: SENTRY_DSN
+              optional: true
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+            ephemeral-storage: 2Gi
+        
+        # Health checks optimized for production
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12  # Allow 2 minutes for startup
+          successThreshold: 1
+        
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+        
+        # Volume mounts for temp directories
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: var-tmp-volume
+          mountPath: /var/tmp
+      
+      # Pod security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Volumes for writable directories
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: var-tmp-volume
+        emptyDir: {}
+      
+      # Service account
+      serviceAccountName: financial-planning
+      automountServiceAccountToken: false
+      
+      # DNS configuration
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 60
+      
+      # Node selection for production workloads
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        node-type: general
+      
+      # Tolerations for dedicated nodes
+      tolerations:
+      - key: "workload-type"
+        operator: "Equal"
+        value: "production"
+        effect: "NoSchedule"
+      
+      # Anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: financial-planning
+                color: blue
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: financial-planning
+              topologyKey: topology.kubernetes.io/zone
+        
+        # Node affinity for performance
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - general
+                - compute
+
+---
+# Green Deployment (inactive by default)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financial-planning-green
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    color: green
+    version: candidate
+spec:
+  replicas: 0  # Start with 0 replicas (inactive)
+  selector:
+    matchLabels:
+      app: financial-planning
+      color: green
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  template:
+    metadata:
+      labels:
+        app: financial-planning
+        color: green
+        version: candidate
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: financial-planning
+        image: ghcr.io/financial-planning/backend:candidate
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: COLOR
+          value: "green"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: REDIS_URL
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: SECRET_KEY
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: SENTRY_DSN
+              optional: true
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+            ephemeral-storage: 2Gi
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+        
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: var-tmp-volume
+          mountPath: /var/tmp
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: var-tmp-volume
+        emptyDir: {}
+      
+      serviceAccountName: financial-planning
+      automountServiceAccountToken: false
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 60
+      
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        node-type: general
+      
+      tolerations:
+      - key: "workload-type"
+        operator: "Equal"
+        value: "production"
+        effect: "NoSchedule"
+      
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: financial-planning
+                color: green
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: financial-planning
+              topologyKey: topology.kubernetes.io/zone
+
+---
+# Blue Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-blue
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    color: blue
+spec:
+  selector:
+    app: financial-planning
+    color: blue
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+# Green Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-green
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    color: green
+spec:
+  selector:
+    app: financial-planning
+    color: green
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+# Active Service (points to current live deployment)
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-planning-active
+  namespace: financial-planning-production
+  labels:
+    app: financial-planning
+    service: active
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/health"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "30"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "10"
+spec:
+  selector:
+    app: financial-planning
+    color: blue  # Initially points to blue
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+# Pod Disruption Budget for Blue
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: financial-planning-blue-pdb
+  namespace: financial-planning-production
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: financial-planning
+      color: blue
+
+---
+# Pod Disruption Budget for Green
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: financial-planning-green-pdb
+  namespace: financial-planning-production
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: financial-planning
+      color: green
+
+---
+# Horizontal Pod Autoscaler for Blue
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: financial-planning-blue-hpa
+  namespace: financial-planning-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning-blue
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# Horizontal Pod Autoscaler for Green
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: financial-planning-green-hpa
+  namespace: financial-planning-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning-green
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      selectPolicy: Min

@@ -1,0 +1,869 @@
+# Production-Ready Kubernetes Deployments for Financial Planning Application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financial-planning-api
+  namespace: financial-planning
+  labels:
+    app: financial-planning-api
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubernetes
+    tier: backend
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    description: "Main API service for Financial Planning application"
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: financial-planning-api
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: financial-planning-api
+        app.kubernetes.io/name: financial-planning-api
+        app.kubernetes.io/component: api
+        version: v1
+        tier: backend
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        sidecar.istio.io/proxyCPU: "100m"
+        sidecar.istio.io/proxyMemory: "128Mi"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        config.linkerd.io/proxy-cpu-request: "100m"
+        config.linkerd.io/proxy-memory-request: "128Mi"
+    spec:
+      serviceAccountName: financial-planning-api
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+        supplementalGroups: [1000]
+      priorityClassName: financial-planning-high
+      terminationGracePeriodSeconds: 30
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+      containers:
+      - name: api
+        image: ghcr.io/financial-planning/backend:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: database-credentials
+        - secretRef:
+            name: redis-credentials
+        - secretRef:
+            name: jwt-secret
+        - secretRef:
+            name: encryption-key
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+            ephemeral-storage: "2Gi"
+          limits:
+            memory: "2Gi"
+            cpu: "1500m"
+            ephemeral-storage: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-Liveness-Probe"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-Readiness-Probe"
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 12
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: app-tmp
+          mountPath: /app/tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: cache
+          mountPath: /app/cache
+      # Sidecar container for log shipping
+      - name: fluent-bit
+        image: fluent/fluent-bit:2.2.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 2020
+          protocol: TCP
+        env:
+        - name: FLUENT_CONF
+          value: fluent-bit.conf
+        - name: FLUENT_OPT
+          value: ""
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        volumeMounts:
+        - name: fluent-bit-config
+          mountPath: /fluent-bit/etc/
+        - name: logs
+          mountPath: /app/logs
+          readOnly: true
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 500Mi
+          medium: Memory
+      - name: app-tmp
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: logs
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: cache
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: fluent-bit-config
+        configMap:
+          name: fluent-bit-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      # Pod placement and distribution
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: financial-planning-api
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: financial-planning-api
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: financial-planning-api
+              topologyKey: kubernetes.io/hostname
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: financial-planning-api
+              topologyKey: topology.kubernetes.io/zone
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - compute-optimized
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+      tolerations:
+      - key: "financial-planning.com/api"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      - key: "node.kubernetes.io/memory-pressure"
+        operator: "Exists"
+        effect: "NoSchedule"
+        tolerationSeconds: 300
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        kubernetes.io/os: linux
+        node-type: compute
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: financial-planning
+  labels:
+    app: user-service
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: user-management
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: user-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: user-service
+        app.kubernetes.io/name: user-service
+        version: v1
+        tier: backend
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9091"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      serviceAccountName: financial-planning-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: financial-planning-high
+      containers:
+      - name: user-service
+        image: ghcr.io/financial-planning/user-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8002
+          name: http
+        - containerPort: 50052
+          name: grpc
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "user-service"
+        - name: SERVICE_PORT
+          value: "8002"
+        - name: GRPC_PORT
+          value: "50052"
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: database-credentials
+        - secretRef:
+            name: redis-credentials
+        - secretRef:
+            name: jwt-secret
+        - secretRef:
+            name: encryption-key
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 300m
+            memory: 512Mi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: 800m
+            memory: 1Gi
+            ephemeral-storage: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8002
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 10
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 200Mi
+      - name: logs
+        emptyDir:
+          sizeLimit: 500Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: user-service
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banking-service
+  namespace: financial-planning
+  labels:
+    app: banking-service
+    app.kubernetes.io/name: banking-service
+    app.kubernetes.io/component: banking
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    tier: backend
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: banking-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: banking-service
+        app.kubernetes.io/name: banking-service
+        version: v1
+        tier: backend
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9092"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"  # Critical service
+    spec:
+      serviceAccountName: financial-planning-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: financial-planning-critical
+      containers:
+      - name: banking-service
+        image: ghcr.io/financial-planning/banking-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8003
+          name: http
+        - containerPort: 50053
+          name: grpc
+        - containerPort: 9092
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "banking-service"
+        - name: SERVICE_PORT
+          value: "8003"
+        - name: GRPC_PORT
+          value: "50053"
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: database-credentials
+        - secretRef:
+            name: plaid-credentials
+        - secretRef:
+            name: encryption-key
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: 1500m
+            memory: 2Gi
+            ephemeral-storage: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: cache
+          mountPath: /app/cache
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: logs
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: cache
+        emptyDir:
+          sizeLimit: 500Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: banking-service
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-service
+  namespace: financial-planning
+  labels:
+    app: ml-service
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: machine-learning
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    tier: ml
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ml-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: ml-service
+        app.kubernetes.io/name: ml-service
+        version: v1
+        tier: ml
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9093"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      serviceAccountName: financial-planning-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: financial-planning-high
+      containers:
+      - name: ml-service
+        image: ghcr.io/financial-planning/ml-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8004
+          name: http
+        - containerPort: 50054
+          name: grpc
+        - containerPort: 9093
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "ml-service"
+        - name: SERVICE_PORT
+          value: "8004"
+        - name: GRPC_PORT
+          value: "50054"
+        - name: MLFLOW_TRACKING_URI
+          value: "http://mlflow.financial-planning-data.svc.cluster.local:5000"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "all"
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: database-credentials
+        - secretRef:
+            name: ai-service-credentials
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+            ephemeral-storage: 2Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+            ephemeral-storage: 4Gi
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8004
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 20
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: models
+          mountPath: /app/models
+        - name: datasets
+          mountPath: /app/datasets
+        - name: cache
+          mountPath: /app/cache
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: logs
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: cache
+        emptyDir:
+          sizeLimit: 4Gi
+      - name: models
+        persistentVolumeClaim:
+          claimName: ml-models-pvc
+      - name: datasets
+        persistentVolumeClaim:
+          claimName: ml-datasets-pvc
+      nodeSelector:
+        accelerator: nvidia-tesla-v100
+        node-type: gpu
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: gpu-workload
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: financial-planning
+  labels:
+    app: notification-service
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/component: notifications
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: notification-service
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: notification-service
+        app.kubernetes.io/name: notification-service
+        version: v1
+        tier: backend
+        sidecar.istio.io/inject: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9094"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      serviceAccountName: financial-planning-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      priorityClassName: financial-planning-normal
+      containers:
+      - name: notification-service
+        image: ghcr.io/financial-planning/notification-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8005
+          name: http
+        - containerPort: 8085
+          name: websocket
+        - containerPort: 50055
+          name: grpc
+        - containerPort: 9094
+          name: metrics
+        env:
+        - name: SERVICE_NAME
+          value: "notification-service"
+        - name: SERVICE_PORT
+          value: "8005"
+        - name: WEBSOCKET_PORT
+          value: "8085"
+        - name: GRPC_PORT
+          value: "50055"
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: database-credentials
+        - secretRef:
+            name: notification-credentials
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+            ephemeral-storage: 512Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+            ephemeral-storage: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 10
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 200Mi
+      - name: logs
+        emptyDir:
+          sizeLimit: 500Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: notification-service
+              topologyKey: kubernetes.io/hostname

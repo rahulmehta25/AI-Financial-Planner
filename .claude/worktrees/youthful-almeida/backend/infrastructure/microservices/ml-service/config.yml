@@ -1,0 +1,176 @@
+# ML Service Configuration
+service:
+  name: ml-service
+  version: "1.0.0"
+  port: 8004
+  host: "0.0.0.0"
+  debug: false
+  workers: 2  # Lower workers due to memory-intensive ML operations
+  
+machine_learning:
+  model_store_path: "/app/models"
+  artifact_store_path: "/app/artifacts"
+  max_model_cache_size: 10
+  model_warm_up: true
+  feature_store_enabled: true
+  
+models:
+  recommendation_engine:
+    algorithm: "xgboost"
+    version: "1.0.0"
+    retrain_interval_days: 7
+    min_samples_for_training: 1000
+  risk_predictor:
+    algorithm: "lightgbm"
+    version: "1.0.0"
+    retrain_interval_days: 30
+    feature_importance_threshold: 0.01
+  portfolio_optimizer:
+    algorithm: "mean_variance"
+    version: "1.0.0"
+    rebalance_threshold: 0.05
+  behavioral_analyzer:
+    algorithm: "clustering"
+    version: "1.0.0"
+    n_clusters: 5
+    update_interval_days: 14
+  
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-ml_service_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 4
+  password: "${REDIS_PASSWORD}"
+  max_connections: 10
+  
+feature_store:
+  type: "redis"  # redis, s3, or database
+  cache_ttl: 3600
+  batch_size: 1000
+  
+mlflow:
+  tracking_uri: "${MLFLOW_TRACKING_URI:-http://mlflow:5000}"
+  experiment_name: "financial_planning"
+  artifact_location: "s3://financial-planning-ml-artifacts/"
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/ml-service.log"
+  max_file_size: 100MB
+  backup_count: 3
+  model_predictions_logging: true
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9093
+  model_metrics: true
+  prediction_latency_tracking: true
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  model_health_checks: true
+  
+api:
+  title: "Financial Planning ML Service"
+  description: "Machine learning service for recommendations and predictions"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+training:
+  auto_training_enabled: true
+  training_schedule_cron: "0 2 * * 0"  # Weekly at 2 AM on Sunday
+  validation_split: 0.2
+  test_split: 0.1
+  cross_validation_folds: 5
+  hyperparameter_tuning: true
+  early_stopping: true
+  
+hyperparameter_optimization:
+  optimization_framework: "optuna"
+  n_trials: 100
+  pruner: "median"
+  sampler: "tpe"
+  timeout_hours: 6
+  
+model_serving:
+  batch_prediction_enabled: true
+  max_batch_size: 1000
+  prediction_timeout_seconds: 30
+  model_versioning: true
+  a_b_testing: true
+  
+data_processing:
+  feature_engineering:
+    - "transaction_patterns"
+    - "spending_categories"
+    - "income_stability"
+    - "goal_progress"
+    - "market_correlation"
+  data_validation: true
+  outlier_detection: true
+  missing_value_imputation: "median"
+  
+security:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  model_access_control: true
+  data_privacy_protection: true
+  
+rate_limiting:
+  predictions_per_minute: 60
+  training_requests_per_hour: 5
+  model_updates_per_day: 10
+  
+external_services:
+  user_service:
+    url: "http://user-service:8002"
+    timeout: 30
+  banking_service:
+    url: "http://banking-service:8003"
+    timeout: 30
+  simulation_service:
+    url: "http://simulation-service:8001"
+    timeout: 60
+    
+monitoring:
+  model_drift_detection: true
+  data_drift_detection: true
+  prediction_quality_monitoring: true
+  feedback_collection: true
+  alert_thresholds:
+    accuracy_drop: 0.05
+    latency_increase: 2.0
+    error_rate: 0.01
+    
+recommendations:
+  types:
+    - "savings_optimization"
+    - "investment_allocation"
+    - "debt_reduction"
+    - "goal_adjustment"
+    - "risk_management"
+  max_recommendations_per_user: 5
+  recommendation_refresh_hours: 24
+  personalization_factors:
+    - "risk_tolerance"
+    - "age"
+    - "income"
+    - "goals"
+    - "spending_patterns"

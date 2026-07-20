@@ -1,0 +1,323 @@
+# Docker Compose for Data Monitoring Infrastructure
+# Includes Prometheus, Grafana, AlertManager, and supporting services
+
+version: '3.8'
+
+services:
+  # Prometheus - Metrics collection and storage
+  prometheus:
+    image: prom/prometheus:v2.40.0
+    container_name: financial-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - monitoring
+    restart: unless-stopped
+    
+  # Grafana - Visualization and dashboards
+  grafana:
+    image: grafana/grafana:9.3.0
+    container_name: financial-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/plugins:/var/lib/grafana/plugins
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-worldmap-panel
+      - GF_ALERTING_ENABLED=true
+      - GF_UNIFIED_ALERTING_ENABLED=true
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  # AlertManager - Alert routing and management
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: financial-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Node Exporter - System metrics
+  node-exporter:
+    image: prom/node-exporter:v1.5.0
+    container_name: financial-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Postgres Exporter - Database metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.11.1
+    container_name: financial-postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  # Redis Exporter - Cache metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.45.0
+    container_name: financial-redis-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  # Kafka Exporter - Message queue metrics
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.6.0
+    container_name: financial-kafka-exporter
+    ports:
+      - "9308:9308"
+    command:
+      - '--kafka.server=kafka1:9092'
+      - '--kafka.server=kafka2:9092'
+      - '--kafka.server=kafka3:9092'
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+
+  # Elasticsearch Exporter - Search engine metrics
+  elasticsearch-exporter:
+    image: prometheuscommunity/elasticsearch-exporter:v1.5.0
+    container_name: financial-elasticsearch-exporter
+    ports:
+      - "9114:9114"
+    command:
+      - '--es.uri=http://elasticsearch:9200'
+      - '--es.all'
+      - '--es.indices'
+      - '--es.cluster_settings'
+      - '--es.snapshots'
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - elasticsearch
+
+  # Airflow Exporter - Pipeline metrics
+  airflow-exporter:
+    image: epoch8/airflow-exporter:latest
+    container_name: financial-airflow-exporter
+    ports:
+      - "9112:9112"
+    environment:
+      - AIRFLOW_PROMETHEUS_HOST=0.0.0.0
+      - AIRFLOW_PROMETHEUS_PORT=9112
+      - AIRFLOW_PROMETHEUS_DATABASE_BACKEND=postgres
+      - AIRFLOW_PROMETHEUS_DATABASE_HOST=postgres
+      - AIRFLOW_PROMETHEUS_DATABASE_PORT=5432
+      - AIRFLOW_PROMETHEUS_DATABASE_USER=${POSTGRES_USER}
+      - AIRFLOW_PROMETHEUS_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - AIRFLOW_PROMETHEUS_DATABASE_NAME=airflow
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  # Custom Financial Metrics Exporter
+  financial-metrics-exporter:
+    build:
+      context: ./exporters/financial-metrics
+      dockerfile: Dockerfile
+    container_name: financial-metrics-exporter
+    ports:
+      - "9200:9200"
+    environment:
+      - POSTGRES_CONNECTION_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - METRICS_PORT=9200
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./exporters/financial-metrics/config.yml:/app/config.yml
+    networks:
+      - monitoring
+      - data-platform
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+
+  # Loki - Log aggregation
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: financial-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/tmp/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Promtail - Log shipping
+  promtail:
+    image: grafana/promtail:2.8.0
+    container_name: financial-promtail
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  # Jaeger - Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.39
+    container_name: financial-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Blackbox Exporter - Endpoint monitoring
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.22.0
+    container_name: financial-blackbox-exporter
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # SNMP Exporter - Network device monitoring
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.21.0
+    container_name: financial-snmp-exporter
+    ports:
+      - "9116:9116"
+    volumes:
+      - ./snmp/snmp.yml:/etc/snmp_exporter/snmp.yml
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Pushgateway - Batch job metrics
+  pushgateway:
+    image: prom/pushgateway:v1.5.1
+    container_name: financial-pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Nginx for reverse proxy and load balancing
+  nginx-monitoring:
+    image: nginx:1.23-alpine
+    container_name: financial-monitoring-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - grafana
+      - alertmanager
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  loki_data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+  
+  data-platform:
+    external: true
+    name: financial_data_platform

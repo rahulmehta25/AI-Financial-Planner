@@ -1,0 +1,461 @@
+# Disaster Recovery Monitoring Configuration
+# This file contains monitoring and alerting configuration for disaster recovery scenarios
+# All sensitive values should be provided via environment variables
+
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: PrometheusRule
+metadata:
+  name: disaster-recovery-alerts
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+    severity: critical
+
+spec:
+  groups:
+    - name: disaster-recovery
+      rules:
+        # Database connectivity alerts
+        - alert: DatabaseConnectionLost
+          expr: up{job="postgresql"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: database
+            service: postgresql
+          annotations:
+            summary: "Database connection lost"
+            description: "PostgreSQL database is not responding"
+            action: "Check database service status and connectivity"
+            runbook: "https://runbooks.financial-planning.com/database-connection"
+
+        # Backup failure alerts
+        - alert: BackupFailure
+          expr: backup_job_success{job="backup-manager"} == 0
+          for: 5m
+          labels:
+            severity: high
+            component: backup
+            service: backup-manager
+          annotations:
+            summary: "Backup job failed"
+            description: "Automated backup process has failed"
+            action: "Investigate backup logs and retry backup process"
+            runbook: "https://runbooks.financial-planning.com/backup-failure"
+
+        # Replication lag alerts
+        - alert: ReplicationLag
+          expr: postgresql_replication_lag_seconds > 300
+          for: 2m
+          labels:
+            severity: warning
+            component: database
+            service: postgresql
+          annotations:
+            summary: "Database replication lag detected"
+            description: "Replication lag is {{ $value }} seconds"
+            action: "Monitor replication status and investigate lag causes"
+            runbook: "https://runbooks.financial-planning.com/replication-lag"
+
+        # Disk space alerts
+        - alert: DiskSpaceCritical
+          expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+          for: 5m
+          labels:
+            severity: critical
+            component: infrastructure
+            service: storage
+          annotations:
+            summary: "Critical disk space usage"
+            description: "Disk usage is {{ $value }}% available"
+            action: "Immediate disk cleanup or expansion required"
+            runbook: "https://runbooks.financial-planning.com/disk-space"
+
+        # Memory usage alerts
+        - alert: MemoryUsageCritical
+          expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 5
+          for: 5m
+          labels:
+            severity: critical
+            component: infrastructure
+            service: memory
+          annotations:
+            summary: "Critical memory usage"
+            description: "Memory usage is {{ $value }}% available"
+            action: "Investigate memory leaks or scale resources"
+            runbook: "https://runbooks.financial-planning.com/memory-usage"
+
+        # Network connectivity alerts
+        - alert: NetworkConnectivityLost
+          expr: up{job="network-monitor"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: network
+            service: connectivity
+          annotations:
+            summary: "Network connectivity lost"
+            description: "Network monitoring service is down"
+            action: "Check network infrastructure and routing"
+            runbook: "https://runbooks.financial-planning.com/network-connectivity"
+
+        # Service health alerts
+        - alert: ServiceUnhealthy
+          expr: health_check_status{service=~"financial-planning.*"} == 0
+          for: 1m
+          labels:
+            severity: high
+            component: application
+            service: financial-planning
+          annotations:
+            summary: "Service health check failed"
+            description: "Service {{ $labels.service }} is unhealthy"
+            action: "Investigate service logs and restart if necessary"
+            runbook: "https://runbooks.financial-planning.com/service-health"
+
+        # Certificate expiration alerts
+        - alert: CertificateExpiringSoon
+          expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+          for: 1m
+          labels:
+            severity: warning
+            component: security
+            service: ssl
+          annotations:
+            summary: "SSL certificate expiring soon"
+            description: "Certificate expires in {{ $value }} seconds"
+            action: "Renew SSL certificate before expiration"
+            runbook: "https://runbooks.financial-planning.com/certificate-renewal"
+
+        # Security incident alerts
+        - alert: SecurityIncident
+          expr: security_events_total{severity="high"} > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: security
+            service: security-monitor
+          annotations:
+            summary: "Security incident detected"
+            description: "High severity security event detected"
+            action: "Immediate security investigation required"
+            runbook: "https://runbooks.financial-planning.com/security-incident"
+
+        # Performance degradation alerts
+        - alert: PerformanceDegradation
+          expr: http_request_duration_seconds{quantile="0.95"} > 2
+          for: 5m
+          labels:
+            severity: warning
+            component: application
+            service: performance
+          annotations:
+            summary: "Performance degradation detected"
+            description: "95th percentile response time is {{ $value }} seconds"
+            action: "Investigate performance bottlenecks"
+            runbook: "https://runbooks.financial-planning.com/performance-degradation"
+
+---
+# Alertmanager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: monitoring
+
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: '${SMTP_SMARTHOST:localhost:587}'
+      smtp_from: '${SMTP_FROM:alerts@financial-planning.com}'
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+      pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+        # Critical alerts go to PagerDuty
+        - match:
+            severity: critical
+          receiver: 'pagerduty-critical'
+          group_wait: 10s
+          repeat_interval: 5m
+          
+        # High severity alerts go to Slack and email
+        - match:
+            severity: high
+          receiver: 'slack-high-severity'
+          group_wait: 30s
+          repeat_interval: 1h
+          
+        # Security alerts have special routing
+        - match:
+            component: security
+          receiver: 'security-team'
+          group_wait: 10s
+          repeat_interval: 30m
+
+    receivers:
+      - name: 'default'
+        email_configs:
+          - to: '${OPS_TEAM_EMAIL:ops-team@financial-planning.com}'
+            subject: '[{{ .GroupLabels.cluster }}] Alert: {{ .GroupLabels.alertname }}'
+            body: |
+              {{ range .Alerts }}
+              Alert: {{ .Annotations.summary }}
+              Description: {{ .Annotations.description }}
+              Severity: {{ .Labels.severity }}
+              Action: {{ .Annotations.action }}
+              Runbook: {{ .Annotations.runbook }}
+              {{ end }}
+
+      - name: 'pagerduty-critical'
+        pagerduty_configs:
+          - routing_key: '${PAGERDUTY_INTEGRATION_KEY}'
+            description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.instance }}'
+            severity: '{{ .GroupLabels.severity }}'
+            details:
+              summary: '{{ .CommonAnnotations.summary }}'
+              description: '{{ .CommonAnnotations.description }}'
+              action: '{{ .CommonAnnotations.action }}'
+              runbook: '{{ .CommonAnnotations.runbook }}'
+
+      - name: 'slack-high-severity'
+        slack_configs:
+          - channel: '${SLACK_CHANNEL:#ops-alerts}'
+            title: 'High Severity Alert'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Severity:* {{ .Labels.severity }}
+              *Action:* {{ .Annotations.action }}
+              *Runbook:* {{ .Annotations.runbook }}
+              {{ end }}
+
+      - name: 'security-team'
+        email_configs:
+          - to: '${SECURITY_TEAM_EMAIL:security-team@financial-planning.com}'
+            subject: '[SECURITY] {{ .GroupLabels.alertname }}'
+            body: |
+              SECURITY ALERT DETECTED
+              
+              {{ range .Alerts }}
+              Alert: {{ .Annotations.summary }}
+              Description: {{ .Annotations.description }}
+              Severity: {{ .Labels.severity }}
+              Component: {{ .Labels.component }}
+              Instance: {{ .Labels.instance }}
+              Time: {{ .StartsAt }}
+              
+              Immediate Action Required: {{ .Annotations.action }}
+              Runbook: {{ .Annotations.runbook }}
+              {{ end }}
+        slack_configs:
+          - channel: '${SECURITY_SLACK_CHANNEL:#security-incidents}'
+            title: 'Security Alert'
+            color: 'danger'
+            text: |
+              🚨 *SECURITY ALERT* 🚨
+              {{ range .Alerts }}
+              *{{ .Annotations.summary }}*
+              {{ .Annotations.description }}
+              *Action:* {{ .Annotations.action }}
+              *Runbook:* {{ .Annotations.runbook }}
+              {{ end }}
+
+---
+# Service Monitor for Disaster Recovery Services
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: disaster-recovery-monitor
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning
+      component: disaster-recovery
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      honorLabels: true
+      scrapeTimeout: 10s
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'backup_.*|replication_.*|health_.*'
+          action: keep
+
+---
+# Pod Monitor for Disaster Recovery Pods
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: disaster-recovery-pods
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning
+      component: disaster-recovery
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      honorLabels: true
+      scrapeTimeout: 10s
+
+---
+# Prometheus Rule for Disaster Recovery Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: disaster-recovery-metrics
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+
+spec:
+  groups:
+    - name: disaster-recovery-metrics
+      rules:
+        # Backup success rate
+        - record: backup:success_rate
+          expr: rate(backup_job_success_total[1h]) / rate(backup_job_total[1h])
+
+        # Replication health score
+        - record: replication:health_score
+          expr: (1 - (postgresql_replication_lag_seconds / 3600)) * 100
+
+        # Service availability
+        - record: service:availability
+          expr: (up{job=~"financial-planning.*"} / count(up{job=~"financial-planning.*"})) * 100
+
+        # Response time percentiles
+        - record: http:response_time_p95
+          expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+
+        - record: http:response_time_p99
+          expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
+
+---
+# Grafana Dashboard Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disaster-recovery-dashboard
+  namespace: monitoring
+  labels:
+    app: financial-planning
+    component: disaster-recovery
+
+data:
+  dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Disaster Recovery Monitoring",
+        "tags": ["financial-planning", "disaster-recovery", "monitoring"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Health Overview",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "service:availability",
+                "legendFormat": "Availability %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Backup Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "backup:success_rate * 100",
+                "legendFormat": "Success Rate %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Replication Health",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "replication:health_score",
+                "legendFormat": "Health Score %"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "green", "value": 95}
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }

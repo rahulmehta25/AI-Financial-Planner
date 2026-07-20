@@ -1,0 +1,722 @@
+{
+  "dashboard_config": {
+    "name": "Financial Planning Executive Dashboard",
+    "version": "2.0",
+    "created_date": "2024-01-15",
+    "description": "Comprehensive financial analytics dashboard with real-time KPIs and drill-down capabilities",
+    "refresh_schedule": "hourly",
+    "data_sources": [
+      {
+        "name": "financial_warehouse",
+        "type": "postgresql",
+        "connection_string": "${WAREHOUSE_CONNECTION_STRING}",
+        "schema": "marts",
+        "tables": [
+          "customer_360",
+          "financial_health_dashboard",
+          "user_activity_summary_mv",
+          "portfolio_performance_summary",
+          "transaction_analytics"
+        ]
+      },
+      {
+        "name": "real_time_metrics",
+        "type": "redis",
+        "connection_string": "${REDIS_CONNECTION_STRING}",
+        "refresh_interval": "30s"
+      }
+    ]
+  },
+  "pages": [
+    {
+      "name": "Executive Summary",
+      "layout": "grid",
+      "filters": [
+        {
+          "name": "date_range",
+          "type": "date_range",
+          "default": "last_30_days",
+          "options": ["last_7_days", "last_30_days", "last_90_days", "ytd", "custom"]
+        },
+        {
+          "name": "customer_segment",
+          "type": "multi_select",
+          "source": "customer_360.customer_segment",
+          "default": "all"
+        },
+        {
+          "name": "geography",
+          "type": "hierarchy",
+          "levels": ["country", "state", "city"],
+          "default": "all"
+        }
+      ],
+      "visualizations": [
+        {
+          "id": "kpi_cards",
+          "type": "kpi_grid",
+          "position": {"row": 1, "col": 1, "width": 12, "height": 2},
+          "title": "Key Performance Indicators",
+          "data_source": {
+            "query": "
+              SELECT 
+                COUNT(DISTINCT user_key) as total_users,
+                SUM(total_portfolio_value) as total_aum,
+                AVG(financial_health_score) as avg_health_score,
+                COUNT(DISTINCT user_key) FILTER (WHERE churn_risk_score > 0.7) as high_risk_users,
+                AVG(engagement_score) as avg_engagement,
+                COUNT(DISTINCT user_key) FILTER (WHERE days_since_last_login <= 7) as active_users_7d
+              FROM marts.customer_360
+              WHERE last_updated >= CURRENT_DATE - INTERVAL '${date_range}'
+            "
+          },
+          "metrics": [
+            {
+              "name": "Total Users",
+              "value": "total_users",
+              "format": "number",
+              "icon": "users",
+              "color": "blue",
+              "trend": {
+                "comparison": "previous_period",
+                "direction": "higher_is_better"
+              }
+            },
+            {
+              "name": "Assets Under Management",
+              "value": "total_aum",
+              "format": "currency",
+              "icon": "dollar-sign",
+              "color": "green",
+              "trend": {
+                "comparison": "previous_period",
+                "direction": "higher_is_better"
+              }
+            },
+            {
+              "name": "Avg Financial Health",
+              "value": "avg_health_score",
+              "format": "percentage",
+              "icon": "heart",
+              "color": "purple",
+              "threshold": {
+                "green": 80,
+                "yellow": 60,
+                "red": 40
+              }
+            },
+            {
+              "name": "High Risk Users",
+              "value": "high_risk_users",
+              "format": "number",
+              "icon": "alert-triangle",
+              "color": "red",
+              "trend": {
+                "comparison": "previous_period",
+                "direction": "lower_is_better"
+              }
+            },
+            {
+              "name": "Engagement Score",
+              "value": "avg_engagement",
+              "format": "percentage",
+              "icon": "activity",
+              "color": "orange"
+            },
+            {
+              "name": "Active Users (7d)",
+              "value": "active_users_7d",
+              "format": "number",
+              "icon": "zap",
+              "color": "cyan"
+            }
+          ]
+        },
+        {
+          "id": "user_growth_trend",
+          "type": "line_chart",
+          "position": {"row": 3, "col": 1, "width": 6, "height": 4},
+          "title": "User Growth & Engagement Trends",
+          "data_source": {
+            "query": "
+              SELECT 
+                DATE_TRUNC('week', registration_date) as week,
+                COUNT(*) as new_users,
+                AVG(engagement_score) as avg_engagement,
+                COUNT(*) FILTER (WHERE churn_risk_score > 0.7) as high_risk_count
+              FROM marts.customer_360
+              WHERE registration_date >= CURRENT_DATE - INTERVAL '12 months'
+              GROUP BY DATE_TRUNC('week', registration_date)
+              ORDER BY week
+            "
+          },
+          "x_axis": "week",
+          "y_axes": [
+            {
+              "field": "new_users",
+              "type": "bar",
+              "color": "#3b82f6",
+              "label": "New Users",
+              "axis": "left"
+            },
+            {
+              "field": "avg_engagement",
+              "type": "line",
+              "color": "#10b981",
+              "label": "Avg Engagement",
+              "axis": "right"
+            },
+            {
+              "field": "high_risk_count",
+              "type": "line",
+              "color": "#ef4444",
+              "label": "High Risk Users",
+              "axis": "right"
+            }
+          ],
+          "interactions": {
+            "drill_down": "user_cohort_analysis",
+            "tooltip": true,
+            "zoom": true
+          }
+        },
+        {
+          "id": "portfolio_performance",
+          "type": "combo_chart",
+          "position": {"row": 3, "col": 7, "width": 6, "height": 4},
+          "title": "Portfolio Performance Overview",
+          "data_source": {
+            "query": "
+              SELECT 
+                DATE_TRUNC('month', snapshot_date) as month,
+                SUM(current_portfolio_value) as total_aum,
+                WEIGHTED_AVG(portfolio_ytd_return, current_portfolio_value) as weighted_avg_return,
+                COUNT(DISTINCT user_key) as active_investors
+              FROM marts.customer_360
+              WHERE current_portfolio_value > 0
+                AND snapshot_date >= CURRENT_DATE - INTERVAL '24 months'
+              GROUP BY DATE_TRUNC('month', snapshot_date)
+              ORDER BY month
+            "
+          },
+          "x_axis": "month",
+          "y_axes": [
+            {
+              "field": "total_aum",
+              "type": "bar",
+              "color": "#6366f1",
+              "label": "Total AUM",
+              "axis": "left",
+              "format": "currency"
+            },
+            {
+              "field": "weighted_avg_return",
+              "type": "line",
+              "color": "#f59e0b",
+              "label": "Weighted Avg Return",
+              "axis": "right",
+              "format": "percentage"
+            }
+          ]
+        },
+        {
+          "id": "customer_segmentation",
+          "type": "treemap",
+          "position": {"row": 7, "col": 1, "width": 4, "height": 4},
+          "title": "Customer Segmentation",
+          "data_source": {
+            "query": "
+              SELECT 
+                customer_segment,
+                ltv_segment,
+                COUNT(*) as user_count,
+                AVG(net_worth) as avg_net_worth,
+                SUM(current_portfolio_value) as segment_aum
+              FROM marts.customer_360
+              WHERE customer_segment IS NOT NULL
+              GROUP BY customer_segment, ltv_segment
+              ORDER BY segment_aum DESC
+            "
+          },
+          "dimensions": ["customer_segment", "ltv_segment"],
+          "measure": "segment_aum",
+          "color_by": "avg_net_worth",
+          "tooltip_fields": ["user_count", "avg_net_worth", "segment_aum"]
+        },
+        {
+          "id": "financial_health_distribution",
+          "type": "histogram",
+          "position": {"row": 7, "col": 5, "width": 4, "height": 4},
+          "title": "Financial Health Score Distribution",
+          "data_source": {
+            "query": "
+              SELECT 
+                financial_health_score,
+                COUNT(*) as user_count,
+                customer_segment
+              FROM marts.financial_health_dashboard
+              WHERE snapshot_date = CURRENT_DATE
+              GROUP BY financial_health_score, customer_segment
+            "
+          },
+          "x_axis": "financial_health_score",
+          "y_axis": "user_count",
+          "color_by": "customer_segment",
+          "bin_size": 5,
+          "annotations": [
+            {
+              "type": "reference_line",
+              "value": 80,
+              "label": "Excellent Health Threshold",
+              "color": "green"
+            },
+            {
+              "type": "reference_line",
+              "value": 60,
+              "label": "Good Health Threshold",
+              "color": "orange"
+            }
+          ]
+        },
+        {
+          "id": "geography_heatmap",
+          "type": "map",
+          "position": {"row": 7, "col": 9, "width": 4, "height": 4},
+          "title": "User Distribution by Geography",
+          "data_source": {
+            "query": "
+              SELECT 
+                location_state,
+                location_city,
+                COUNT(*) as user_count,
+                AVG(net_worth) as avg_net_worth,
+                AVG(engagement_score) as avg_engagement
+              FROM marts.customer_360
+              WHERE location_state IS NOT NULL
+              GROUP BY location_state, location_city
+            "
+          },
+          "geography_column": "location_state",
+          "measure": "user_count",
+          "color_scheme": "blue",
+          "tooltip_fields": ["avg_net_worth", "avg_engagement"]
+        }
+      ]
+    },
+    {
+      "name": "Financial Health Analytics",
+      "layout": "grid",
+      "filters": [
+        {
+          "name": "health_score_range",
+          "type": "range_slider",
+          "min": 0,
+          "max": 100,
+          "default": [0, 100]
+        },
+        {
+          "name": "risk_segment",
+          "type": "multi_select",
+          "source": "financial_health_dashboard.recommendation_category"
+        }
+      ],
+      "visualizations": [
+        {
+          "id": "health_score_trends",
+          "type": "area_chart",
+          "position": {"row": 1, "col": 1, "width": 8, "height": 4},
+          "title": "Financial Health Score Trends",
+          "data_source": {
+            "query": "
+              SELECT 
+                snapshot_date,
+                AVG(financial_health_score) as avg_score,
+                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY financial_health_score) as p25,
+                PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY financial_health_score) as p75,
+                COUNT(*) as total_users
+              FROM marts.financial_health_dashboard
+              WHERE snapshot_date >= CURRENT_DATE - INTERVAL '12 months'
+              GROUP BY snapshot_date
+              ORDER BY snapshot_date
+            "
+          },
+          "x_axis": "snapshot_date",
+          "y_axes": [
+            {
+              "field": "avg_score",
+              "type": "line",
+              "color": "#3b82f6",
+              "label": "Average Score"
+            },
+            {
+              "field": "p25",
+              "type": "area",
+              "color": "#93c5fd",
+              "label": "25th Percentile",
+              "opacity": 0.3
+            },
+            {
+              "field": "p75",
+              "type": "area",
+              "color": "#93c5fd",
+              "label": "75th Percentile",
+              "opacity": 0.3
+            }
+          ]
+        },
+        {
+          "id": "component_scores",
+          "type": "radar_chart",
+          "position": {"row": 1, "col": 9, "width": 4, "height": 4},
+          "title": "Health Component Analysis",
+          "data_source": {
+            "query": "
+              SELECT 
+                customer_segment,
+                AVG(liquidity_score) as liquidity,
+                AVG(debt_score) as debt,
+                AVG(savings_score) as savings,
+                AVG(investment_score) as investment,
+                AVG(planning_score) as planning
+              FROM marts.financial_health_dashboard
+              WHERE snapshot_date = CURRENT_DATE
+              GROUP BY customer_segment
+            "
+          },
+          "category_field": "customer_segment",
+          "value_fields": ["liquidity", "debt", "savings", "investment", "planning"],
+          "max_value": 100
+        },
+        {
+          "id": "health_improvement_funnel",
+          "type": "funnel_chart",
+          "position": {"row": 5, "col": 1, "width": 6, "height": 4},
+          "title": "Financial Health Improvement Journey",
+          "data_source": {
+            "query": "
+              SELECT 
+                'All Users' as stage,
+                COUNT(*) as count,
+                1 as order_seq
+              FROM marts.financial_health_dashboard
+              WHERE snapshot_date = CURRENT_DATE
+              UNION ALL
+              SELECT 
+                'Received Recommendations' as stage,
+                COUNT(*) as count,
+                2 as order_seq
+              FROM marts.financial_health_dashboard
+              WHERE top_recommendation IS NOT NULL
+                AND snapshot_date = CURRENT_DATE
+              UNION ALL
+              SELECT 
+                'Improved Score (30d)' as stage,
+                COUNT(*) as count,
+                3 as order_seq
+              FROM marts.financial_health_dashboard
+              WHERE score_change_30d > 5
+                AND snapshot_date = CURRENT_DATE
+              ORDER BY order_seq
+            "
+          },
+          "stage_field": "stage",
+          "value_field": "count"
+        },
+        {
+          "id": "alert_summary",
+          "type": "donut_chart",
+          "position": {"row": 5, "col": 7, "width": 6, "height": 4},
+          "title": "Financial Alerts Distribution",
+          "data_source": {
+            "query": "
+              SELECT 
+                CASE 
+                  WHEN high_debt_alert THEN 'High Debt'
+                  WHEN low_emergency_fund_alert THEN 'Low Emergency Fund'
+                  WHEN irregular_income_alert THEN 'Irregular Income'
+                  WHEN high_spending_alert THEN 'High Spending'
+                  ELSE 'No Alerts'
+                END as alert_type,
+                COUNT(*) as alert_count
+              FROM marts.financial_health_dashboard
+              WHERE snapshot_date = CURRENT_DATE
+              GROUP BY alert_type
+            "
+          },
+          "category_field": "alert_type",
+          "value_field": "alert_count",
+          "color_scheme": "red_yellow_green"
+        }
+      ]
+    },
+    {
+      "name": "Transaction Analytics",
+      "layout": "grid",
+      "filters": [
+        {
+          "name": "transaction_type",
+          "type": "button_group",
+          "options": ["all", "debit", "credit"],
+          "default": "all"
+        },
+        {
+          "name": "amount_range",
+          "type": "range_slider",
+          "min": 0,
+          "max": 10000,
+          "default": [0, 10000]
+        }
+      ],
+      "visualizations": [
+        {
+          "id": "transaction_volume_trend",
+          "type": "dual_axis_chart",
+          "position": {"row": 1, "col": 1, "width": 8, "height": 4},
+          "title": "Transaction Volume & Value Trends",
+          "data_source": {
+            "query": "
+              SELECT 
+                DATE_TRUNC('day', transaction_datetime) as date,
+                COUNT(*) as transaction_count,
+                SUM(amount) as total_amount,
+                AVG(amount) as avg_amount,
+                COUNT(DISTINCT user_key) as unique_users
+              FROM facts.fact_transaction_enhanced
+              WHERE transaction_datetime >= CURRENT_DATE - INTERVAL '90 days'
+              GROUP BY DATE_TRUNC('day', transaction_datetime)
+              ORDER BY date
+            "
+          },
+          "x_axis": "date",
+          "left_y_axis": {
+            "field": "transaction_count",
+            "type": "bar",
+            "color": "#3b82f6",
+            "label": "Transaction Count"
+          },
+          "right_y_axis": {
+            "field": "total_amount",
+            "type": "line",
+            "color": "#ef4444",
+            "label": "Total Amount",
+            "format": "currency"
+          }
+        },
+        {
+          "id": "spending_categories",
+          "type": "horizontal_bar",
+          "position": {"row": 1, "col": 9, "width": 4, "height": 4},
+          "title": "Top Spending Categories",
+          "data_source": {
+            "query": "
+              SELECT 
+                dc.category_name,
+                SUM(t.amount) as total_spent,
+                COUNT(*) as transaction_count,
+                AVG(t.amount) as avg_amount
+              FROM facts.fact_transaction_enhanced t
+              JOIN dimensions.dim_transaction_category dc ON t.category_key = dc.category_key
+              WHERE t.is_debit = true
+                AND t.transaction_datetime >= CURRENT_DATE - INTERVAL '30 days'
+              GROUP BY dc.category_name
+              ORDER BY total_spent DESC
+              LIMIT 15
+            "
+          },
+          "x_axis": "total_spent",
+          "y_axis": "category_name",
+          "color": "#10b981",
+          "format": "currency"
+        },
+        {
+          "id": "fraud_risk_heatmap",
+          "type": "heatmap",
+          "position": {"row": 5, "col": 1, "width": 6, "height": 4},
+          "title": "Fraud Risk Analysis by Time",
+          "data_source": {
+            "query": "
+              SELECT 
+                EXTRACT(hour FROM transaction_datetime) as hour,
+                EXTRACT(dow FROM transaction_datetime) as day_of_week,
+                AVG(fraud_score) as avg_fraud_score,
+                COUNT(*) as transaction_count
+              FROM facts.fact_transaction_enhanced
+              WHERE transaction_datetime >= CURRENT_DATE - INTERVAL '30 days'
+                AND fraud_score > 0
+              GROUP BY EXTRACT(hour FROM transaction_datetime), 
+                       EXTRACT(dow FROM transaction_datetime)
+            "
+          },
+          "x_axis": "hour",
+          "y_axis": "day_of_week",
+          "value": "avg_fraud_score",
+          "color_scheme": "red"
+        },
+        {
+          "id": "anomaly_detection",
+          "type": "scatter_plot",
+          "position": {"row": 5, "col": 7, "width": 6, "height": 4},
+          "title": "Transaction Anomaly Detection",
+          "data_source": {
+            "query": "
+              SELECT 
+                amount,
+                anomaly_score,
+                fraud_score,
+                transaction_datetime,
+                merchant_name,
+                CASE WHEN anomaly_score > 0.8 THEN 'High' 
+                     WHEN anomaly_score > 0.5 THEN 'Medium'
+                     ELSE 'Low' END as anomaly_level
+              FROM facts.fact_transaction_enhanced
+              WHERE transaction_datetime >= CURRENT_DATE - INTERVAL '7 days'
+                AND anomaly_score > 0.3
+              ORDER BY anomaly_score DESC
+              LIMIT 1000
+            "
+          },
+          "x_axis": "amount",
+          "y_axis": "anomaly_score",
+          "color_by": "anomaly_level",
+          "size_by": "fraud_score",
+          "tooltip_fields": ["transaction_datetime", "merchant_name"]
+        }
+      ]
+    },
+    {
+      "name": "Goal Progress Analytics",
+      "layout": "grid",
+      "visualizations": [
+        {
+          "id": "goal_completion_funnel",
+          "type": "funnel_chart",
+          "position": {"row": 1, "col": 1, "width": 6, "height": 4},
+          "title": "Goal Achievement Funnel",
+          "data_source": {
+            "query": "
+              SELECT 
+                'Created Goals' as stage,
+                COUNT(*) as count,
+                1 as order_seq
+              FROM dimensions.dim_goal
+              UNION ALL
+              SELECT 
+                'Started Progress' as stage,
+                COUNT(*) as count,
+                2 as order_seq
+              FROM dimensions.dim_goal
+              WHERE current_amount > 0
+              UNION ALL
+              SELECT 
+                '50% Complete' as stage,
+                COUNT(*) as count,
+                3 as order_seq
+              FROM dimensions.dim_goal
+              WHERE (current_amount / target_amount) >= 0.5
+              UNION ALL
+              SELECT 
+                'Completed' as stage,
+                COUNT(*) as count,
+                4 as order_seq
+              FROM dimensions.dim_goal
+              WHERE goal_status = 'completed'
+              ORDER BY order_seq
+            "
+          },
+          "stage_field": "stage",
+          "value_field": "count"
+        },
+        {
+          "id": "goal_types_analysis",
+          "type": "stacked_bar",
+          "position": {"row": 1, "col": 7, "width": 6, "height": 4},
+          "title": "Goal Types & Success Rates",
+          "data_source": {
+            "query": "
+              SELECT 
+                goal_type,
+                COUNT(*) as total_goals,
+                COUNT(*) FILTER (WHERE goal_status = 'completed') as completed,
+                COUNT(*) FILTER (WHERE goal_status = 'active') as active,
+                COUNT(*) FILTER (WHERE goal_status = 'paused') as paused
+              FROM dimensions.dim_goal
+              GROUP BY goal_type
+              ORDER BY total_goals DESC
+            "
+          },
+          "x_axis": "goal_type",
+          "stack_fields": ["completed", "active", "paused"],
+          "colors": ["#10b981", "#3b82f6", "#f59e0b"]
+        },
+        {
+          "id": "goal_progress_timeline",
+          "type": "timeline",
+          "position": {"row": 5, "col": 1, "width": 12, "height": 4},
+          "title": "Goal Progress Timeline",
+          "data_source": {
+            "query": "
+              SELECT 
+                user_key,
+                goal_name,
+                created_date,
+                target_date,
+                completed_date,
+                (current_amount / target_amount) * 100 as progress_pct,
+                goal_status
+              FROM dimensions.dim_goal
+              WHERE created_date >= CURRENT_DATE - INTERVAL '12 months'
+              ORDER BY created_date
+            "
+          },
+          "start_date": "created_date",
+          "end_date": "target_date",
+          "completion_date": "completed_date",
+          "progress_field": "progress_pct",
+          "group_by": "user_key"
+        }
+      ]
+    }
+  ],
+  "parameters": {
+    "global_filters": {
+      "enable_row_level_security": true,
+      "user_context_field": "user_id",
+      "role_based_access": {
+        "admin": "all_data",
+        "analyst": "aggregated_data",
+        "user": "own_data_only"
+      }
+    },
+    "performance": {
+      "enable_caching": true,
+      "cache_duration": "1h",
+      "incremental_refresh": true,
+      "query_optimization": true
+    },
+    "alerts": [
+      {
+        "name": "high_churn_risk",
+        "condition": "COUNT(*) FILTER (WHERE churn_risk_score > 0.8) > 100",
+        "frequency": "daily",
+        "recipients": ["customer-success@company.com"]
+      },
+      {
+        "name": "portfolio_performance_decline",
+        "condition": "AVG(portfolio_ytd_return) < -0.1",
+        "frequency": "weekly",
+        "recipients": ["investment-team@company.com"]
+      }
+    ],
+    "exports": {
+      "formats": ["pdf", "excel", "csv"],
+      "schedule": {
+        "weekly_report": {
+          "frequency": "weekly",
+          "day": "monday",
+          "time": "09:00",
+          "recipients": ["executives@company.com"]
+        }
+      }
+    }
+  }
+}

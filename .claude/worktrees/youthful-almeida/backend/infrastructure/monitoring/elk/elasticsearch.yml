@@ -1,0 +1,30 @@
+cluster.name: "financial-planning-logs"
+node.name: "elasticsearch-master"
+network.host: 0.0.0.0
+http.port: 9200
+discovery.type: single-node
+bootstrap.memory_lock: true
+
+# Security settings
+xpack.security.enabled: true
+xpack.security.transport.ssl.enabled: true
+xpack.security.http.ssl.enabled: true
+
+# Index management
+index.number_of_replicas: 1
+index.refresh_interval: 30s
+
+# Memory settings
+indices.memory.index_buffer_size: 20%
+indices.memory.min_index_buffer_size: 96mb
+
+# Monitoring
+xpack.monitoring.enabled: true
+xpack.monitoring.collection.enabled: true
+
+# Index lifecycle management
+xpack.ilm.enabled: true
+
+# Performance tuning
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000

@@ -1,0 +1,198 @@
+# Staging environment values for financial-planning platform
+# Scaled-down configuration for staging/testing
+
+global:
+  environment: staging
+  imageTag: "staging"
+  imagePullPolicy: Always
+
+# Staging scaling
+replicaCount: 2
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 85
+
+# Staging resources
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+    ephemeral-storage: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+    ephemeral-storage: 2Gi
+
+# Staging microservices scaling
+microservices:
+  userService:
+    replicaCount: 2
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 4
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  bankingService:
+    replicaCount: 2
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 4
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: 750m
+        memory: 1Gi
+
+  mlService:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+        nvidia.com/gpu: 1
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+        nvidia.com/gpu: 1
+
+  notificationService:
+    replicaCount: 2
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 4
+
+# Staging database configuration
+postgresql:
+  primary:
+    persistence:
+      size: 50Gi
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 500m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+  
+  readReplicas:
+    replicaCount: 1
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+
+redis:
+  master:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+  
+  replica:
+    replicaCount: 1
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 250m
+
+# Staging ingress
+ingress:
+  hosts:
+    - host: staging-api.financialplanning.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: staging-financial-planning-tls
+      hosts:
+        - staging-api.financialplanning.com
+
+ingress-nginx:
+  controller:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Staging monitoring (reduced retention)
+monitoring:
+  enabled: true
+  prometheus:
+    prometheusSpec:
+      retention: 7d
+      retentionSize: 10GB
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            resources:
+              requests:
+                storage: 50Gi
+
+# Staging security (less strict)
+security:
+  certManager:
+    enabled: true
+  externalSecrets:
+    enabled: false  # Use regular secrets in staging
+  podSecurityStandards:
+    enabled: true
+    enforce: "baseline"
+
+# Staging backup (reduced frequency)
+backup:
+  velero:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily
+    ttl: "168h0m0s"  # 7 days retention
+
+# Staging service mesh (disabled for simplicity)
+serviceMesh:
+  istio:
+    enabled: false
+
+# Staging configuration overrides
+config:
+  api:
+    maxRequestSize: 52428800  # 50MB
+    timeoutSeconds: 120
+  security:
+    accessTokenExpireMinutes: 1440  # 24 hours
+    refreshTokenExpireMinutes: 10080  # 1 week
+  performance:
+    workers: 2
+    cacheDefaultTimeout: 60
+    cacheTTL: 300
+  logging:
+    level: DEBUG  # More verbose logging in staging
+
+# Node selectors for staging
+nodeSelector:
+  node-tier: staging
+  node-type: general-purpose

@@ -1,0 +1,359 @@
+# Vertical Pod Autoscaler configurations for Financial Planning Application
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: financial-planning-api-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: financial-planning
+    app.kubernetes.io/version: "1.0.0"
+  annotations:
+    description: "VPA for Financial Planning API to optimize resource allocation"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financial-planning-api
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3
+  resourcePolicy:
+    containerPolicies:
+    - containerName: api
+      minAllowed:
+        cpu: 250m
+        memory: 512Mi
+        ephemeral-storage: 1Gi
+      maxAllowed:
+        cpu: 4000m
+        memory: 8Gi
+        ephemeral-storage: 10Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+    - containerName: fluent-bit
+      minAllowed:
+        cpu: 50m
+        memory: 64Mi
+      maxAllowed:
+        cpu: 200m
+        memory: 256Mi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: user-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 2
+  resourcePolicy:
+    containerPolicies:
+    - containerName: user-service
+      minAllowed:
+        cpu: 100m
+        memory: 256Mi
+        ephemeral-storage: 512Mi
+      maxAllowed:
+        cpu: 2000m
+        memory: 4Gi
+        ephemeral-storage: 5Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: banking-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: banking-service
+    app.kubernetes.io/component: autoscaling
+  annotations:
+    description: "VPA for critical banking service with conservative scaling"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: banking-service
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3
+  resourcePolicy:
+    containerPolicies:
+    - containerName: banking-service
+      minAllowed:
+        cpu: 300m
+        memory: 512Mi
+        ephemeral-storage: 1Gi
+      maxAllowed:
+        cpu: 3000m
+        memory: 6Gi
+        ephemeral-storage: 8Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: ml-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: autoscaling
+  annotations:
+    description: "VPA for ML service with GPU resource optimization"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ml-service
+  updatePolicy:
+    updateMode: "Off"  # Manual mode for GPU workloads
+  resourcePolicy:
+    containerPolicies:
+    - containerName: ml-service
+      minAllowed:
+        cpu: 500m
+        memory: 1Gi
+        ephemeral-storage: 2Gi
+      maxAllowed:
+        cpu: 8000m
+        memory: 32Gi
+        ephemeral-storage: 20Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsOnly  # Don't auto-adjust limits for GPU workloads
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: notification-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-service
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 2
+  resourcePolicy:
+    containerPolicies:
+    - containerName: notification-service
+      minAllowed:
+        cpu: 100m
+        memory: 128Mi
+        ephemeral-storage: 256Mi
+      maxAllowed:
+        cpu: 1000m
+        memory: 2Gi
+        ephemeral-storage: 3Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: document-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: document-service
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: document-service
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 2
+  resourcePolicy:
+    containerPolicies:
+    - containerName: document-service
+      minAllowed:
+        cpu: 200m
+        memory: 256Mi
+        ephemeral-storage: 1Gi
+      maxAllowed:
+        cpu: 2000m
+        memory: 4Gi
+        ephemeral-storage: 10Gi  # Higher for document processing
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: simulation-service-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: simulation-service
+    app.kubernetes.io/component: autoscaling
+  annotations:
+    description: "VPA for simulation service with GPU optimization"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: simulation-service
+  updatePolicy:
+    updateMode: "Off"  # Manual for GPU workloads
+  resourcePolicy:
+    containerPolicies:
+    - containerName: simulation-service
+      minAllowed:
+        cpu: 1000m
+        memory: 2Gi
+        ephemeral-storage: 2Gi
+      maxAllowed:
+        cpu: 8000m
+        memory: 16Gi
+        ephemeral-storage: 20Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsOnly
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: graphql-gateway-vpa
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: graphql-gateway
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: graphql-gateway
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3
+  resourcePolicy:
+    containerPolicies:
+    - containerName: graphql-gateway
+      minAllowed:
+        cpu: 100m
+        memory: 128Mi
+        ephemeral-storage: 256Mi
+      maxAllowed:
+        cpu: 1500m
+        memory: 2Gi
+        ephemeral-storage: 3Gi
+      controlledResources: ["cpu", "memory", "ephemeral-storage"]
+      controlledValues: RequestsAndLimits
+
+---
+# VPA for Database Workloads
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: postgresql-primary-vpa
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: postgresql-primary
+  updatePolicy:
+    updateMode: "Off"  # Manual for databases to avoid disruption
+  resourcePolicy:
+    containerPolicies:
+    - containerName: postgresql
+      minAllowed:
+        cpu: 500m
+        memory: 1Gi
+      maxAllowed:
+        cpu: 8000m
+        memory: 32Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsOnly
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: redis-master-vpa
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: redis-master
+  updatePolicy:
+    updateMode: "Off"  # Manual for caches
+  resourcePolicy:
+    containerPolicies:
+    - containerName: redis
+      minAllowed:
+        cpu: 250m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 4000m
+        memory: 16Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsOnly
+
+---
+# VPA Recommender Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vpa-recommender-config
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: vpa-recommender
+    app.kubernetes.io/component: config
+data:
+  recommender-config.yaml: |
+    # VPA Recommender configuration
+    podRecommendationMinCpuMillicores: 25
+    podRecommendationMinMemoryMb: 250
+    targetCPUPercentile: 0.9
+    targetMemoryPercentile: 0.9
+    
+    # Recommendation bounds
+    recommendationMarginFraction: 0.15
+    podRecommendationMinCpuMillicores: 25
+    podRecommendationMinMemoryMb: 250
+    
+    # Safety margins
+    safetyMarginCpuFraction: 0.15
+    safetyMarginMemoryFraction: 0.15
+    
+    # Histogram settings
+    histogramBucketSizeRatio: 1.05
+    histogramMaxNumBuckets: 1000
+    histogramDecayHalfLife: 24h
+    
+    # Resource policy defaults
+    defaultCpuPercentile: 0.9
+    defaultMemoryPercentile: 0.9
+    defaultCPUHistogramBucketSizeRatio: 1.05
+    defaultMemoryHistogramBucketSizeRatio: 1.05

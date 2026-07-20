@@ -1,0 +1,152 @@
+groups:
+  - name: financial_planning_app
+    rules:
+      # Application Health
+      - alert: AppDown
+        expr: up{job="financial-planning-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Financial Planning API is down"
+          description: "The Financial Planning API has been down for more than 1 minute."
+          runbook_url: "https://runbooks.your-domain.com/app-down"
+
+      - alert: HighErrorRate
+        expr: rate(fastapi_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 10% for the last 5 minutes"
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(fastapi_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time"
+          description: "95th percentile response time is above 2 seconds"
+
+      # Database Alerts
+      - alert: DatabaseDown
+        expr: up{job="postgresql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database has been unreachable for more than 1 minute"
+
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connections"
+          description: "Database connections are above 80% of maximum"
+
+      - alert: DatabaseSlowQueries
+        expr: rate(pg_stat_activity_max_tx_duration[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Database queries taking longer than 30 seconds detected"
+
+      # Redis Alerts
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache has been unreachable for more than 1 minute"
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is above 90%"
+
+      - alert: RedisCacheHitRateLow
+        expr: rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) < 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low Redis cache hit rate"
+          description: "Redis cache hit rate is below 80%"
+
+      # System Resource Alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 85% for 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90%"
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_size_bytes{fstype!="tmpfs"} - node_filesystem_free_bytes{fstype!="tmpfs"}) / node_filesystem_size_bytes{fstype!="tmpfs"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is above 85%"
+
+      # Financial Planning Business Metrics
+      - alert: HighSimulationFailureRate
+        expr: rate(financial_simulations_failed_total[5m]) / rate(financial_simulations_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High simulation failure rate"
+          description: "Monte Carlo simulation failure rate is above 10%"
+
+      - alert: LowUserEngagement
+        expr: rate(financial_user_actions_total[1h]) < 100
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low user engagement"
+          description: "User engagement is below normal levels"
+
+      - alert: HighMarketDataLatency
+        expr: histogram_quantile(0.95, rate(market_data_fetch_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High market data latency"
+          description: "Market data fetching is taking longer than expected"
+
+      - alert: AIRecommendationSystemDown
+        expr: rate(ai_recommendations_generated_total[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI recommendation system not generating recommendations"
+          description: "AI recommendation system has not generated any recommendations in the last 10 minutes"

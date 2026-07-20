@@ -1,0 +1,80 @@
+# Kubernetes Namespaces for Financial Planning Application
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning
+  labels:
+    name: financial-planning
+    tier: application
+    app.kubernetes.io/name: financial-planning
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubernetes
+  annotations:
+    kubernetes.io/managed-by: "financial-planning-platform"
+    description: "Main namespace for Financial Planning application microservices"
+    contact: "devops@financialplanning.com"
+spec:
+  finalizers:
+  - kubernetes
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning-monitoring
+  labels:
+    name: financial-planning-monitoring
+    tier: monitoring
+    app.kubernetes.io/name: monitoring-stack
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubernetes
+  annotations:
+    kubernetes.io/managed-by: "financial-planning-platform"
+    description: "Monitoring and observability namespace"
+    contact: "devops@financialplanning.com"
+spec:
+  finalizers:
+  - kubernetes
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: financial-planning-data
+  labels:
+    name: financial-planning-data
+    tier: data
+    app.kubernetes.io/name: data-services
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubernetes
+  annotations:
+    kubernetes.io/managed-by: "financial-planning-platform"
+    description: "Data services namespace including databases and caches"
+    contact: "devops@financialplanning.com"
+spec:
+  finalizers:
+  - kubernetes
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    name: istio-system
+    tier: mesh
+    app.kubernetes.io/name: service-mesh
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubernetes
+    istio-injection: disabled
+  annotations:
+    kubernetes.io/managed-by: "financial-planning-platform"
+    description: "Istio service mesh system namespace"
+    contact: "devops@financialplanning.com"
+spec:
+  finalizers:
+  - kubernetes

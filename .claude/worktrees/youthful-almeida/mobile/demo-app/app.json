@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Financial Planner Demo",
+    "slug": "financial-planner-demo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e293b"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.financialplanner.demo"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e293b"
+      },
+      "package": "com.financialplanner.demo"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-local-authentication",
+      "expo-notifications"
+    ],
+    "scheme": "financial-planner-demo",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    }
+  }
+}

@@ -1,0 +1,74 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/financial-planning/*.log
+  fields:
+    log_type: financial-planning
+  fields_under_root: true
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+- type: log
+  enabled: true
+  paths:
+    - /var/log/nginx/access.log
+  fields:
+    log_type: nginx
+  fields_under_root: true
+
+- type: log
+  enabled: true
+  paths:
+    - /var/log/postgresql/*.log
+  fields:
+    log_type: postgresql
+  fields_under_root: true
+
+- type: log
+  enabled: true
+  paths:
+    - /var/log/redis/*.log
+  fields:
+    log_type: redis
+  fields_under_root: true
+
+- type: docker
+  containers.ids:
+    - "*"
+  processors:
+    - add_docker_metadata:
+        host: "unix:///var/run/docker.sock"
+
+# Processors
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_kubernetes_metadata: ~
+
+# Output to Logstash
+output.logstash:
+  hosts: ["logstash:5044"]
+  compression_level: 3
+  worker: 2
+
+# Monitoring
+monitoring.enabled: true
+monitoring.elasticsearch.hosts: ["elasticsearch:9200"]
+
+# Logging
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+# Performance tuning
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 1s

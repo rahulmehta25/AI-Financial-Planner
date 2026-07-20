@@ -1,0 +1,1 @@
+Welcome to Financial Planning App, {user_name}! Get started by setting your first goal: {app_url}

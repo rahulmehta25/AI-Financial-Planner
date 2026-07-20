@@ -1,0 +1,678 @@
+# Istio Service Mesh Configuration for Financial Planning Application
+# Gateway for external traffic entry point
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: financial-planning-gateway
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: istio-gateway
+    app.kubernetes.io/component: service-mesh
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    description: "Main gateway for Financial Planning application traffic"
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  # HTTPS (Production)
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: financial-planning-tls
+    hosts:
+    - api.financialplanning.com
+    - admin.financialplanning.com
+    - app.financialplanning.com
+  # HTTP (Redirect to HTTPS)
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - api.financialplanning.com
+    - admin.financialplanning.com
+    - app.financialplanning.com
+    tls:
+      httpsRedirect: true
+
+---
+# Gateway for monitoring tools
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: monitoring-gateway
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: istio-gateway
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: monitoring-tls
+    hosts:
+    - grafana.financialplanning.com
+    - prometheus.financialplanning.com
+    - jaeger.financialplanning.com
+
+---
+# Virtual Service for API routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: financial-planning-api-vs
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: virtual-service
+    app.kubernetes.io/component: api-routing
+spec:
+  hosts:
+  - api.financialplanning.com
+  - admin.financialplanning.com
+  gateways:
+  - financial-planning-gateway
+  http:
+  # API v1 routes
+  - match:
+    - uri:
+        prefix: /api/v1/auth
+    route:
+    - destination:
+        host: user-service.financial-planning.svc.cluster.local
+        port:
+          number: 8002
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+  
+  - match:
+    - uri:
+        prefix: /api/v1/banking
+    route:
+    - destination:
+        host: banking-service.financial-planning.svc.cluster.local
+        port:
+          number: 8003
+    timeout: 60s  # Longer timeout for banking operations
+    retries:
+      attempts: 2  # Fewer retries for financial operations
+      perTryTimeout: 30s
+      retryOn: 5xx,reset,connect-failure
+    headers:
+      request:
+        add:
+          x-service-route: banking
+      response:
+        add:
+          x-response-time: "%RESPONSE_DURATION%"
+  
+  - match:
+    - uri:
+        prefix: /api/v1/ml
+    route:
+    - destination:
+        host: ml-service.financial-planning.svc.cluster.local
+        port:
+          number: 8004
+    timeout: 120s  # Extended timeout for ML operations
+    retries:
+      attempts: 1  # Single attempt for expensive ML operations
+      perTryTimeout: 60s
+  
+  - match:
+    - uri:
+        prefix: /api/v1/notifications
+    route:
+    - destination:
+        host: notification-service.financial-planning.svc.cluster.local
+        port:
+          number: 8005
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  
+  - match:
+    - uri:
+        prefix: /api/v1/documents
+    route:
+    - destination:
+        host: document-service.financial-planning.svc.cluster.local
+        port:
+          number: 8006
+    timeout: 180s  # Extended timeout for document generation
+    retries:
+      attempts: 2
+      perTryTimeout: 90s
+  
+  - match:
+    - uri:
+        prefix: /api/v1/simulations
+    route:
+    - destination:
+        host: simulation-service.financial-planning.svc.cluster.local
+        port:
+          number: 8001
+    timeout: 300s  # Very long timeout for complex simulations
+    retries:
+      attempts: 1
+      perTryTimeout: 150s
+  
+  # GraphQL endpoint
+  - match:
+    - uri:
+        prefix: /graphql
+    route:
+    - destination:
+        host: graphql-gateway.financial-planning.svc.cluster.local
+        port:
+          number: 4000
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+  
+  # WebSocket routes for real-time features
+  - match:
+    - uri:
+        prefix: /ws
+    - headers:
+        upgrade:
+          exact: websocket
+    route:
+    - destination:
+        host: notification-service.financial-planning.svc.cluster.local
+        port:
+          number: 8085
+    timeout: 0s  # No timeout for WebSocket connections
+  
+  # Default route to main API
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: financial-planning-api.financial-planning.svc.cluster.local
+        port:
+          number: 8000
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+    corsPolicy:
+      allowOrigins:
+      - exact: https://app.financialplanning.com
+      - exact: https://admin.financialplanning.com
+      allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+      - PATCH
+      allowHeaders:
+      - authorization
+      - content-type
+      - x-requested-with
+      - x-request-id
+      - x-api-key
+      allowCredentials: true
+      maxAge: 24h
+
+---
+# Virtual Service for monitoring
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: monitoring-vs
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: virtual-service
+    app.kubernetes.io/component: monitoring
+spec:
+  hosts:
+  - grafana.financialplanning.com
+  - prometheus.financialplanning.com
+  - jaeger.financialplanning.com
+  gateways:
+  - monitoring-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+      headers:
+        :authority:
+          exact: grafana.financialplanning.com
+    route:
+    - destination:
+        host: grafana.financial-planning-monitoring.svc.cluster.local
+        port:
+          number: 3000
+  
+  - match:
+    - uri:
+        prefix: /
+      headers:
+        :authority:
+          exact: prometheus.financialplanning.com
+    route:
+    - destination:
+        host: prometheus.financial-planning-monitoring.svc.cluster.local
+        port:
+          number: 9090
+  
+  - match:
+    - uri:
+        prefix: /
+      headers:
+        :authority:
+          exact: jaeger.financialplanning.com
+    route:
+    - destination:
+        host: jaeger-query.financial-planning-monitoring.svc.cluster.local
+        port:
+          number: 16686
+
+---
+# Destination Rules for traffic policies
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: financial-planning-api-dr
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: destination-rule
+    app.kubernetes.io/component: traffic-policy
+spec:
+  host: financial-planning-api.financial-planning.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 10
+        maxRetries: 3
+        idleTimeout: 90s
+        h2UpgradePolicy: UPGRADE
+    loadBalancer:
+      simple: LEAST_CONN
+    circuitBreaker:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 30
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      loadBalancer:
+        simple: ROUND_ROBIN
+
+---
+# Banking service destination rule (more conservative)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: banking-service-dr
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: destination-rule
+    app.kubernetes.io/component: banking-policy
+spec:
+  host: banking-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 10s
+        keepAlive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 25
+        http2MaxRequests: 50
+        maxRequestsPerConnection: 5
+        maxRetries: 2
+        idleTimeout: 60s
+    loadBalancer:
+      simple: LEAST_CONN
+    circuitBreaker:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 3
+      interval: 60s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 25
+      minHealthPercent: 50
+
+---
+# ML service destination rule
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ml-service-dr
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: destination-rule
+    app.kubernetes.io/component: ml-policy
+spec:
+  host: ml-service.financial-planning.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 20
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 10
+        http2MaxRequests: 20
+        maxRequestsPerConnection: 2
+        maxRetries: 1
+        idleTimeout: 300s
+    loadBalancer:
+      simple: LEAST_CONN
+    circuitBreaker:
+      consecutiveGatewayErrors: 2
+      consecutive5xxErrors: 2
+      interval: 120s
+      baseEjectionTime: 120s
+      maxEjectionPercent: 50
+
+---
+# Service Entry for external APIs
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: service-entry
+    app.kubernetes.io/component: external-apis
+spec:
+  hosts:
+  - api.plaid.com
+  - production.plaid.com
+  - www.alphavantage.co
+  - api.openai.com
+  - api.anthropic.com
+  - sendgrid.api.com
+  - api.twilio.com
+  - fcm.googleapis.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  - number: 80
+    name: http
+    protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Authorization Policy for API access
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: financial-planning-authz
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: authorization-policy
+    app.kubernetes.io/component: security
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  rules:
+  # Allow authenticated users
+  - from:
+    - source:
+        principals: ["cluster.local/ns/financial-planning/sa/financial-planning-api"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+    when:
+    - key: request.headers[authorization]
+      values: ["Bearer *"]
+  
+  # Allow health checks without authentication
+  - to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/health", "/health/*", "/metrics"]
+
+---
+# Authorization Policy for banking service (stricter)
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: banking-service-authz
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: authorization-policy
+    app.kubernetes.io/component: banking-security
+spec:
+  selector:
+    matchLabels:
+      app: banking-service
+  rules:
+  # Only allow access from API service and GraphQL gateway
+  - from:
+    - source:
+        principals: 
+        - "cluster.local/ns/financial-planning/sa/financial-planning-api"
+        - "cluster.local/ns/financial-planning/sa/financial-planning-sa"
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+    when:
+    - key: request.headers[x-service-route]
+      values: ["banking"]
+    - key: request.headers[authorization]
+      values: ["Bearer *"]
+
+---
+# Peer Authentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: peer-authentication
+    app.kubernetes.io/component: mtls
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Request Authentication for JWT
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: jwt-auth
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: request-authentication
+    app.kubernetes.io/component: jwt
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  jwtRules:
+  - issuer: "https://auth.financialplanning.com"
+    jwksUri: "https://auth.financialplanning.com/.well-known/jwks.json"
+    audiences:
+    - "financial-planning-api"
+    outputPayloadToHeader: "x-jwt-payload"
+  - issuer: "financial-planning-internal"
+    jwks: |
+      {
+        "keys": [
+          {
+            "kty": "RSA",
+            "use": "sig",
+            "kid": "financial-planning-key-1",
+            "n": "your-public-key-n",
+            "e": "AQAB"
+          }
+        ]
+      }
+    audiences:
+    - "internal-services"
+
+---
+# Telemetry configuration for observability
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: financial-planning-telemetry
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: telemetry
+    app.kubernetes.io/component: observability
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        request_id:
+          value: "%{REQUEST_ID}"
+        user_id:
+          value: "%{REQUEST_HEADERS['x-user-id']}"
+        service_version:
+          value: "%{ENVIRONMENT['SERVICE_VERSION']}"
+  accessLogging:
+  - providers:
+    - name: otel
+  - filter:
+      expression: 'response.code >= 400'
+  tracing:
+  - providers:
+    - name: jaeger
+  - randomSamplingPercentage: 1.0
+
+---
+# Envoy Filter for custom headers
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: financial-planning-headers
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: envoy-filter
+    app.kubernetes.io/component: headers
+spec:
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_request(request_handle)
+              -- Add security headers
+              request_handle:headers():add("x-request-start", tostring(os.time()))
+              request_handle:headers():add("x-forwarded-proto", "https")
+              
+              -- Rate limiting based on user
+              local user_id = request_handle:headers():get("x-user-id")
+              if user_id then
+                request_handle:headers():add("x-rate-limit-key", "user:" .. user_id)
+              end
+            end
+            
+            function envoy_on_response(response_handle)
+              -- Add security headers to response
+              response_handle:headers():add("x-content-type-options", "nosniff")
+              response_handle:headers():add("x-frame-options", "DENY")
+              response_handle:headers():add("x-xss-protection", "1; mode=block")
+              response_handle:headers():add("strict-transport-security", "max-age=31536000; includeSubDomains; preload")
+              
+              -- Add response timing
+              local request_start = response_handle:headers():get("x-request-start")
+              if request_start then
+                local duration = os.time() - tonumber(request_start)
+                response_handle:headers():add("x-response-time", tostring(duration) .. "s")
+              end
+            end
+
+---
+# Wasm Plugin for advanced security
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: financial-planning-security
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: wasm-plugin
+    app.kubernetes.io/component: security
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  url: oci://ghcr.io/financial-planning/security-wasm:v1.0.0
+  phase: AUTHN
+  pluginConfig:
+    # Rate limiting configuration
+    rate_limits:
+      - key: "user_id"
+        requests_per_minute: 1000
+        burst: 100
+      - key: "ip_address"
+        requests_per_minute: 10000
+        burst: 1000
+    
+    # Security rules
+    security_rules:
+      - name: "block_suspicious_patterns"
+        pattern: "(?i)(union|select|insert|delete|drop|create|alter|exec|script)"
+        action: "block"
+      - name: "require_auth_for_api"
+        path_pattern: "/api/.*"
+        require_auth: true
+    
+    # Geographic restrictions
+    geo_restrictions:
+      allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "JP"]
+      blocked_countries: []

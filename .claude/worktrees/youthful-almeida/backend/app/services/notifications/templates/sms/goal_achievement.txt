@@ -1,0 +1,1 @@
+🎉 Congratulations {user_name}! You've achieved your "{goal_name}" goal of ${target_amount}. View details: {achievement_url}

@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: financial-planning-api-pdb
+  namespace: financial-planning
+  labels:
+    app: financial-planning-api
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  maxUnavailable: 1

@@ -1,0 +1,777 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Financial Planning System - Production Overview",
+    "tags": ["financial-planning", "production", "overview"],
+    "style": "dark",
+    "timezone": "UTC",
+    "editable": true,
+    "hideControls": false,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+      "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+    },
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Overview",
+        "type": "row",
+        "collapsed": false,
+        "datasource": null,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "panels": []
+      },
+      {
+        "id": 2,
+        "title": "Service Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"financial-planning\"}",
+            "legendFormat": "API Service",
+            "refId": "A"
+          },
+          {
+            "expr": "up{job=\"postgresql-exporter\"}",
+            "legendFormat": "Database",
+            "refId": "B"
+          },
+          {
+            "expr": "up{job=\"redis-exporter\"}",
+            "legendFormat": "Redis",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "value": "0",
+                "text": "DOWN"
+              },
+              {
+                "type": "value", 
+                "value": "1",
+                "text": "UP"
+              }
+            ],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "background"
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 1
+        }
+      },
+      {
+        "id": 3,
+        "title": "Request Rate (req/sec)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{service=\"financial-planning\"}[5m])",
+            "legendFormat": "Requests/sec",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "reqps",
+            "decimals": 2
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 1
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Rate (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "(rate(http_requests_total{service=\"financial-planning\",code=~\"5..\"}[5m]) / rate(http_requests_total{service=\"financial-planning\"}[5m])) * 100",
+            "legendFormat": "Error Rate",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 1
+        }
+      },
+      {
+        "id": 5,
+        "title": "Response Time P95 (ms)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service=\"financial-planning\"}[5m])) * 1000",
+            "legendFormat": "P95 Latency",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "ms",
+            "decimals": 0,
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 500
+                },
+                {
+                  "color": "red",
+                  "value": 2000
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value"
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 1
+        }
+      },
+      {
+        "id": 6,
+        "title": "Active Pods",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_ready{condition=\"true\",namespace=\"financial-planning-production\"})",
+            "legendFormat": "Ready Pods",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 5
+        }
+      },
+      {
+        "id": 7,
+        "title": "Memory Usage (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "avg((container_memory_usage_bytes{namespace=\"financial-planning-production\",container=\"financial-planning\"} / container_spec_memory_limit_bytes{namespace=\"financial-planning-production\",container=\"financial-planning\"}) * 100)",
+            "legendFormat": "Avg Memory",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 85
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 5
+        }
+      },
+      {
+        "id": 8,
+        "title": "CPU Usage (%)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"financial-planning-production\",container=\"financial-planning\"}[5m]) * 100)",
+            "legendFormat": "Avg CPU",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 70
+                },
+                {
+                  "color": "red",
+                  "value": 85
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 5
+        }
+      },
+      {
+        "id": 9,
+        "title": "Application Performance",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 9
+        }
+      },
+      {
+        "id": 10,
+        "title": "Request Rate Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{service=\"financial-planning\"}[5m])",
+            "legendFormat": "{{method}} {{endpoint}}",
+            "refId": "A"
+          }
+        ],
+        "xAxis": {
+          "show": true
+        },
+        "yAxes": [
+          {
+            "label": "req/sec",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 10
+        }
+      },
+      {
+        "id": 11,
+        "title": "Response Time Percentiles",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{service=\"financial-planning\"}[5m])) * 1000",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service=\"financial-planning\"}[5m])) * 1000",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{service=\"financial-planning\"}[5m])) * 1000",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "milliseconds",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 10
+        }
+      },
+      {
+        "id": 12,
+        "title": "HTTP Status Codes",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{service=\"financial-planning\",code=~\"2..\"}[5m])",
+            "legendFormat": "2xx Success",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(http_requests_total{service=\"financial-planning\",code=~\"4..\"}[5m])",
+            "legendFormat": "4xx Client Error",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(http_requests_total{service=\"financial-planning\",code=~\"5..\"}[5m])",
+            "legendFormat": "5xx Server Error",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "req/sec",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 18
+        }
+      },
+      {
+        "id": 13,
+        "title": "Infrastructure Metrics",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 26
+        }
+      },
+      {
+        "id": 14,
+        "title": "Pod Resource Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{namespace=\"financial-planning-production\",container=\"financial-planning\"} / 1024 / 1024",
+            "legendFormat": "Memory {{pod}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"financial-planning-production\",container=\"financial-planning\"}[5m]) * 100",
+            "legendFormat": "CPU {{pod}}",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "MB / %",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 27
+        }
+      },
+      {
+        "id": 15,
+        "title": "Pod Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kube_pod_info{namespace=\"financial-planning-production\"}",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "__name__": true,
+                "job": true,
+                "instance": true
+              }
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 27
+        }
+      },
+      {
+        "id": 16,
+        "title": "Database Metrics",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 35
+        }
+      },
+      {
+        "id": 17,
+        "title": "Database Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends",
+            "legendFormat": "Active Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "pg_settings_max_connections",
+            "legendFormat": "Max Connections",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "connections",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 36
+        }
+      },
+      {
+        "id": 18,
+        "title": "Database Query Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(pg_stat_database_xact_commit[5m])",
+            "legendFormat": "Commits/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(pg_stat_database_xact_rollback[5m])",
+            "legendFormat": "Rollbacks/sec", 
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "transactions/sec",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 36
+        }
+      },
+      {
+        "id": 19,
+        "title": "Redis Metrics",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "redis_connected_clients",
+            "legendFormat": "Connected Clients",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(redis_total_commands_processed[5m])",
+            "legendFormat": "Commands/sec",
+            "refId": "B"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "count / ops/sec",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 36
+        }
+      },
+      {
+        "id": 20,
+        "title": "Business Metrics",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        }
+      },
+      {
+        "id": 21,
+        "title": "Active Users",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "active_user_sessions",
+            "legendFormat": "Active Sessions",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 45
+        }
+      },
+      {
+        "id": 22,
+        "title": "Financial Calculations",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(monte_carlo_simulations_total[5m]) * 60",
+            "legendFormat": "Simulations/min",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 45
+        }
+      },
+      {
+        "id": 23,
+        "title": "PDF Exports",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(pdf_exports_total[5m]) * 60",
+            "legendFormat": "PDFs/min",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 45
+        }
+      },
+      {
+        "id": 24,
+        "title": "AI Requests",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(ai_requests_total[5m]) * 60",
+            "legendFormat": "AI Calls/min",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 45
+        }
+      },
+      {
+        "id": 25,
+        "title": "Feature Usage Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(feature_usage_total[5m])",
+            "legendFormat": "{{feature}}",
+            "refId": "A"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "usage/sec",
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 49
+        }
+      }
+    ]
+  }
+}

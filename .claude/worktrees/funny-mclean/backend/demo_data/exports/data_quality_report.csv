@@ -1,0 +1,5 @@
+check_name,check_type,column,threshold,passed,message
+Market Data Completeness,completeness,price,,True,Missing values: 0
+Price Range Validation,range,price,,True,Invalid price values: 0
+Portfolio Allocation Sum,business_rule,allocation_percent,100.0,True,Invalid allocation sums: 0
+Streaming Data Timeliness,timeliness,timestamp,0.8,True,Recent data percentage: 100.00%

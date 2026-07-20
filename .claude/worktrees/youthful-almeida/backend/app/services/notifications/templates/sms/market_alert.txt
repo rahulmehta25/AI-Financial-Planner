@@ -1,0 +1,1 @@
+MARKET ALERT: {security_name} ({symbol}) {alert_type}. Price: ${current_price} ({percentage_change}%). Portfolio impact: {portfolio_impact}. View: {portfolio_url}

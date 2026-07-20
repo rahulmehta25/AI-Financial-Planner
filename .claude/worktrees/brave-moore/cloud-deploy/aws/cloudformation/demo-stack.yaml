@@ -1,0 +1,630 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Financial Planning Demo - Cost-Optimized CloudFormation Stack'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: demo
+    AllowedValues:
+      - demo
+      - staging
+      - production
+  
+  ProjectName:
+    Description: Project name for resource naming
+    Type: String
+    Default: finplan
+  
+  DatabasePassword:
+    Description: RDS master password
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 41
+    Default: ChangeMeNow123!
+  
+  KeyName:
+    Description: EC2 Key Pair for SSH access (optional)
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: ''
+  
+  CertificateArn:
+    Description: ACM Certificate ARN for HTTPS (optional)
+    Type: String
+    Default: ''
+  
+  AlarmEmail:
+    Description: Email for cost and operational alarms
+    Type: String
+    Default: ''
+
+Mappings:
+  EnvironmentConfig:
+    demo:
+      InstanceType: t3.micro
+      DBInstanceClass: db.t3.micro
+      CacheNodeType: cache.t3.micro
+      DesiredCapacity: 1
+      MaxCapacity: 2
+    staging:
+      InstanceType: t3.small
+      DBInstanceClass: db.t3.small
+      CacheNodeType: cache.t3.small
+      DesiredCapacity: 2
+      MaxCapacity: 4
+    production:
+      InstanceType: t3.medium
+      DBInstanceClass: db.t3.medium
+      CacheNodeType: cache.m5.large
+      DesiredCapacity: 3
+      MaxCapacity: 10
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, '']]
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+  IsProduction: !Equals [!Ref EnvironmentName, production]
+
+Resources:
+  # VPC Configuration (Using Default VPC)
+  SecurityGroupALB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Application Load Balancer
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-alb-sg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  SecurityGroupECS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ECS tasks
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref SecurityGroupALB
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecs-sg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  SecurityGroupRDS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS database
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref SecurityGroupECS
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-rds-sg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # RDS Database
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS database
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-db-subnet-group
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  PostgresDB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub ${ProjectName}-db-${EnvironmentName}
+      DBName: financial_planning
+      Engine: postgres
+      EngineVersion: '15.5'
+      DBInstanceClass: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, DBInstanceClass]
+      AllocatedStorage: 20
+      MaxAllocatedStorage: 100
+      StorageType: gp3
+      StorageEncrypted: true
+      MasterUsername: dbadmin
+      MasterUserPassword: !Ref DatabasePassword
+      VPCSecurityGroups:
+        - !Ref SecurityGroupRDS
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: !If [IsProduction, 30, 7]
+      PreferredBackupWindow: "03:00-04:00"
+      PreferredMaintenanceWindow: "sun:04:00-sun:05:00"
+      MultiAZ: !If [IsProduction, true, false]
+      DeletionProtection: !If [IsProduction, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-database
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ElastiCache Redis
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for ElastiCache
+      SubnetIds:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-cache-subnet-group
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  RedisCache:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      CacheNodeType: !FindInMap [EnvironmentConfig, !Ref EnvironmentName, CacheNodeType]
+      Engine: redis
+      NumCacheNodes: 1
+      VpcSecurityGroupIds:
+        - !Ref SecurityGroupECS
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-redis
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ECR Repositories
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-backend
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-backend-ecr
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${ProjectName}-frontend
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-frontend-ecr
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${ProjectName}-cluster-${EnvironmentName}
+      ClusterSettings:
+        - Name: containerInsights
+          Value: !If [IsProduction, enabled, disabled]
+      CapacityProviders:
+        - FARGATE_SPOT
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE_SPOT
+          Weight: 100
+          Base: 0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecs-cluster
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # IAM Roles
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecs-execution-role
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub ${StaticBucket.Arn}/*
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-ecs-task-role
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # CloudWatch Log Groups
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/backend
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${ProjectName}/frontend
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  # Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${ProjectName}-alb-${EnvironmentName}
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroupALB
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-alb
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # Target Groups
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-backend-tg
+      Port: 8000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-backend-tg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${ProjectName}-frontend-tg
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-frontend-tg
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # ALB Listeners
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: '443'
+            StatusCode: HTTP_301
+
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificate
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  # Listener Rules
+  BackendListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !If [HasCertificate, !Ref HTTPSListener, !Ref HTTPListener]
+      Priority: 100
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /api/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  # S3 Bucket for Static Assets
+  StaticBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${ProjectName}-static-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-static
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${ProjectName} static assets
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt StaticBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOAI}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        PriceClass: PriceClass_100
+        Tags:
+          - Key: Name
+            Value: !Sub ${ProjectName}-cdn
+          - Key: Environment
+            Value: !Ref EnvironmentName
+
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub ${ProjectName} OAI
+
+  # Cost Monitoring
+  CostAlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlarmEmail
+    Properties:
+      DisplayName: !Sub ${ProjectName} Cost Alerts
+      Subscription:
+        - Endpoint: !Ref AlarmEmail
+          Protocol: email
+
+  HighCostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlarmEmail
+    Properties:
+      AlarmName: !Sub ${ProjectName}-high-cost-alarm
+      AlarmDescription: Alert when monthly costs exceed threshold
+      MetricName: EstimatedCharges
+      Namespace: AWS/Billing
+      Statistic: Maximum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref CostAlarmTopic
+      Dimensions:
+        - Name: Currency
+          Value: USD
+
+  # VPC and Subnets (simplified for demo)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-vpc
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-subnet-1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-subnet-2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-igw
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${ProjectName}-public-rt
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  SubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+Outputs:
+  ApplicationURL:
+    Description: URL to access the application
+    Value: !Sub http://${ApplicationLoadBalancer.DNSName}
+    Export:
+      Name: !Sub ${AWS::StackName}-ApplicationURL
+
+  BackendRepositoryURI:
+    Description: ECR Repository URI for backend
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${BackendRepository}
+    Export:
+      Name: !Sub ${AWS::StackName}-BackendRepo
+
+  FrontendRepositoryURI:
+    Description: ECR Repository URI for frontend
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${FrontendRepository}
+    Export:
+      Name: !Sub ${AWS::StackName}-FrontendRepo
+
+  CloudFrontURL:
+    Description: CloudFront distribution URL
+    Value: !Sub https://${CloudFrontDistribution.DomainName}
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudFrontURL
+
+  EstimatedMonthlyCost:
+    Description: Estimated monthly cost for this stack
+    Value: "$85 - $100 per month (depending on usage)"

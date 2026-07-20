@@ -1,0 +1,482 @@
+---
+# Istio ServiceEntry for external API access
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: service-mesh
+spec:
+  hosts:
+  - api.alpha-vantage.co
+  - finnhub.io
+  - api.quandl.com
+  - api.marketstack.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  - number: 80
+    name: http
+    protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+---
+# Istio VirtualService for traffic routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: financial-planning-api-vs
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: service-mesh
+spec:
+  hosts:
+  - api.financial-planning.yourdomain.com
+  - financial-planning-api-svc.financial-planning-prod.svc.cluster.local
+  gateways:
+  - financial-planning-api-gateway
+  - mesh  # For internal traffic
+  http:
+  # Health check route
+  - match:
+    - uri:
+        exact: /health
+    route:
+    - destination:
+        host: financial-planning-api-svc.financial-planning-prod.svc.cluster.local
+        port:
+          number: 80
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+  
+  # API routes with rate limiting
+  - match:
+    - uri:
+        prefix: /api/
+    route:
+    - destination:
+        host: financial-planning-api-svc.financial-planning-prod.svc.cluster.local
+        port:
+          number: 80
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 15s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+  
+  # Default route
+  - route:
+    - destination:
+        host: financial-planning-api-svc.financial-planning-prod.svc.cluster.local
+        port:
+          number: 80
+---
+# Istio Gateway for ingress traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: financial-planning-api-gateway
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: service-mesh
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: financial-planning-api-tls
+    hosts:
+    - api.financial-planning.yourdomain.com
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - api.financial-planning.yourdomain.com
+    tls:
+      httpsRedirect: true  # Redirect HTTP to HTTPS
+---
+# Istio DestinationRule for load balancing and circuit breaker
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: financial-planning-api-dr
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: service-mesh
+spec:
+  host: financial-planning-api-svc.financial-planning-prod.svc.cluster.local
+  trafficPolicy:
+    # Load balancing policy
+    loadBalancer:
+      simple: LEAST_CONN  # or ROUND_ROBIN, RANDOM, PASSTHROUGH
+    
+    # Connection pool settings
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+        tcpKeepalive:
+          time: 7200s
+          interval: 75s
+      http:
+        http1MaxPendingRequests: 64    # Queue for pending requests
+        http2MaxRequests: 1000         # Max requests per connection
+        maxRequestsPerConnection: 10   # Max requests per HTTP/1.1 connection
+        maxRetries: 3                  # Max retries to all hosts
+        consecutiveGatewayErrors: 5    # Before circuit breaker opens
+        interval: 30s                  # Analysis interval
+        baseEjectionTime: 30s          # Minimum ejection duration
+        maxEjectionPercent: 50         # Max % of upstream hosts ejected
+    
+    # Circuit breaker
+    outlierDetection:
+      consecutiveGatewayErrors: 5      # Errors before ejection
+      consecutive5xxErrors: 5          # 5xx errors before ejection  
+      interval: 30s                    # Analysis interval
+      baseEjectionTime: 30s            # Minimum ejection duration
+      maxEjectionPercent: 50           # Max % of upstream hosts ejected
+      minHealthPercent: 30             # Minimum healthy upstream hosts
+---
+# Istio PeerAuthentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: financial-planning-api-peer-auth
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: security
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  mtls:
+    mode: STRICT  # Require mTLS for all traffic
+---
+# Istio AuthorizationPolicy for access control
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: financial-planning-api-authz
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: security
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  rules:
+  # Allow health checks from any source
+  - to:
+    - operation:
+        paths: ["/health", "/status"]
+        methods: ["GET"]
+  
+  # Allow API access from authenticated sources
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+    to:
+    - operation:
+        paths: ["/api/*"]
+        methods: ["GET", "POST", "PUT", "DELETE"]
+  
+  # Allow metrics scraping from monitoring
+  - from:
+    - source:
+        namespaces: ["monitoring"]
+    to:
+    - operation:
+        paths: ["/metrics"]
+        methods: ["GET"]
+    - operation:
+        ports: ["9090"]
+---
+# Istio Telemetry configuration for observability
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: financial-planning-api-telemetry
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: observability
+spec:
+  selector:
+    matchLabels:
+      app: financial-planning-api
+  metrics:
+  - providers:
+    - name: prometheus
+  - overrides:
+    - match:
+        metric: ALL_METRICS
+      tagOverrides:
+        destination_service_name:
+          value: "financial-planning-api"
+        source_app:
+          operation: UPSERT
+          value: "{{ .source_app | default \"unknown\" }}"
+  tracing:
+  - providers:
+    - name: jaeger
+  accessLogging:
+  - providers:
+    - name: otel
+---
+# EnvoyFilter for advanced traffic management
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: financial-planning-api-ratelimit
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    environment: production
+    component: traffic-management
+spec:
+  workloadSelector:
+    labels:
+      app: financial-planning-api
+  configPatches:
+  # Add rate limiting filter
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.local_ratelimit
+        typed_config:
+          "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+          type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+          value:
+            stat_prefix: local_rate_limiter
+            token_bucket:
+              max_tokens: 100
+              tokens_per_fill: 100
+              fill_interval: 60s
+            filter_enabled:
+              runtime_key: local_rate_limit_enabled
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            filter_enforced:
+              runtime_key: local_rate_limit_enforced
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+---
+# Kiali dashboard access (for service mesh visualization)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiali-ingress
+  namespace: istio-system
+  labels:
+    app: kiali
+    environment: production
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: kiali-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+spec:
+  tls:
+  - hosts:
+    - kiali.financial-planning.yourdomain.com
+    secretName: kiali-tls
+  rules:
+  - host: kiali.financial-planning.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kiali
+            port:
+              number: 20001
+---
+# Jaeger tracing configuration
+apiVersion: jaegertracing.io/v1
+kind: Jaeger
+metadata:
+  name: financial-planning-tracing
+  namespace: financial-planning-prod
+  labels:
+    app: jaeger
+    environment: production
+    component: tracing
+spec:
+  strategy: production
+  storage:
+    type: elasticsearch
+    options:
+      es:
+        server-urls: http://elasticsearch.logging.svc.cluster.local:9200
+        index-prefix: financial-planning
+        max-num-spans: 10000000
+        max-span-age: 168h  # 7 days
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+    - jaeger.financial-planning.yourdomain.com
+    tls:
+    - hosts:
+      - jaeger.financial-planning.yourdomain.com
+      secretName: jaeger-tls
+  agent:
+    strategy: DaemonSet
+  collector:
+    replicas: 3
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+  query:
+    replicas: 2
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 512Mi
+---
+# Service Monitor for Istio metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: istio-mesh-metrics
+  namespace: financial-planning-prod
+  labels:
+    app: istio-monitoring
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: istiod
+  namespaceSelector:
+    matchNames:
+    - istio-system
+  endpoints:
+  - port: http-monitoring
+    interval: 15s
+    path: /stats/prometheus
+---
+# Grafana Dashboard ConfigMap for Financial Planning API
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: financial-planning-dashboard
+  namespace: monitoring
+  labels:
+    app: grafana
+    grafana_dashboard: "1"
+data:
+  financial-planning-api.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Financial Planning API - Production",
+        "tags": ["financial-planning", "api", "production"],
+        "timezone": "UTC",
+        "panels": [
+          {
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{destination_service_name=\"financial-planning-api\"}[5m])) by (source_app)",
+                "legendFormat": "{{source_app}}"
+              }
+            ]
+          },
+          {
+            "title": "Response Time (P95)",
+            "type": "graph", 
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_name=\"financial-planning-api\"}[5m])) by (le))",
+                "legendFormat": "P95"
+              }
+            ]
+          },
+          {
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum(rate(istio_requests_total{destination_service_name=\"financial-planning-api\",response_code!~\"2..\"}[5m])) / sum(rate(istio_requests_total{destination_service_name=\"financial-planning-api\"}[5m]))",
+                "legendFormat": "Error Rate"
+              }
+            ]
+          },
+          {
+            "title": "Pod CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"financial-planning-prod\",pod=~\"financial-planning-api-.*\"}[5m]))",
+                "legendFormat": "{{pod}}"
+              }
+            ]
+          },
+          {
+            "title": "Pod Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"financial-planning-prod\",pod=~\"financial-planning-api-.*\"})",
+                "legendFormat": "{{pod}}"
+              }
+            ]
+          }
+        ],
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        }
+      }
+    }

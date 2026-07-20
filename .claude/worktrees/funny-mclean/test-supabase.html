@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Supabase Connection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    
+    <div id="status" class="test-section info">
+        Click the buttons below to test different Supabase features
+    </div>
+
+    <div class="test-section">
+        <h2>1. Test Connection</h2>
+        <button onclick="testConnection()">Test Connection</button>
+        <div id="connection-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Check Tables</h2>
+        <button onclick="checkTables()">Check Tables</button>
+        <div id="tables-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Test Authentication</h2>
+        <input type="email" id="email" placeholder="test@example.com" value="test@example.com">
+        <input type="password" id="password" placeholder="password123" value="password123">
+        <button onclick="testSignUp()">Sign Up</button>
+        <button onclick="testSignIn()">Sign In</button>
+        <button onclick="testSignOut()">Sign Out</button>
+        <button onclick="getCurrentUser()">Get Current User</button>
+        <div id="auth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Test Portfolio Operations</h2>
+        <button onclick="createPortfolio()">Create Portfolio</button>
+        <button onclick="getPortfolios()">Get Portfolios</button>
+        <div id="portfolio-result"></div>
+    </div>
+
+    <script>
+        // Initialize Supabase
+        const SUPABASE_URL = 'https://tqxhvrsdroafvigbgaxx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxeGh2cnNkcm9hZnZpZ2JnYXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTE4OTMsImV4cCI6MjA3MjI2Nzg5M30.Q-eHrZbjQXXJoN0Ry5JICZRkWJ6A_KcaiDlhzzamekU';
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        function showResult(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<pre class="${isSuccess ? 'success' : 'error'}">${message}</pre>`;
+        }
+
+        async function testConnection() {
+            try {
+                const { data, error } = await supabaseClient.from('profiles').select('count', { count: 'exact' });
+                
+                if (error) throw error;
+                
+                showResult('connection-result', '✅ Connection successful!', true);
+                document.getElementById('status').className = 'test-section success';
+                document.getElementById('status').textContent = '✅ Supabase is connected and working!';
+            } catch (error) {
+                showResult('connection-result', `❌ Connection failed: ${error.message}`, false);
+            }
+        }
+
+        async function checkTables() {
+            const tables = ['profiles', 'portfolios', 'holdings', 'transactions', 'goals', 'market_data'];
+            let results = [];
+            
+            for (const table of tables) {
+                try {
+                    const { error } = await supabaseClient.from(table).select('count', { count: 'exact', head: true });
+                    results.push(`✅ ${table}: exists`);
+                } catch (error) {
+                    results.push(`❌ ${table}: ${error.message}`);
+                }
+            }
+            
+            showResult('tables-result', results.join('\n'), true);
+        }
+
+        async function testSignUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const { data, error } = await supabaseClient.auth.signUp({
+                    email,
+                    password,
+                });
+                
+                if (error) throw error;
+                
+                showResult('auth-result', `✅ Sign up successful!\n${JSON.stringify(data, null, 2)}`, true);
+            } catch (error) {
+                showResult('auth-result', `❌ Sign up failed: ${error.message}`, false);
+            }
+        }
+
+        async function testSignIn() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+                
+                if (error) throw error;
+                
+                showResult('auth-result', `✅ Sign in successful!\nUser ID: ${data.user.id}\nEmail: ${data.user.email}`, true);
+            } catch (error) {
+                showResult('auth-result', `❌ Sign in failed: ${error.message}`, false);
+            }
+        }
+
+        async function testSignOut() {
+            try {
+                const { error } = await supabaseClient.auth.signOut();
+                
+                if (error) throw error;
+                
+                showResult('auth-result', '✅ Signed out successfully!', true);
+            } catch (error) {
+                showResult('auth-result', `❌ Sign out failed: ${error.message}`, false);
+            }
+        }
+
+        async function getCurrentUser() {
+            try {
+                const { data: { user }, error } = await supabaseClient.auth.getUser();
+                
+                if (error) throw error;
+                
+                if (user) {
+                    showResult('auth-result', `✅ Current user:\nID: ${user.id}\nEmail: ${user.email}`, true);
+                } else {
+                    showResult('auth-result', 'No user logged in', false);
+                }
+            } catch (error) {
+                showResult('auth-result', `❌ Error: ${error.message}`, false);
+            }
+        }
+
+        async function createPortfolio() {
+            try {
+                // Check if user is logged in first
+                const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+                
+                if (userError || !user) {
+                    showResult('portfolio-result', '❌ Please sign in first', false);
+                    return;
+                }
+                
+                const { data, error } = await supabaseClient
+                    .from('portfolios')
+                    .insert({
+                        name: `Test Portfolio ${new Date().toISOString()}`,
+                        description: 'Created from test page',
+                        currency: 'USD',
+                        user_id: user.id
+                    })
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                
+                showResult('portfolio-result', `✅ Portfolio created!\n${JSON.stringify(data, null, 2)}`, true);
+            } catch (error) {
+                showResult('portfolio-result', `❌ Failed to create portfolio: ${error.message}`, false);
+            }
+        }
+
+        async function getPortfolios() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('portfolios')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                showResult('portfolio-result', `✅ Found ${data.length} portfolios:\n${JSON.stringify(data, null, 2)}`, true);
+            } catch (error) {
+                showResult('portfolio-result', `❌ Failed to get portfolios: ${error.message}`, false);
+            }
+        }
+
+        // Test connection on load
+        window.onload = () => {
+            console.log('Supabase test page loaded. Click buttons to test different features.');
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-08-26T15:27:24.266Z",
+  "url": "http://localhost:5173",
+  "tests": [
+    {
+      "viewport": "desktop",
+      "elementsFound": {
+        "header": 0,
+        "[data-testid=\"header\"]": 0,
+        "h1": 1,
+        "h2": 0,
+        "form": 0,
+        "input": 0,
+        "button": 10,
+        "select": 0,
+        "canvas": 1,
+        "svg": 6,
+        ".chart": 0,
+        "[class*=\"chart\"]": 0,
+        "nav": 1,
+        ".navigation": 0,
+        "[class*=\"nav\"]": 0
+      },
+      "consoleErrors": [],
+      "screenshot": "desktop-main.png"
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "desktop-main.png",
+    "tablet-main.png",
+    "mobile-main.png"
+  ],
+  "performance": {
+    "loadTime": 0,
+    "domContentLoaded": 0.09999996423721313,
+    "firstPaint": 400,
+    "firstContentfulPaint": 516
+  },
+  "accessibilityIssues": []
+}

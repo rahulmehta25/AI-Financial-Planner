@@ -1,0 +1,682 @@
+# Network Policies for Financial Planning Application
+# Comprehensive network segmentation and micro-segmentation
+
+# Default deny all ingress and egress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: network-policy
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: financial-planning
+  annotations:
+    description: "Default deny all ingress and egress traffic - explicit allow required"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Allow DNS resolution for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: network-policy
+    app.kubernetes.io/component: dns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS (TCP and UDP)
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow access to kube-dns service
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Financial Planning API ingress policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: financial-planning-api-ingress
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow ingress from nginx ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090  # Metrics
+  # Allow ingress from same namespace (microservices communication)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+  # Allow monitoring access
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+
+---
+# Financial Planning API egress policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: financial-planning-api-egress
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: financial-planning-api
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planning-api
+  policyTypes:
+  - Egress
+  egress:
+  # Allow HTTPS outbound (external APIs)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow HTTP outbound (internal services)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+  # Allow database connections
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+  # Allow communication with other microservices
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    ports:
+    - protocol: TCP
+      port: 8001  # Simulation service
+    - protocol: TCP
+      port: 8002  # User service
+    - protocol: TCP
+      port: 8003  # Banking service
+    - protocol: TCP
+      port: 8004  # ML service
+    - protocol: TCP
+      port: 8005  # Notification service
+    - protocol: TCP
+      port: 8006  # Document service
+    - protocol: TCP
+      port: 4000  # GraphQL gateway
+    - protocol: TCP
+      port: 50051  # gRPC simulation
+    - protocol: TCP
+      port: 50052  # gRPC user
+    - protocol: TCP
+      port: 50053  # gRPC banking
+    - protocol: TCP
+      port: 50054  # gRPC ML
+    - protocol: TCP
+      port: 50055  # gRPC notification
+    - protocol: TCP
+      port: 50056  # gRPC document
+  # Allow monitoring and logging
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9200  # Elasticsearch
+    - protocol: TCP
+      port: 24224 # Fluentd
+    - protocol: UDP
+      port: 6831  # Jaeger agent
+
+---
+# Banking service network policy (most restrictive due to sensitive data)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: banking-service-policy
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: banking-service
+    app.kubernetes.io/component: network-policy
+  annotations:
+    description: "Strict network policy for banking service handling sensitive financial data"
+spec:
+  podSelector:
+    matchLabels:
+      app: banking-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow ingress from API and GraphQL gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app: financial-planning-api
+    - podSelector:
+        matchLabels:
+          app: graphql-gateway
+    ports:
+    - protocol: TCP
+      port: 8003
+    - protocol: TCP
+      port: 50053
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9092
+  egress:
+  # Database access only
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  # HTTPS for external banking APIs (Plaid, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Monitoring and logging
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9200
+    - protocol: TCP
+      port: 24224
+    - protocol: UDP
+      port: 6831
+
+---
+# User service network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-service-policy
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: user-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from API and other services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: financial-planning-api
+    - podSelector:
+        matchLabels:
+          app: graphql-gateway
+    - podSelector:
+        matchLabels:
+          app: banking-service
+    ports:
+    - protocol: TCP
+      port: 8002
+    - protocol: TCP
+      port: 50052
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9091
+  egress:
+  # Database access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  # HTTPS for external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Communication with notification service
+  - to:
+    - podSelector:
+        matchLabels:
+          app: notification-service
+    ports:
+    - protocol: TCP
+      port: 8005
+    - protocol: TCP
+      port: 50055
+
+---
+# ML service network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-service-policy
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: ml-service
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: ml-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from API and specific services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: financial-planning-api
+    - podSelector:
+        matchLabels:
+          app: banking-service
+    - podSelector:
+        matchLabels:
+          app: simulation-service
+    ports:
+    - protocol: TCP
+      port: 8004
+    - protocol: TCP
+      port: 50054
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9093
+  egress:
+  # Database access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432
+  # HTTPS for AI/ML APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # MLflow tracking
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5000
+
+---
+# Notification service network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: notification-service-policy
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: notification-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from all application services
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    ports:
+    - protocol: TCP
+      port: 8005
+    - protocol: TCP
+      port: 8085  # WebSocket
+    - protocol: TCP
+      port: 50055
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9094
+  egress:
+  # Database access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  # HTTPS for external notification services (SendGrid, Twilio, FCM)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 587  # SMTP
+    - protocol: TCP
+      port: 25   # SMTP
+
+---
+# Document service network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: document-service-policy
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: document-service
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: document-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from API and specific services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: financial-planning-api
+    - podSelector:
+        matchLabels:
+          app: user-service
+    ports:
+    - protocol: TCP
+      port: 8006
+    - protocol: TCP
+      port: 50056
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9095
+  egress:
+  # Database access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    ports:
+    - protocol: TCP
+      port: 5432
+  # HTTPS for external services (S3, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# Database namespace network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-namespace-policy
+  namespace: financial-planning-data
+  labels:
+    app.kubernetes.io/name: database
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow ingress from application namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+    - protocol: TCP
+      port: 5000  # MLflow
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9187  # PostgreSQL exporter
+    - protocol: TCP
+      port: 9121  # Redis exporter
+  # Allow internal communication within data namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+  egress:
+  # Allow internal communication
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+  # Allow HTTPS for backups and replication
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow monitoring and logging
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    ports:
+    - protocol: TCP
+      port: 9200
+    - protocol: TCP
+      port: 24224
+
+---
+# Monitoring namespace network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-namespace-policy
+  namespace: financial-planning-monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from all monitored namespaces
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+  # Allow ingress controller access to Grafana
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    ports:
+    - protocol: TCP
+      port: 3000  # Grafana
+  egress:
+  # Allow all egress for monitoring tools
+  - to: []
+
+---
+# Istio system namespace network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: istio-system-policy
+  namespace: istio-system
+  labels:
+    app.kubernetes.io/name: istio
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow all ingress to Istio system for service mesh functionality
+  - from: []
+  egress:
+  # Allow all egress from Istio system
+  - to: []
+
+---
+# Block inter-namespace communication except for explicitly allowed
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: financial-planning
+  labels:
+    app.kubernetes.io/name: network-policy
+    app.kubernetes.io/component: isolation
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Deny all cross-namespace ingress except from allowed namespaces
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+  egress:
+  # Allow egress to specific namespaces only
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-data
+    - namespaceSelector:
+        matchLabels:
+          name: financial-planning-monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system

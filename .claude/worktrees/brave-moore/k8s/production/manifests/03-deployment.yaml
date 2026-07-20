@@ -1,0 +1,362 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financial-planning-api
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: backend
+    environment: production
+    version: v1.0.0
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "Initial production deployment"
+spec:
+  replicas: 5  # Initial replica count
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1      # Maximum 1 pod unavailable during update
+      maxSurge: 2            # Maximum 2 additional pods during update
+  selector:
+    matchLabels:
+      app: financial-planning-api
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: financial-planning-api
+        component: backend
+        environment: production
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # Force pod restart on ConfigMap/Secret changes
+        checksum/config: "UPDATE_ON_CONFIG_CHANGE"
+        checksum/secret: "UPDATE_ON_SECRET_CHANGE"
+    spec:
+      serviceAccountName: financial-planning-api
+      automountServiceAccountToken: true
+      
+      # Security Context for the Pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Pod Anti-Affinity for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - financial-planning-api
+              topologyKey: kubernetes.io/hostname
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - financial-planning-api
+              topologyKey: topology.kubernetes.io/zone
+      
+      # Node Selection (prefer dedicated nodes if available)
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: "financial-planning.io/dedicated"
+        operator: "Equal"
+        value: "api"
+        effect: "NoSchedule"
+      
+      # Init Container for database migrations and pre-flight checks
+      initContainers:
+      - name: database-migration
+        image: financial-planning-api:latest  # Same image as main container
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Running database migrations..."
+          python -m alembic upgrade head
+          echo "Database migrations completed"
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: financial-planning-secrets
+              key: DATABASE_URL
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: financial-planning-secrets
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # Migration needs write access
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+            
+      # Main application containers
+      containers:
+      - name: financial-planning-api
+        image: financial-planning-api:latest
+        imagePullPolicy: Always
+        
+        # Container Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        
+        # Environment Variables
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        
+        # Configuration from ConfigMap and Secrets
+        envFrom:
+        - configMapRef:
+            name: financial-planning-config
+        - secretRef:
+            name: financial-planning-secrets
+        
+        # Resource Limits and Requests
+        resources:
+          requests:
+            cpu: 500m          # 0.5 CPU core minimum
+            memory: 1Gi        # 1GB RAM minimum
+            ephemeral-storage: 1Gi
+          limits:
+            cpu: 2000m         # 2 CPU cores maximum
+            memory: 4Gi        # 4GB RAM maximum
+            ephemeral-storage: 5Gi
+        
+        # Health Checks - Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30    # Wait 30s after container starts
+          periodSeconds: 30          # Check every 30s
+          timeoutSeconds: 10         # Timeout after 10s
+          successThreshold: 1        # Must succeed once
+          failureThreshold: 3        # Fail after 3 consecutive failures
+        
+        # Health Checks - Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+            httpHeaders:
+            - name: X-Health-Check
+              value: readiness
+          initialDelaySeconds: 10    # Wait 10s after container starts
+          periodSeconds: 10          # Check every 10s
+          timeoutSeconds: 5          # Timeout after 5s
+          successThreshold: 1        # Must succeed once
+          failureThreshold: 3        # Fail after 3 consecutive failures
+        
+        # Startup Probe (for slow-starting applications)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 10    # Wait 10s after container starts
+          periodSeconds: 5           # Check every 5s
+          timeoutSeconds: 5          # Timeout after 5s
+          successThreshold: 1        # Must succeed once
+          failureThreshold: 20       # Allow up to 100s for startup (20 * 5s)
+        
+        # Volume Mounts
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: cache-volume
+          mountPath: /app/cache
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: config-cache
+          mountPath: /app/config/cache
+          readOnly: true
+        - name: tls-certs
+          mountPath: /app/certs
+          readOnly: true
+      
+      # Sidecar container for log shipping (optional)
+      - name: log-shipper
+        image: fluent/fluent-bit:2.1.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - name: logs-volume
+          mountPath: /app/logs
+          readOnly: true
+        - name: fluent-bit-config
+          mountPath: /fluent-bit/etc
+          readOnly: true
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+      
+      # Volumes
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: logs-volume
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: config-cache
+        configMap:
+          name: financial-planning-cache
+      - name: tls-certs
+        secret:
+          secretName: financial-planning-tls
+          defaultMode: 0400
+      - name: fluent-bit-config
+        configMap:
+          name: fluent-bit-config
+      
+      # DNS Configuration
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
+      
+      # Termination Grace Period
+      terminationGracePeriodSeconds: 60
+      
+      # Restart Policy
+      restartPolicy: Always
+      
+      # Image Pull Secrets (if using private registry)
+      imagePullSecrets:
+      - name: registry-credentials
+---
+# Fluent Bit Configuration for Log Shipping
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: financial-planning-prod
+  labels:
+    app: financial-planning-api
+    component: logging
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Daemon        off
+        Log_Level     info
+        Parsers_File  parsers.conf
+    
+    [INPUT]
+        Name              tail
+        Path              /app/logs/*.log
+        Parser            json
+        Tag               app.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     5MB
+    
+    [FILTER]
+        Name                kubernetes
+        Match               app.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Merge_Log           On
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+    
+    [OUTPUT]
+        Name            es
+        Match           *
+        Host            ${FLUENT_ELASTICSEARCH_HOST}
+        Port            ${FLUENT_ELASTICSEARCH_PORT}
+        Index           financial-planning-logs
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix financial-planning
+        Retry_Limit     5
+  
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On

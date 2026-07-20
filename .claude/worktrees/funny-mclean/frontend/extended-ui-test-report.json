@@ -1,0 +1,164 @@
+{
+  "timestamp": "2025-08-26T15:29:01.443Z",
+  "pages": [
+    {
+      "name": "Home",
+      "path": "/",
+      "url": "http://localhost:5173/",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 10,
+        "inputs": 0,
+        "forms": 0,
+        "headings": 1,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 6
+      },
+      "errors": 0,
+      "screenshot": "home-page.png",
+      "loaded": true
+    },
+    {
+      "name": "Dashboard",
+      "path": "/dashboard",
+      "url": "http://localhost:5173/dashboard",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 12,
+        "inputs": 3,
+        "forms": 1,
+        "headings": 11,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 16
+      },
+      "errors": 3,
+      "screenshot": "dashboard-page.png",
+      "loaded": true
+    },
+    {
+      "name": "Portfolio",
+      "path": "/portfolio",
+      "url": "http://localhost:5173/portfolio",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 9,
+        "inputs": 0,
+        "forms": 0,
+        "headings": 4,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 13
+      },
+      "errors": 0,
+      "screenshot": "portfolio-page.png",
+      "loaded": true
+    },
+    {
+      "name": "Goals",
+      "path": "/goals",
+      "url": "http://localhost:5173/goals",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 17,
+        "inputs": 0,
+        "forms": 0,
+        "headings": 5,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 7
+      },
+      "errors": 0,
+      "screenshot": "goals-page.png",
+      "loaded": true
+    },
+    {
+      "name": "AI Chat",
+      "path": "/chat",
+      "url": "http://localhost:5173/chat",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 14,
+        "inputs": 1,
+        "forms": 0,
+        "headings": 4,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 14
+      },
+      "errors": 0,
+      "screenshot": "ai-chat-page.png",
+      "loaded": true
+    },
+    {
+      "name": "Analytics",
+      "path": "/analytics",
+      "url": "http://localhost:5173/analytics",
+      "title": "AI Financial Planning System",
+      "elements": {
+        "buttons": 8,
+        "inputs": 0,
+        "forms": 0,
+        "headings": 4,
+        "links": 0,
+        "canvases": 1,
+        "svgs": 11
+      },
+      "errors": 0,
+      "screenshot": "analytics-page.png",
+      "loaded": true
+    }
+  ],
+  "navigationTests": [
+    {
+      "item": "Dashboard",
+      "success": false,
+      "reason": "Link not found"
+    },
+    {
+      "item": "Portfolio",
+      "success": false,
+      "reason": "Link not found"
+    },
+    {
+      "item": "Goals",
+      "success": false,
+      "reason": "Link not found"
+    },
+    {
+      "item": "AI Chat",
+      "success": false,
+      "reason": "Link not found"
+    },
+    {
+      "item": "Analytics",
+      "success": false,
+      "reason": "Link not found"
+    }
+  ],
+  "interactionTests": [
+    {
+      "element": "button",
+      "text": "Get Started",
+      "visible": true,
+      "enabled": true,
+      "selector": "button:has-text(\"Get Started\")"
+    },
+    {
+      "element": "button",
+      "text": "View Demo",
+      "visible": true,
+      "enabled": true,
+      "selector": "button:has-text(\"View Demo\")"
+    },
+    {
+      "element": "button",
+      "text": "Sign In",
+      "visible": true,
+      "enabled": true,
+      "selector": "button:has-text(\"Sign In\")"
+    }
+  ],
+  "errors": []
+}

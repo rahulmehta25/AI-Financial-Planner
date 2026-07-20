@@ -1,0 +1,520 @@
+name: Demo Testing & Validation
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'mobile/**'
+      - '*demo*.py'
+      - '*demo*.sh'
+      - 'docker-compose*.yml'
+      - '.github/workflows/demo-testing.yml'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'mobile/**'
+      - '*demo*.py'
+      - '*demo*.sh'
+      - 'docker-compose*.yml'
+  schedule:
+    # Run daily demo health checks at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of demo tests to run'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - full
+          - integration
+          - performance
+      quick_mode:
+        description: 'Run in quick mode'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.9'
+  NODE_VERSION: '18'
+  DEMO_ENV: ci
+  SKIP_CHECKS: false
+  AUTO_OPEN_BROWSER: false
+
+jobs:
+  # Quick smoke tests - run on every push
+  smoke-tests:
+    name: Demo Smoke Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.test_type == 'smoke'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-demo-${{ hashFiles('backend/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-demo-
+          ${{ runner.os }}-pip-
+          
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y netstat-nat lsof
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install -r backend/requirements_test.txt || pip install pytest requests psutil
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x demo-smoke-tests.sh
+        find . -name "*.sh" -exec chmod +x {} \;
+        
+    - name: Run smoke tests
+      run: |
+        if [ "${{ inputs.quick_mode }}" = "true" ] || [ "${{ github.event_name }}" = "push" ]; then
+          ./demo-smoke-tests.sh --quick --verbose
+        else
+          ./demo-smoke-tests.sh --verbose
+        fi
+        
+    - name: Upload smoke test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: smoke-test-results
+        path: /tmp/demo-smoke-tests.log
+        retention-days: 7
+
+  # Comprehensive demo validation
+  demo-validation:
+    name: Demo Validation Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || inputs.test_type == 'full' || inputs.test_type == 'integration'
+    needs: smoke-tests
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        test_suite:
+          - basic_startup
+          - api_demos
+          - ml_simulation
+          - security_demos
+          - cli_demos
+          - frontend_demos
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-demo-full-${{ hashFiles('backend/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-demo-full-
+          ${{ runner.os }}-pip-demo-
+          
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          postgresql-client \
+          redis-tools \
+          netstat-nat \
+          lsof \
+          curl \
+          wget \
+          chromium-browser \
+          xvfb
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install -r backend/requirements_test.txt || echo "Test requirements not found"
+        pip install pytest requests psutil docker selenium webdriver-manager
+        
+    - name: Install optional dependencies
+      run: |
+        pip install scipy matplotlib reportlab numba || echo "Optional dependencies may not be available"
+        
+    - name: Set up Chrome WebDriver
+      run: |
+        # Download and setup ChromeDriver
+        CHROME_DRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE)
+        wget -N https://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip
+        unzip chromedriver_linux64.zip
+        chmod +x chromedriver
+        sudo mv chromedriver /usr/local/bin/
+        
+    - name: Start services for testing
+      run: |
+        # Start PostgreSQL and Redis for integration tests
+        sudo systemctl start postgresql
+        sudo systemctl start redis
+        
+        # Create test database
+        sudo -u postgres createdb financial_planning_test || echo "Test DB may already exist"
+        
+    - name: Run demo validation tests
+      env:
+        DISPLAY: :99
+        DATABASE_URL: postgresql://postgres:@localhost/financial_planning_test
+        REDIS_URL: redis://localhost:6379/0
+        TESTING: true
+        CI: true
+      run: |
+        # Start virtual display for selenium tests
+        Xvfb :99 -ac -screen 0 1280x1024x24 &
+        
+        # Run specific test suite based on matrix
+        case "${{ matrix.test_suite }}" in
+          "basic_startup")
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestBasicDemoStartup -v --tb=short
+            ;;
+          "api_demos")  
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestAPIDemo -v --tb=short
+            ;;
+          "ml_simulation")
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestMLSimulationDemo -v --tb=short
+            ;;
+          "security_demos")
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestSecurityDemo -v --tb=short
+            ;;
+          "cli_demos")
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestCLIDemo -v --tb=short
+            ;;
+          "frontend_demos")
+            python -m pytest backend/tests/demo-validation/test_all_demos.py::TestFrontendDemo -v --tb=short
+            ;;
+        esac
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: demo-validation-${{ matrix.test_suite }}
+        path: |
+          pytest.log
+          /tmp/*.log
+        retention-days: 14
+
+  # Docker-based demo testing
+  docker-demo-tests:
+    name: Docker Demo Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || inputs.test_type == 'full'
+    needs: smoke-tests
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: financial_planning
+          POSTGRES_USER: financial_planning  
+          POSTGRES_PASSWORD: secure_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-demo-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-demo-
+          
+    - name: Create environment file
+      run: |
+        cp backend/env.template .env
+        echo "DATABASE_URL=postgresql://financial_planning:secure_password@localhost:5432/financial_planning" >> .env
+        echo "REDIS_URL=redis://localhost:6379/0" >> .env
+        echo "ENVIRONMENT=demo" >> .env
+        
+    - name: Test Docker Compose configuration
+      run: |
+        docker-compose config
+        docker-compose -f docker-compose.demo.yml config
+        
+    - name: Build Docker images
+      run: |
+        docker-compose build --parallel
+        
+    - name: Run Docker demo environment
+      timeout-minutes: 10
+      run: |
+        docker-compose -f docker-compose.demo.yml up -d
+        
+        # Wait for services to be ready
+        timeout=60
+        while [ $timeout -gt 0 ]; do
+          if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+            echo "API is ready"
+            break
+          fi
+          echo "Waiting for API... ($timeout seconds remaining)"
+          sleep 5
+          timeout=$((timeout-5))
+        done
+        
+        # Test API endpoints
+        curl -f http://localhost:8000/health
+        curl -f http://localhost:8000/docs >/dev/null
+        
+    - name: Run health checks
+      run: |
+        # Test database connectivity
+        docker-compose exec -T postgres pg_isready -U financial_planning -d financial_planning
+        
+        # Test Redis connectivity  
+        docker-compose exec -T redis redis-cli ping
+        
+        # Test API health
+        response=$(curl -s http://localhost:8000/health)
+        echo $response | grep -q "healthy"
+        
+    - name: Clean up Docker environment
+      if: always()
+      run: |
+        docker-compose -f docker-compose.demo.yml logs api > api-logs.txt || true
+        docker-compose -f docker-compose.demo.yml down -v
+        
+    - name: Upload Docker logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: docker-demo-logs
+        path: |
+          api-logs.txt
+        retention-days: 7
+
+  # Performance benchmarking
+  performance-tests:
+    name: Performance Demo Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || inputs.test_type == 'performance'
+    needs: smoke-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install -r backend/requirements_performance.txt || echo "Performance requirements not found"
+        
+    - name: Run performance demo
+      timeout-minutes: 15
+      run: |
+        cd backend
+        python performance_demo.py --test-mode --quick
+        
+    - name: Benchmark ML simulations  
+      timeout-minutes: 10
+      run: |
+        cd backend
+        python ml_simulation_demo.py --benchmark --quick-test
+        
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-results
+        path: |
+          backend/ml_demo_outputs/
+          backend/performance_results.json
+        retention-days: 14
+
+  # Daily health check
+  daily-health-check:
+    name: Daily Demo Health Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install requests psutil
+        
+    - name: Run comprehensive health check
+      run: |
+        chmod +x demo-smoke-tests.sh
+        ./demo-smoke-tests.sh --verbose
+        
+    - name: Test critical demo functionality
+      run: |
+        cd backend
+        
+        # Test minimal demo startup
+        timeout 60s python minimal_working_demo.py &
+        DEMO_PID=$!
+        
+        # Wait for API to start
+        sleep 10
+        
+        # Test health endpoint
+        curl -f http://localhost:8000/health
+        
+        # Clean up
+        kill $DEMO_PID || true
+        
+    - name: Create health report
+      run: |
+        echo "# Daily Demo Health Report - $(date)" > health_report.md
+        echo "" >> health_report.md
+        echo "## Test Results" >> health_report.md
+        
+        if [ -f /tmp/demo-smoke-tests.log ]; then
+          echo "### Smoke Test Results" >> health_report.md
+          echo '```' >> health_report.md
+          tail -20 /tmp/demo-smoke-tests.log >> health_report.md
+          echo '```' >> health_report.md
+        fi
+        
+    - name: Upload health report
+      uses: actions/upload-artifact@v3
+      with:
+        name: daily-health-report-${{ github.run_number }}
+        path: |
+          health_report.md
+          /tmp/demo-smoke-tests.log
+        retention-days: 30
+        
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "::error::Daily demo health check failed. Please investigate."
+        # Here you could add Slack/email notifications if configured
+
+  # Collect and report results
+  report-results:
+    name: Test Results Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [smoke-tests, demo-validation, docker-demo-tests, performance-tests]
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Generate summary report
+      run: |
+        echo "# Demo Testing Summary Report" > summary_report.md
+        echo "Generated: $(date)" >> summary_report.md
+        echo "" >> summary_report.md
+        
+        echo "## Test Execution Summary" >> summary_report.md
+        
+        if [ "${{ needs.smoke-tests.result }}" = "success" ]; then
+          echo "✅ Smoke Tests: PASSED" >> summary_report.md
+        else
+          echo "❌ Smoke Tests: FAILED" >> summary_report.md
+        fi
+        
+        if [ "${{ needs.demo-validation.result }}" = "success" ]; then
+          echo "✅ Demo Validation: PASSED" >> summary_report.md
+        elif [ "${{ needs.demo-validation.result }}" = "skipped" ]; then
+          echo "⏸️ Demo Validation: SKIPPED" >> summary_report.md
+        else
+          echo "❌ Demo Validation: FAILED" >> summary_report.md
+        fi
+        
+        if [ "${{ needs.docker-demo-tests.result }}" = "success" ]; then
+          echo "✅ Docker Tests: PASSED" >> summary_report.md
+        elif [ "${{ needs.docker-demo-tests.result }}" = "skipped" ]; then
+          echo "⏸️ Docker Tests: SKIPPED" >> summary_report.md
+        else
+          echo "❌ Docker Tests: FAILED" >> summary_report.md
+        fi
+        
+        if [ "${{ needs.performance-tests.result }}" = "success" ]; then
+          echo "✅ Performance Tests: PASSED" >> summary_report.md
+        elif [ "${{ needs.performance-tests.result }}" = "skipped" ]; then
+          echo "⏸️ Performance Tests: SKIPPED" >> summary_report.md
+        else
+          echo "❌ Performance Tests: FAILED" >> summary_report.md
+        fi
+        
+        echo "" >> summary_report.md
+        echo "## Available Artifacts" >> summary_report.md
+        find . -name "*.log" -o -name "*.md" -o -name "*.json" -o -name "*.txt" | sort >> summary_report.md
+        
+    - name: Upload summary report
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-summary-report
+        path: summary_report.md
+        retention-days: 30

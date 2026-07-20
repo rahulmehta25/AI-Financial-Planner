@@ -1,0 +1,205 @@
+# Demo Dockerfile for Financial Planning Backend
+# Optimized for quick demo startup and development
+
+FROM python:3.11-slim as base
+
+# Build arguments
+ARG BUILD_ENV=demo
+ARG PYTHONUNBUFFERED=1
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=$PYTHONUNBUFFERED \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (minimal for demo)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        sqlite3 \
+        ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directory structure
+RUN mkdir -p /app/data /app/logs /app/demo_data /app/scripts
+
+# Install Python dependencies
+COPY requirements_demo.txt .
+RUN pip install --no-cache-dir -r requirements_demo.txt
+
+# Copy application code
+COPY app/ app/
+COPY alembic/ alembic/
+COPY alembic.ini .
+
+# Copy demo-specific files
+COPY scripts/ scripts/
+COPY *.py ./
+
+# Create demo-specific files
+RUN echo '#!/usr/bin/env python3\n\
+import os\n\
+import sys\n\
+import asyncio\n\
+import sqlite3\n\
+from pathlib import Path\n\
+\n\
+async def setup_demo_db():\n\
+    """Initialize SQLite database for demo"""\n\
+    db_path = Path("/app/data/demo_database.db")\n\
+    db_path.parent.mkdir(exist_ok=True)\n\
+    \n\
+    # Create basic tables if they don not exist\n\
+    conn = sqlite3.connect(str(db_path))\n\
+    conn.execute("""CREATE TABLE IF NOT EXISTS demo_status (\n\
+        id INTEGER PRIMARY KEY,\n\
+        initialized BOOLEAN DEFAULT FALSE,\n\
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n\
+    )""")\n\
+    conn.execute("INSERT OR IGNORE INTO demo_status (id, initialized) VALUES (1, TRUE)")\n\
+    conn.commit()\n\
+    conn.close()\n\
+    print("Demo database initialized successfully")\n\
+\n\
+if __name__ == "__main__":\n\
+    asyncio.run(setup_demo_db())\n' > /app/init_demo_db.py
+
+# Create health check script
+RUN echo '#!/usr/bin/env python3\n\
+import requests\n\
+import sys\n\
+import os\n\
+\n\
+def health_check():\n\
+    try:\n\
+        response = requests.get("http://localhost:8000/health", timeout=10)\n\
+        if response.status_code == 200:\n\
+            print("Backend health check: OK")\n\
+            sys.exit(0)\n\
+        else:\n\
+            print(f"Backend health check failed: HTTP {response.status_code}")\n\
+            sys.exit(1)\n\
+    except Exception as e:\n\
+        print(f"Backend health check failed: {e}")\n\
+        sys.exit(1)\n\
+\n\
+if __name__ == "__main__":\n\
+    health_check()\n' > /app/health_check.py && chmod +x /app/health_check.py
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "=== Financial Planning Demo Backend Starting ==="\n\
+echo "Environment: ${ENVIRONMENT:-demo}"\n\
+echo "Database: ${DATABASE_URL}"\n\
+echo "Redis: ${REDIS_URL}"\n\
+echo "============================================"\n\
+\n\
+# Initialize demo database\n\
+echo "Initializing demo database..."\n\
+python init_demo_db.py\n\
+\n\
+# Run database migrations if needed\n\
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then\n\
+    echo "Running database migrations..."\n\
+    alembic upgrade head || echo "Migration failed, continuing..."\n\
+fi\n\
+\n\
+# Wait for Redis if specified\n\
+if [ -n "${REDIS_URL}" ]; then\n\
+    echo "Waiting for Redis..."\n\
+    timeout=30\n\
+    while [ $timeout -gt 0 ]; do\n\
+        if python -c "import redis; redis.from_url(\"${REDIS_URL}\").ping()"; then\n\
+            echo "Redis is ready!"\n\
+            break\n\
+        fi\n\
+        echo "Waiting for Redis... ($timeout seconds remaining)"\n\
+        sleep 2\n\
+        timeout=$((timeout-2))\n\
+    done\n\
+fi\n\
+\n\
+# Start the application\n\
+echo "Starting FastAPI application..."\n\
+exec uvicorn app.main:app \\\n\
+    --host 0.0.0.0 \\\n\
+    --port 8000 \\\n\
+    --reload \\\n\
+    --log-level info \\\n\
+    --access-log\n' > /app/start_demo.sh && chmod +x /app/start_demo.sh
+
+# Create non-root user for security
+RUN groupadd -r demouser && \
+    useradd -r -g demouser demouser && \
+    chown -R demouser:demouser /app
+
+# Switch to non-root user
+USER demouser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
+    CMD python health_check.py
+
+# Default command
+CMD ["/app/start_demo.sh"]
+
+# Demo stage for development with volume mounts
+FROM base as demo-dev
+
+# Switch back to root for development setup
+USER root
+
+# Install additional development tools
+RUN pip install --no-cache-dir \
+    watchdog \
+    python-dotenv
+
+# Development startup script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "=== Demo Development Mode ==="\n\
+echo "Hot reload enabled"\n\
+echo "Volume mounts active"\n\
+echo "==========================="\n\
+\n\
+# Install any new dependencies on startup\n\
+if [ -f "requirements_demo.txt" ]; then\n\
+    pip install -r requirements_demo.txt\n\
+fi\n\
+\n\
+# Initialize demo database\n\
+python init_demo_db.py\n\
+\n\
+# Start with hot reload\n\
+exec uvicorn app.main:app \\\n\
+    --host 0.0.0.0 \\\n\
+    --port 8000 \\\n\
+    --reload \\\n\
+    --reload-dir /app/app \\\n\
+    --log-level debug\n' > /app/start_demo_dev.sh && chmod +x /app/start_demo_dev.sh
+
+# Switch back to non-root user
+USER demouser
+
+# Override command for development
+CMD ["/app/start_demo_dev.sh"]
+
+# Metadata
+LABEL maintainer="Financial Planning Demo" \
+      version="1.0.0" \
+      description="Demo backend for Financial Planning System" \
+      demo.mode="true" \
+      demo.database="sqlite" \
+      demo.features="basic"

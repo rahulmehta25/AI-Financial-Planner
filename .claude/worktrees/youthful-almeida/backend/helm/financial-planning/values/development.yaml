@@ -1,0 +1,155 @@
+# Development environment values for financial-planning platform
+# Minimal configuration for local development
+
+global:
+  environment: development
+  imageTag: "dev"
+  imagePullPolicy: Always
+
+# Development scaling (minimal)
+replicaCount: 1
+
+autoscaling:
+  enabled: false
+
+# Development resources (minimal)
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+    ephemeral-storage: 2Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+    ephemeral-storage: 1Gi
+
+# Development microservices (single replica)
+microservices:
+  userService:
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+
+  bankingService:
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+  mlService:
+    enabled: false  # Disable ML service in development
+
+  notificationService:
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+
+# Development database (minimal)
+postgresql:
+  primary:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 250m
+  
+  readReplicas:
+    replicaCount: 0  # No read replicas in development
+
+redis:
+  master:
+    persistence:
+      size: 1Gi
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 100m
+  
+  replica:
+    replicaCount: 0  # No replicas in development
+
+# Development ingress
+ingress:
+  enabled: false  # Use port-forward in development
+
+ingress-nginx:
+  enabled: false
+
+# Development monitoring (disabled)
+monitoring:
+  enabled: false
+
+# Development security (minimal)
+security:
+  certManager:
+    enabled: false
+  externalSecrets:
+    enabled: false
+  podSecurityStandards:
+    enabled: false
+
+# Development backup (disabled)
+backup:
+  velero:
+    enabled: false
+
+# Development service mesh (disabled)
+serviceMesh:
+  istio:
+    enabled: false
+
+# Network policies (disabled for development)
+networkPolicy:
+  enabled: false
+
+# Development configuration
+config:
+  api:
+    maxRequestSize: 10485760  # 10MB
+    timeoutSeconds: 60
+  security:
+    accessTokenExpireMinutes: 10080  # 1 week (for convenience)
+    refreshTokenExpireMinutes: 43200  # 1 month
+  performance:
+    workers: 1
+    cacheDefaultTimeout: 30
+    cacheTTL: 60
+  logging:
+    level: DEBUG
+    enableTracing: false
+    enableMetrics: false
+
+# Development features (some disabled)
+config:
+  features:
+    enableVoice: false
+    enableAI: false
+    enableBlockchain: false
+    enablePDF: true
+    enableSocial: false
+    enableMLRecommendations: false
+
+# No specific node requirements for development
+nodeSelector: {}
+tolerations: []
+affinity: {}

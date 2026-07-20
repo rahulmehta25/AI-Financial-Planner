@@ -1,0 +1,14 @@
+filebeat.inputs:
+  - type: container
+    enabled: true
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    processors:
+      - add_locale: ~
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  protocol: "http"
+
+setup.kibana:
+  host: "kibana:5601"

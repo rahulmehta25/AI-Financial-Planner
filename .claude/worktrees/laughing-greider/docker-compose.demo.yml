@@ -1,0 +1,337 @@
+# Docker Compose Demo Configuration
+# Bulletproof one-command demo setup for Financial Planning System
+# Usage: docker-compose -f docker-compose.demo.yml up
+
+version: '3.8'
+
+services:
+  # Backend Service (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.demo
+      args:
+        BUILD_ENV: demo
+    container_name: financial-planning-demo-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database - Using SQLite for simplicity
+      DATABASE_URL: sqlite:///./demo_database.db
+      DATABASE_TYPE: sqlite
+      
+      # Redis Cache
+      REDIS_URL: redis://redis:6379/0
+      
+      # Application Settings
+      ENVIRONMENT: demo
+      LOG_LEVEL: INFO
+      SECRET_KEY: demo-secret-key-for-demo-only
+      API_VERSION: v1
+      
+      # Demo Features
+      ENABLE_DEMO_MODE: "true"
+      AUTO_SEED_DATA: "true"
+      DEMO_USER_EMAIL: demo@financialplanning.com
+      DEMO_USER_PASSWORD: demo123
+      
+      # Security (Relaxed for demo)
+      CORS_ORIGINS: "*"
+      ALLOW_CREDENTIALS: "true"
+      
+      # External APIs (Mock/Demo values)
+      OPENAI_API_KEY: demo-key
+      ALPHA_VANTAGE_API_KEY: demo-key
+      PLAID_CLIENT_ID: demo-client-id
+      PLAID_SECRET: demo-secret
+      
+      # Performance Settings
+      WORKERS: "1"
+      MAX_CONNECTIONS: "50"
+      
+      # Health Check
+      HEALTH_CHECK_ENDPOINT: "/health"
+      
+    volumes:
+      # SQLite database persistence
+      - demo_database:/app/data
+      # Application code for hot reload (development)
+      - ./backend/app:/app/app:rw
+      # Demo data
+      - ./backend/demo_data:/app/demo_data:ro
+      # Logs
+      - demo_backend_logs:/app/logs
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - demo-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    
+    labels:
+      - "demo.service=backend"
+      - "demo.description=FastAPI Backend Service"
+
+  # Frontend Service (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.demo
+      args:
+        BUILD_ENV: demo
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: financial-planning-demo-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Next.js Configuration
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: 1
+      
+      # API Configuration
+      NEXT_PUBLIC_API_URL: http://backend:8000
+      NEXT_PUBLIC_API_VERSION: v1
+      
+      # Demo Mode
+      NEXT_PUBLIC_DEMO_MODE: "true"
+      NEXT_PUBLIC_DEMO_USER_EMAIL: demo@financialplanning.com
+      
+      # Feature Flags
+      NEXT_PUBLIC_ENABLE_ANALYTICS: "true"
+      NEXT_PUBLIC_ENABLE_CHARTS: "true"
+      
+      # Performance
+      NEXT_PUBLIC_ENABLE_SW: "false"
+    
+    volumes:
+      # Source code for hot reload
+      - ./frontend/src:/app/src:rw
+      - ./frontend/public:/app/public:rw
+      # Node modules (performance optimization)
+      - demo_frontend_node_modules:/app/node_modules
+      # Next.js cache
+      - demo_frontend_cache:/app/.next
+    
+    depends_on:
+      backend:
+        condition: service_healthy
+    
+    networks:
+      - demo-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    labels:
+      - "demo.service=frontend"
+      - "demo.description=Next.js Frontend Service"
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: financial-planning-demo-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 60
+      --timeout 300
+      --save 60 100
+    volumes:
+      - demo_redis_data:/data
+    networks:
+      - demo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    labels:
+      - "demo.service=redis"
+      - "demo.description=Redis Cache Service"
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: financial-planning-demo-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx.demo.conf:/etc/nginx/nginx.conf:ro
+      - demo_nginx_logs:/var/log/nginx
+      # SSL certificates (if needed)
+      - ./config/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - demo-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "demo.service=nginx"
+      - "demo.description=Nginx Reverse Proxy"
+
+  # Demo Data Initializer
+  demo-initializer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.demo
+    container_name: financial-planning-demo-initializer
+    environment:
+      DATABASE_URL: sqlite:///./demo_database.db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: demo
+      DEMO_MODE: "true"
+    volumes:
+      - demo_database:/app/data
+      - ./backend/scripts:/app/scripts:ro
+    command: >
+      sh -c "
+        echo 'Waiting for backend to be ready...' &&
+        sleep 30 &&
+        echo 'Initializing demo data...' &&
+        python scripts/seed_demo_data.py &&
+        echo 'Demo data initialization complete!'
+      "
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - demo-network
+    restart: "no"
+    labels:
+      - "demo.service=initializer"
+      - "demo.description=Demo Data Seeder"
+
+  # Health Monitor (Optional)
+  health-monitor:
+    image: alpine:latest
+    container_name: financial-planning-demo-health-monitor
+    command: >
+      sh -c "
+        apk add --no-cache curl &&
+        while true; do
+          echo '=== Health Check Report $(date) ===' &&
+          curl -s http://backend:8000/health | head -1 &&
+          curl -s http://frontend:3000/api/health | head -1 &&
+          echo 'Redis:' && (redis-cli -h redis ping || echo 'Redis unavailable') &&
+          echo 'Nginx:' && (curl -s http://nginx/health | head -1 || echo 'Nginx unavailable') &&
+          echo '================================' &&
+          sleep 60
+        done
+      "
+    depends_on:
+      - backend
+      - frontend
+      - redis
+      - nginx
+    networks:
+      - demo-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    labels:
+      - "demo.service=health-monitor"
+      - "demo.description=Health Monitoring Service"
+
+# Networks
+networks:
+  demo-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/16
+    labels:
+      - "demo.network=main"
+
+# Volumes
+volumes:
+  # Database
+  demo_database:
+    driver: local
+    labels:
+      - "demo.volume=database"
+  
+  # Redis Data
+  demo_redis_data:
+    driver: local
+    labels:
+      - "demo.volume=redis"
+  
+  # Frontend Dependencies & Cache
+  demo_frontend_node_modules:
+    driver: local
+    labels:
+      - "demo.volume=frontend-modules"
+  
+  demo_frontend_cache:
+    driver: local
+    labels:
+      - "demo.volume=frontend-cache"
+  
+  # Logs
+  demo_backend_logs:
+    driver: local
+    labels:
+      - "demo.volume=backend-logs"
+  
+  demo_nginx_logs:
+    driver: local
+    labels:
+      - "demo.volume=nginx-logs"
+
+# Demo Configuration Metadata
+x-demo-info:
+  version: "1.0.0"
+  description: "Bulletproof Financial Planning System Demo"
+  ports:
+    nginx: 80
+    frontend: 3000
+    backend: 8000
+    redis: 6379
+  urls:
+    main: "http://localhost"
+    frontend: "http://localhost:3000"
+    backend: "http://localhost:8000"
+    api-docs: "http://localhost:8000/docs"
+  demo-credentials:
+    email: "demo@financialplanning.com"
+    password: "demo123"
+  commands:
+    start: "docker-compose -f docker-compose.demo.yml up"
+    start-detached: "docker-compose -f docker-compose.demo.yml up -d"
+    stop: "docker-compose -f docker-compose.demo.yml down"
+    cleanup: "docker-compose -f docker-compose.demo.yml down -v"
+    logs: "docker-compose -f docker-compose.demo.yml logs -f"

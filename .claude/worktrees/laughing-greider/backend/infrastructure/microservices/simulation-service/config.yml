@@ -1,0 +1,108 @@
+# Simulation Service Configuration
+service:
+  name: simulation-service
+  version: "1.0.0"
+  port: 8001
+  host: "0.0.0.0"
+  debug: false
+  workers: 4
+  
+monte_carlo:
+  default_simulations: 10000
+  max_simulations: 1000000
+  batch_size: 1000
+  parallel_workers: 4
+  use_gpu: true
+  cuda_devices: [0]
+  
+performance:
+  enable_caching: true
+  cache_ttl: 300  # 5 minutes
+  max_cache_size: 1000
+  enable_profiling: true
+  
+database:
+  host: "${DB_HOST:-postgresql}"
+  port: "${DB_PORT:-5432}"
+  name: "${DB_NAME:-financial_planning}"
+  user: "${DB_USER:-simulation_user}"
+  password: "${DB_PASSWORD}"
+  pool_size: 20
+  max_overflow: 40
+  pool_timeout: 30
+  pool_recycle: 3600
+  
+redis:
+  host: "${REDIS_HOST:-redis}"
+  port: "${REDIS_PORT:-6379}"
+  db: 1
+  password: "${REDIS_PASSWORD}"
+  max_connections: 20
+  
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - console
+    - file
+  file_path: "/app/logs/simulation.log"
+  max_file_size: 50MB
+  backup_count: 5
+  
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  port: 9090
+  
+health_check:
+  endpoint: "/health"
+  detailed_endpoint: "/health/detailed"
+  
+api:
+  title: "Financial Planning Simulation Service"
+  description: "Monte Carlo simulation engine for financial planning scenarios"
+  version: "1.0.0"
+  docs_url: "/docs"
+  redoc_url: "/redoc"
+  
+simulation_limits:
+  max_years: 50
+  max_scenarios: 100
+  timeout_seconds: 300
+  memory_limit_gb: 8
+  
+market_data:
+  default_returns:
+    stocks: 0.10
+    bonds: 0.04
+    real_estate: 0.08
+    commodities: 0.06
+  default_volatility:
+    stocks: 0.20
+    bonds: 0.05
+    real_estate: 0.15
+    commodities: 0.25
+  correlation_matrix:
+    stocks_bonds: -0.1
+    stocks_real_estate: 0.3
+    stocks_commodities: 0.2
+    bonds_real_estate: 0.0
+    bonds_commodities: -0.05
+    real_estate_commodities: 0.1
+    
+security:
+  jwt_secret_key: "${JWT_SECRET_KEY}"
+  jwt_algorithm: "HS256"
+  jwt_access_token_expire_minutes: 30
+  
+external_services:
+  user_service:
+    url: "http://user-service:8002"
+    timeout: 30
+  ml_service:
+    url: "http://ml-service:8004"
+    timeout: 60
+    
+rate_limiting:
+  requests_per_minute: 10
+  burst_size: 20

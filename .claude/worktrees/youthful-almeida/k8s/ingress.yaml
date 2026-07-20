@@ -1,0 +1,188 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: financial-planner-ingress
+  namespace: production
+  labels:
+    app: financial-planner
+    component: ingress
+  annotations:
+    # AWS ALB Ingress Controller annotations
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/load-balancer-name: financial-planner-alb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012
+    
+    # Security headers
+    alb.ingress.kubernetes.io/actions.response-headers: |
+      {
+        "type": "response-headers",
+        "responseHeadersConfig": {
+          "customHeaders": {
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "X-XSS-Protection": "1; mode=block",
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none';"
+          }
+        }
+      }
+    
+    # Rate limiting
+    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:global/webacl/financial-planner-waf/12345678-abcd-1234-abcd-123456789012
+    
+    # Health check configuration
+    alb.ingress.kubernetes.io/healthcheck-path: "/health"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
+    
+    # Load balancer attributes
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      idle_timeout.timeout_seconds=60,
+      routing.http2.enabled=true,
+      access_logs.s3.enabled=true,
+      access_logs.s3.bucket=financial-planner-alb-logs,
+      access_logs.s3.prefix=alb-logs
+spec:
+  rules:
+  - host: api.financialplanner.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: response-headers
+            port:
+              name: use-annotation
+      - path: /api/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planner-api-service
+            port:
+              number: 80
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: financial-planner-api-service
+            port:
+              number: 80
+      - path: /metrics
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planner-api-service
+            port:
+              number: 80
+  - host: ml.financialplanner.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-planner-ml-service
+            port:
+              number: 50051
+  tls:
+  - hosts:
+    - api.financialplanner.com
+    - ml.financialplanner.com
+    secretName: financial-planner-tls
+---
+# Internal ingress for admin/monitoring interfaces
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: financial-planner-admin-ingress
+  namespace: production
+  labels:
+    app: financial-planner
+    component: admin-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: admin-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - Admin Area"
+    
+    # IP whitelist for admin access
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/16,172.16.0.0/16"
+    
+    # Rate limiting for admin endpoints
+    nginx.ingress.kubernetes.io/rate-limit-connections: "5"
+    nginx.ingress.kubernetes.io/rate-limit-rps: "10"
+spec:
+  rules:
+  - host: admin.financialplanner.internal
+    http:
+      paths:
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+      - path: /jaeger
+        pathType: Prefix
+        backend:
+          service:
+            name: jaeger-service
+            port:
+              number: 16686
+      - path: /kibana
+        pathType: Prefix
+        backend:
+          service:
+            name: kibana-service
+            port:
+              number: 5601
+  tls:
+  - hosts:
+    - admin.financialplanner.internal
+    secretName: admin-tls
+---
+# Network Policy for ingress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: financial-planner-ingress-policy
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: financial-planner-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090  # Metrics port

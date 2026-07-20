@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-08-22T14:57:21.527432",
+  "total_time": 28.282038688659668,
+  "tests_passed": 2,
+  "tests_total": 6,
+  "success_rate": 0.3333333333333333,
+  "component_status": {
+    "Market Assumptions": true,
+    "Monte Carlo Engine": false,
+    "Portfolio Optimization": true,
+    "ML Recommendation Engine": false,
+    "AI Narrative Generation": false,
+    "Integration Workflow": false
+  }
+}
