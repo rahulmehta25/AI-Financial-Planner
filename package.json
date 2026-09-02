@@ -1,0 +1,9 @@
+{
+  "name": "financial-planning-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root build for the Vercel financial-planning-frontend project. Delegates to web/.",
+  "scripts": {
+    "build": "npm install --prefix web && npm run build --prefix web && node scripts/copy-web-out.mjs"
+  }
+}
