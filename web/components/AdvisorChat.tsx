@@ -56,46 +56,41 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
   }
 
   return (
-    <div className="card flex flex-col p-6 md:p-8">
+    <div className="flex flex-col">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
         <h3 className="font-display text-2xl font-medium tracking-tight">Advisor</h3>
         <span className="text-xs text-muted">Grounded on accounts, goals, and transactions</span>
       </div>
 
       {messages.length === 0 && (
-        <div className="mt-6">
+        <div className="mt-8">
           <p className="text-sm text-muted">Try one of these:</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <ul className="mt-4 space-y-3">
             {SUGGESTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => send(s)}
-                className="rounded-full border border-line bg-paper px-3.5 py-1.5 text-xs leading-relaxed text-ink-soft hover:border-accent/40 hover:bg-card"
-              >
-                {s}
-              </button>
+              <li key={s}>
+                <button type="button" onClick={() => send(s)} className="link text-left text-sm text-ink-soft">
+                  {s}
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
-      <div className="mt-6 max-h-[420px] flex-1 space-y-3 overflow-y-auto">
+      <div className="mt-8 max-h-[420px] flex-1 space-y-8 overflow-y-auto">
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-              m.role === "user" ? "ml-10 bg-paper-deep" : "mr-10 bg-sage-wash/80"
-            }`}
-          >
-            <div className="whitespace-pre-wrap">{m.content}</div>
+          <div key={i} className={`max-w-2xl text-sm leading-relaxed ${m.role === "user" ? "ml-8 text-muted" : "text-ink"}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+              {m.role === "user" ? "You" : "Advisor"}
+            </p>
+            <div className="mt-2 whitespace-pre-wrap">{m.content}</div>
             {m.tool_calls && m.tool_calls.length > 0 && (
               <details className="mt-3 text-xs text-muted">
-                <summary className="cursor-pointer">
+                <summary className="link cursor-pointer">
                   Tool hops: {m.tool_calls.map((t) => t.tool).join(", ")}
                   {m.live === false && " (Anthropic API key missing, stub response)"}
                 </summary>
-                <pre className="mt-2 overflow-x-auto rounded-xl bg-card/80 p-3 text-[11px]">
+                <pre className="mt-2 overflow-x-auto border-t border-line pt-3 text-[11px]">
                   {JSON.stringify(m.tool_calls, null, 2)}
                 </pre>
               </details>
@@ -111,7 +106,7 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
           e.preventDefault();
           send(draft);
         }}
-        className="mt-6 flex flex-col gap-3 sm:flex-row"
+        className="mt-10 flex flex-col gap-6 sm:flex-row sm:items-end"
       >
         <input
           value={draft}

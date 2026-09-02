@@ -17,8 +17,8 @@ export function PersonaPicker({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-      {personas.map((p) => {
+    <div className="grid grid-cols-1 md:grid-cols-3">
+      {personas.map((p, i) => {
         const active = p.id === selectedId;
         return (
           <button
@@ -26,24 +26,23 @@ export function PersonaPicker({
             type="button"
             onClick={() => onSelect(p.id)}
             aria-pressed={active}
-            className={`card p-7 text-left transition ${
-              active
-                ? "border-accent shadow-lift ring-1 ring-accent/30"
-                : "hover:border-accent/30 hover:shadow-lift"
-            }`}
+            className={`rise py-10 text-left transition md:py-2 md:pr-10 ${
+              i > 0 ? "border-t border-line md:border-l md:border-t-0 md:pl-10" : ""
+            } ${active ? "shadow-[inset_0_-2px_0_0_var(--accent)]" : "hover:shadow-[inset_0_-1px_0_0_var(--ink)]"}`}
+            style={{ animationDelay: `${0.06 * i}s` }}
           >
             <p className="text-xs tracking-wide text-muted">
               Age {p.age}, retire at {p.retirement_age}
             </p>
             <h3 className="mt-2 font-display text-2xl font-medium tracking-tight">{p.name}</h3>
-            <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Net worth</p>
+            <p className="mt-8 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Net worth</p>
             <p className="num mt-1 text-3xl font-medium tracking-tight text-ink">{money(netWorth(p))}</p>
             <p className="mt-5 text-sm leading-relaxed text-muted">{p.backstory}</p>
-            <div className="mt-6 flex flex-wrap gap-2 text-xs">
+            <dl className="mt-8 grid grid-cols-3 gap-3 text-xs">
               <Metric label="Income" value={money(p.annual_income)} />
               <Metric label="Savings" value={`${Math.round(p.savings_rate * 100)}%`} />
               <Metric label="Spend" value={money(p.annual_spending)} />
-            </div>
+            </dl>
           </button>
         );
       })}
@@ -53,9 +52,9 @@ export function PersonaPicker({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <span className="rounded-full bg-sage-wash/70 px-2.5 py-1 text-muted">
-      <span className="mr-1.5 uppercase tracking-[0.12em]">{label}</span>
-      <span className="num font-medium text-ink">{value}</span>
-    </span>
+    <div>
+      <dt className="uppercase tracking-[0.12em] text-muted">{label}</dt>
+      <dd className="num mt-1 font-medium text-ink">{value}</dd>
+    </div>
   );
 }

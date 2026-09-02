@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
   "installCommand": "npm install --prefix web",
-  "buildCommand": "npm run build --prefix web && node scripts/copy-web-out.mjs",
+  "buildCommand": "AIFP_EXPORT=1 npm run build --prefix web && node scripts/copy-web-out.mjs",
   "outputDirectory": "dist"
 }

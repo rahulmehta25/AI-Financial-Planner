@@ -52,26 +52,23 @@ export function SimulatorPanel({ persona }: { persona: Persona }) {
   }
 
   return (
-    <div className="card p-6 md:p-8">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-xl space-y-2">
-          <h3 className="font-display text-2xl font-medium tracking-tight">Monte Carlo retirement</h3>
-          <p className="text-sm leading-relaxed text-muted">
-            <span className="num text-ink">{money(assets)}</span> invested and{" "}
-            <span className="num text-ink">{money(contribution)}</span> per year. 10,000 trials at 7% mean,
-            15% stdev.
-          </p>
-        </div>
+    <div>
+      <div className="max-w-xl space-y-2">
+        <h3 className="font-display text-2xl font-medium tracking-tight">Monte Carlo retirement</h3>
+        <p className="text-sm leading-relaxed text-muted">
+          <span className="num text-ink">{money(assets)}</span> invested and{" "}
+          <span className="num text-ink">{money(contribution)}</span> per year. 10,000 trials at 7% mean, 15% stdev.
+        </p>
       </div>
 
       <form
-        className="mt-8 space-y-6"
+        className="mt-10 space-y-8"
         onSubmit={(e) => {
           e.preventDefault();
           void runIt();
         }}
       >
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
           <label className="block space-y-2">
             <span className="text-sm font-medium text-ink">Retirement age</span>
             <input
@@ -95,7 +92,7 @@ export function SimulatorPanel({ persona }: { persona: Persona }) {
               max={24}
               value={shock}
               onChange={(e) => setShock(Number(e.target.value))}
-              className="slider mt-2"
+              className="slider mt-4"
             />
             <span className="block text-xs text-muted">Months with no contributions before retirement.</span>
           </label>
@@ -106,28 +103,28 @@ export function SimulatorPanel({ persona }: { persona: Persona }) {
         </button>
       </form>
 
-      {error && <p className="mt-5 text-sm text-[#9b4a45]">{error}</p>}
+      {error && <p className="mt-6 text-sm text-[#9b4a45]">{error}</p>}
 
       {!result && !loading && (
-        <div className="mt-8 rounded-2xl border border-dashed border-line bg-paper/70 px-4 py-12 text-center text-sm leading-relaxed text-muted">
+        <p className="mt-12 max-w-md border-t border-line pt-8 text-sm leading-relaxed text-muted">
           Set retirement age and any income shock, then run the simulation to see percentile paths.
-        </div>
+        </p>
       )}
 
       {result && (
-        <div className="mt-10 space-y-6">
-          <div className="rounded-2xl bg-sage-wash/70 px-6 py-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
+        <div className="rise mt-14 space-y-12">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
               Chance of never running out
             </p>
-            <p className="num mt-2 text-5xl font-medium tracking-tight text-ink md:text-6xl">
+            <p className="num mt-3 text-6xl font-medium tracking-tight text-ink md:text-7xl">
               {Math.round(result.success_probability * 100)}%
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Stat label="P10 final" value={money(result.p10_final)} tone="rose" />
-            <Stat label="P50 final" value={money(result.p50_final)} tone="accent" />
-            <Stat label="P90 final" value={money(result.p90_final)} tone="sage" />
+          <div className="grid grid-cols-1 gap-8 border-t border-line pt-10 sm:grid-cols-3 sm:gap-0">
+            <Stat label="P10 final" value={money(result.p10_final)} />
+            <Stat label="P50 final" value={money(result.p50_final)} featured />
+            <Stat label="P90 final" value={money(result.p90_final)} last />
           </div>
           <PathChart result={result} />
         </div>
@@ -136,16 +133,21 @@ export function SimulatorPanel({ persona }: { persona: Persona }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: "rose" | "accent" | "sage" }) {
-  const toneClass = {
-    rose: "bg-[#f3e8e4] text-[#9b4a45]",
-    accent: "bg-sage-wash text-accent",
-    sage: "bg-paper-deep text-ink",
-  }[tone];
+function Stat({
+  label,
+  value,
+  featured,
+  last,
+}: {
+  label: string;
+  value: string;
+  featured?: boolean;
+  last?: boolean;
+}) {
   return (
-    <div className={`rounded-2xl px-5 py-5 ${toneClass}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">{label}</div>
-      <div className="num mt-2 text-xl">{value}</div>
+    <div className={`border-t border-line pt-6 sm:border-t-0 sm:pt-0 ${!last ? "sm:border-r sm:pr-8" : ""} ${featured ? "sm:px-8" : "sm:pr-8"}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</div>
+      <div className="num mt-3 text-xl text-ink">{value}</div>
     </div>
   );
 }
@@ -176,39 +178,37 @@ function PathChart({ result }: { result: SimulationResult }) {
   const ticks = [0, 0.5, 1];
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
+    <div className="space-y-4 border-t border-line pt-10">
+      <div className="flex flex-wrap items-center gap-5 text-xs text-muted">
         <Legend swatch="#9b4a45" dashed label="P10" />
-        <Legend swatch="#3f5c4b" label="Median" />
-        <Legend swatch="#8fa392" dashed label="P90" />
+        <Legend swatch="#4a6756" label="Median" />
+        <Legend swatch="#7a7368" dashed label="P90" />
         <span>Shaded band is the 10 to 90 range.</span>
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-line bg-paper/50 p-3">
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-56 w-full" role="img" aria-label="Retirement path percentiles">
-          {ticks.map((t) => {
-            const value = max * t;
-            const yy = y(value);
-            return (
-              <g key={t}>
-                <line x1={pad.l} x2={W - pad.r} y1={yy} y2={yy} stroke="#e4ddd0" strokeWidth={1} />
-                <text x={pad.l - 8} y={yy + 4} textAnchor="end" className="fill-muted" fontSize="11">
-                  {t === 0 ? "$0" : money(value)}
-                </text>
-              </g>
-            );
-          })}
-          <text x={pad.l} y={H - 8} className="fill-muted" fontSize="11">
-            Now
-          </text>
-          <text x={W - pad.r} y={H - 8} textAnchor="end" className="fill-muted" fontSize="11">
-            +{horizon_years} yrs
-          </text>
-          <polygon points={band} fill="rgba(63, 92, 75, 0.12)" />
-          <path d={toPath(p10_path)} fill="none" stroke="#9b4a45" strokeWidth={1.5} strokeDasharray="4,3" />
-          <path d={toPath(median_path)} fill="none" stroke="#3f5c4b" strokeWidth={2.25} />
-          <path d={toPath(p90_path)} fill="none" stroke="#8fa392" strokeWidth={1.5} strokeDasharray="4,3" />
-        </svg>
-      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-56 w-full" role="img" aria-label="Retirement path percentiles">
+        {ticks.map((t) => {
+          const value = max * t;
+          const yy = y(value);
+          return (
+            <g key={t}>
+              <line x1={pad.l} x2={W - pad.r} y1={yy} y2={yy} stroke="#e2d9cc" strokeWidth={1} />
+              <text x={pad.l - 8} y={yy + 4} textAnchor="end" className="fill-muted" fontSize="11">
+                {t === 0 ? "$0" : money(value)}
+              </text>
+            </g>
+          );
+        })}
+        <text x={pad.l} y={H - 8} className="fill-muted" fontSize="11">
+          Now
+        </text>
+        <text x={W - pad.r} y={H - 8} textAnchor="end" className="fill-muted" fontSize="11">
+          +{horizon_years} yrs
+        </text>
+        <polygon points={band} fill="rgba(36, 31, 25, 0.06)" />
+        <path d={toPath(p10_path)} fill="none" stroke="#9b4a45" strokeWidth={1.25} strokeDasharray="4,3" />
+        <path d={toPath(median_path)} fill="none" stroke="#4a6756" strokeWidth={2} />
+        <path d={toPath(p90_path)} fill="none" stroke="#7a7368" strokeWidth={1.25} strokeDasharray="4,3" />
+      </svg>
     </div>
   );
 }
@@ -219,7 +219,7 @@ function Legend({ swatch, label, dashed }: { swatch: string; label: string; dash
       <span
         className="inline-block w-5"
         style={{
-          borderTop: dashed ? `2px dashed ${swatch}` : `2px solid ${swatch}`,
+          borderTop: dashed ? `1.5px dashed ${swatch}` : `1.5px solid ${swatch}`,
         }}
       />
       {label}
