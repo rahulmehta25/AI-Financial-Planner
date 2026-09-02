@@ -1,0 +1,9 @@
+# Python FastAPI lives at /api on this branch. The Vite Vercel project
+# must not treat those files as serverless functions.
+api
+docs
+scripts
+web/node_modules
+web/.next
+frontend/node_modules
+frontend/dist

@@ -1,0 +1,9 @@
+{
+  "name": "financial-planning-frontend",
+  "private": true,
+  "description": "Vercel root entry for the Vite frontend project",
+  "scripts": {
+    "build": "npm install --prefix frontend && npm run build --prefix frontend && rm -rf dist && cp -R frontend/dist dist",
+    "dev": "npm run dev --prefix frontend"
+  }
+}
