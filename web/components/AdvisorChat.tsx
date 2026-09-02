@@ -45,7 +45,7 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
         {
           role: "assistant",
           content:
-            "The live advisor API isn't reachable from this static demo. In the running build this reply streams from Claude, grounded on the selected persona's accounts, transactions, and goals, and cites specific balances. The Monte Carlo simulator panel runs entirely in your browser — try that for a working taste.",
+            "The live advisor API isn't reachable from this static demo. In the running build this reply streams from Claude, grounded on the selected persona's accounts, transactions, and goals, and cites specific balances. The Monte Carlo simulator panel runs entirely in your browser. Try that for a working taste.",
           tool_calls: [],
           live: false,
         },
@@ -56,21 +56,22 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 flex flex-col">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Advisor</h3>
-        <span className="text-xs text-muted">grounded on accounts + goals + transactions</span>
+    <div className="card flex flex-col p-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+        <h3 className="text-base font-semibold tracking-tight">Advisor</h3>
+        <span className="text-xs text-muted">Grounded on accounts, goals, and transactions</span>
       </div>
 
       {messages.length === 0 && (
-        <div className="mt-4">
+        <div className="mt-5">
           <p className="text-sm text-muted">Try one of these:</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {SUGGESTIONS.map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => send(s)}
-                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs hover:bg-slate-100"
+                className="rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs leading-relaxed hover:bg-white"
               >
                 {s}
               </button>
@@ -79,22 +80,22 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
         </div>
       )}
 
-      <div className="mt-4 flex-1 space-y-3 max-h-[420px] overflow-y-auto">
+      <div className="mt-5 max-h-[420px] flex-1 space-y-3 overflow-y-auto">
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`rounded-lg px-3 py-2 text-sm ${
-              m.role === "user" ? "bg-slate-100 ml-10" : "bg-indigo-50 mr-10"
+            className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${
+              m.role === "user" ? "ml-10 bg-slate-100" : "mr-10 bg-indigo-50"
             }`}
           >
             <div className="whitespace-pre-wrap">{m.content}</div>
             {m.tool_calls && m.tool_calls.length > 0 && (
-              <details className="mt-2 text-xs text-muted">
+              <details className="mt-3 text-xs text-muted">
                 <summary className="cursor-pointer">
                   Tool hops: {m.tool_calls.map((t) => t.tool).join(", ")}
                   {m.live === false && " (Anthropic API key missing, stub response)"}
                 </summary>
-                <pre className="mt-2 bg-white/60 p-2 rounded text-[11px] overflow-x-auto">
+                <pre className="mt-2 overflow-x-auto rounded-lg bg-white/60 p-3 text-[11px]">
                   {JSON.stringify(m.tool_calls, null, 2)}
                 </pre>
               </details>
@@ -110,19 +111,19 @@ export function AdvisorChat({ personaId }: { personaId: string }) {
           e.preventDefault();
           send(draft);
         }}
-        className="mt-4 flex gap-2"
+        className="mt-5 flex flex-col gap-3 sm:flex-row"
       >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask about retirement, debt, shocks..."
-          className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm"
+          placeholder="Ask about retirement, debt, or income shocks..."
+          className="field"
           disabled={sending}
         />
         <button
           type="submit"
           disabled={sending || !draft.trim()}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-600 disabled:opacity-60 sm:shrink-0"
         >
           Send
         </button>
